@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Class Chat - Section {{ section }}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    textarea { width: 100%; height: 120px; font-family: monospace; }
+    ul#messages { list-style-type: none; padding: 0; }
+    li.message { margin-bottom: 1em; border-bottom: 1px solid #ddd; padding-bottom: 0.5em; }
+    pre { background: #f0f0f0; padding: 0.5em; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Chat — Section {{ section }}</h1>
+  <ul id="messages">
+    {% for msg in messages %}
+      <li class="message">
+        {% if '\n' in msg %}
+          <pre><code>{{ msg }}</code></pre>
+        {% else %}
+          {{ msg }}
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+
+  <textarea id="msg" placeholder="Paste code or message here..."></textarea><br>
+  <button onclick="sendMsg()">Send</button>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>
+    let name = localStorage.getItem("netid");
+    if (!name) {
+      name = prompt("Enter your NetID:");
+      if (!name) name = "Anonymous";
+      localStorage.setItem("netid", name);
+    }
+    const section = {{ section }};
+    const socket = io();
+
+    socket.emit("join", { section });
+
+    socket.on("message", function(msg) {
+      const item = document.createElement('li');
+      item.className = 'message';
+      if (msg.includes('\n')) {
+        item.innerHTML = `<pre><code>${escapeHtml(msg)}</code></pre>`;
+      } else {
+        item.textContent = msg;
+      }
+      document.getElementById('messages').appendChild(item);
+      hljs.highlightAll();
+    });
+
+    function sendMsg() {
+      const input = document.getElementById("msg");
+      if (input.value.trim() !== "") {
+        socket.emit("message", { 
+	  section,
+	  msg: `${name}:\n${input.value}` 
+	});
+        input.value = "";
+      }
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;");
+    }
+  </script>
+</body>
+</html>
+

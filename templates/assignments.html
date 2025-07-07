@@ -1,0 +1,12 @@
+<h2>Assignments</h2>
+{% for a in assignments %}
+  <h3>{{ a.name }}</h3>
+  <p><a href="{{ a.invite_url }}" target="_blank">Join Assignment</a></p>
+  <p>{{ a.count }} student repos submitted:</p>
+  <ul>
+    {% for repo in a.repos %}
+      <li><a href="{{ repo.url }}" target="_blank">{{ repo.name }}</a> (last push: {{ repo.pushed_at }})</li>
+    {% endfor %}
+  </ul>
+{% endfor %}
+
