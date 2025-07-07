@@ -5,6 +5,7 @@ from flask import Flask, render_template, request, Response, abort#, redirect
 from flask_socketio import SocketIO, emit, join_room
 import redis
 from datetime import datetime
+import json
 
 load_dotenv()
 
@@ -40,8 +41,41 @@ def check_admin_access():
 # Route: chat by section
 @app.route("/chat/<int:section>")
 def chat(section):
-    messages = r.lrange(f"chat:{section}", 0, -1)
+    raw = r.lrange(f"chat:{section}", 0, -1)
+    messages = []
+
+    for item in raw:
+        try:
+            msg_obj = json.loads(item)
+            # Ensure all expected fields are present
+            if isinstance(msg_obj, dict):
+                msg_obj.setdefault("netid", "unknown")
+                msg_obj.setdefault("msg", "")
+                msg_obj.setdefault("timestamp", "[unknown]")
+                msg_obj.setdefault("reply", None)
+                msg_obj.setdefault("edited", False)
+                messages.append(msg_obj)
+            else:
+                # fallback for malformed entries
+                messages.append({
+                    "netid": "unknown",
+                    "msg": str(item),
+                    "timestamp": "[old]",
+                    "reply": None,
+                    "edited": False
+                })
+        except json.JSONDecodeError:
+            # fallback for old string messages
+            messages.append({
+                "netid": "unknown",
+                "msg": item,
+                "timestamp": "[old]",
+                "reply": None,
+                "edited": False
+            })
+
     return render_template("chat.html", section=section, messages=messages)
+
 
 # When a user joins, assign them to a room
 @socketio.on("join")
@@ -53,18 +87,34 @@ def on_join(data):
 @socketio.on("message")
 def handle_message(data):
     section = data.get("section")
-    msg = data.get("msg")
-    today = datetime.now().strftime("%Y-%m-%d")
+    raw_msg = data.get("msg")
+    reply = None
+    if "|||reply|||" in raw_msg:
+        raw_msg, reply = raw_msg.split("|||reply|||", 1)
+
     timestamp = datetime.now().strftime("%H:%M")
+    today = datetime.now().strftime("%Y-%m-%d")
 
-    if ':' in msg:
-        netid = msg.split(':')[0].strip()
-        r.sadd(f"participation:{today}:{section}", netid)
+    # Extract netid from start of msg
+    netid = raw_msg.split(":")[0].strip() if ":" in raw_msg else "unknown"
 
-    # Save and emit as JSON
-    record = f"{msg}|||{timestamp}"
-    r.rpush(f"chat:{section}", record)
-    emit("message", {"msg": msg, "timestamp": timestamp}, to=section)
+    # Track participation
+    r.sadd(f"participation:{today}:{section}", netid)
+
+    # Create structured message
+    msg_obj = {
+        "netid": netid,
+        "msg": raw_msg.strip(),
+        "timestamp": timestamp,
+        "reply": reply,
+        "edited": False
+    }
+
+    # Store JSON in Redis
+    r.rpush(f"chat:{section}", json.dumps(msg_obj))
+
+    # Send structured message to clients
+    socketio.emit("message", msg_obj, to=section)
 
     
 @app.route("/participation_dashboard")

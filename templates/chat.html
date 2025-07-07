@@ -6,11 +6,31 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
 <style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 1em;
+    background-color: var(--bg);
+  }
+
   :root {
     --bubble-bg: #e6f7ff;
     --bubble-border: #1e90ff;
     --message-text: black;
   }
+
   [data-theme="dark"] {
     --bubble-bg: #1e1e1e;
     --bubble-border: #4ea1f3;
@@ -18,13 +38,14 @@
   }
 
   #messages {
+    flex-grow: 1;
+    overflow-y: auto;
     border: 1px solid #ccc;
-    height: 300px;
-    overflow-y: scroll;
     padding: 10px;
     margin-bottom: 10px;
     background-color: var(--bg);
   }
+
   .message {
     margin-bottom: 10px;
     padding: 8px;
@@ -34,17 +55,20 @@
     position: relative;
     cursor: pointer;
   }
+
   .meta {
     font-size: 0.75em;
     color: var(--link);
     margin-bottom: 4px;
   }
-  .content pre, .content code {
+
+  .content pre {
     margin: 0;
-    background: transparent;
     white-space: pre-wrap;
+    background: transparent;
     color: var(--message-text);
   }
+
   .reply-box {
     font-size: 0.8em;
     color: gray;
@@ -52,17 +76,21 @@
     border-left: 2px solid var(--bubble-border);
     margin-bottom: 5px;
   }
+
   #inputBox {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
+    padding-top: 5px;
   }
+
   #msgInput {
     width: 100%;
     padding: 8px;
     min-height: 60px;
     resize: vertical;
   }
+
   #sendBtn {
     align-self: flex-end;
     padding: 8px 16px;
@@ -71,14 +99,30 @@
 {% endblock %}
 
 {% block content %}
-<h2>Live Chat – Section {{ section }}</h2>
-<div id="messages"></div>
+<main>
+  <h2>Live Chat – Section {{ section }}</h2>
+  <div id="messages">
+    {% for m in messages %}
+      <div class="message">
+        <div class="meta">
+          {{ m.netid }} — {{ m.timestamp }}{% if m.edited %} (edited){% endif %}
+        </div>
+        {% if m.reply %}
+          <div class="reply-box">{{ m.reply }}</div>
+        {% endif %}
+        <div class="content">
+          <pre><code class="language-python">{{ m.msg.split(':', 1)[1] if ':' in m.msg else m.msg }}</code></pre>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
 
-<div id="inputBox">
-  <div id="replyPreview" class="reply-box" style="display: none;"></div>
-  <textarea id="msgInput" placeholder="Type your message (Shift+Enter for newline)"></textarea>
-  <button id="sendBtn">Send</button>
-</div>
+  <div id="inputBox">
+    <div id="replyPreview" class="reply-box" style="display: none;"></div>
+    <textarea id="msgInput" placeholder="Type your message (Shift+Enter for newline)"></textarea>
+    <button id="sendBtn">Send</button>
+  </div>
+</main>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -86,15 +130,14 @@
 <script>
 const section = {{ section }};
 const socket = io();
-
 let replyTo = null;
 
-// Prompt for netid once per day
+// Prompt NetID (once per day)
 function promptNetid() {
-  const storedDate = localStorage.getItem("netidDate");
   const today = new Date().toISOString().slice(0, 10);
+  const storedDate = localStorage.getItem("netidDate");
   if (storedDate !== today || !localStorage.getItem("netid")) {
-    const netid = prompt("Enter your NetID (only once per day):");
+    const netid = prompt("Enter your NetID (once per day):");
     if (netid && netid.trim()) {
       localStorage.setItem("netid", netid.trim());
       localStorage.setItem("netidDate", today);
@@ -109,41 +152,35 @@ function escapeHtml(text) {
              .replace(/>/g, "&gt;");
 }
 
-// Add a message to the DOM
-function addMessage(msg, timestamp) {
+function stripNetid(msg) {
+  return msg.includes(":") ? msg.split(":").slice(1).join(":").trim() : msg;
+}
+
+function addMessageObject(data) {
   const div = document.createElement("div");
   div.className = "message";
 
-  const parts = msg.split("|||reply|||");
-  const body = parts[0];
-  const quoted = parts[1] || null;
-
-  const netid = body.includes(":") ? body.split(":")[0].trim() : "";
-  const content = escapeHtml(body);
-
   const meta = document.createElement("div");
   meta.className = "meta";
-  meta.textContent = `${netid} — ${timestamp}`;
-
-  const contentDiv = document.createElement("div");
-  contentDiv.className = "content";
-  contentDiv.innerHTML = `<pre><code class="language-python">${content}</code></pre>`;
-
+  meta.textContent = `${data.netid} — ${data.timestamp}${data.edited ? " (edited)" : ""}`;
   div.appendChild(meta);
 
-  if (quoted) {
+  if (data.reply) {
     const reply = document.createElement("div");
     reply.className = "reply-box";
-    reply.textContent = quoted.length > 100 ? quoted.slice(0, 100) + "..." : quoted;
+    reply.textContent = data.reply.length > 100 ? data.reply.slice(0, 100) + "..." : data.reply;
     div.appendChild(reply);
   }
 
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "content";
+  contentDiv.innerHTML = `<pre><code class="language-python">${escapeHtml(stripNetid(data.msg))}</code></pre>`;
   div.appendChild(contentDiv);
 
   div.addEventListener("click", () => {
-    replyTo = body;
+    replyTo = stripNetid(data.msg);
     const box = document.getElementById("replyPreview");
-    box.textContent = "↪ " + body.slice(0, 80);
+    box.textContent = "↪ " + replyTo.slice(0, 80);
     box.style.display = "block";
   });
 
@@ -156,7 +193,11 @@ function addMessage(msg, timestamp) {
 socket.emit("join", { section });
 
 socket.on("message", function(data) {
-  addMessage(data.msg, data.timestamp);
+  if (typeof data === "string") {
+    addMessageObject({ msg: data, timestamp: "[old]", netid: "?", edited: false });
+  } else {
+    addMessageObject(data);
+  }
 });
 
 function sendMessage() {
@@ -166,15 +207,14 @@ function sendMessage() {
 
   if (text) {
     const full = `${netid}: ${text}`;
-    const message = replyTo ? `${full}|||reply|||${replyTo}` : full;
-    socket.emit("message", { section, msg: message });
+    const msg = replyTo ? `${full}|||reply|||${replyTo}` : full;
+    socket.emit("message", { section, msg });
     input.value = "";
     replyTo = null;
     document.getElementById("replyPreview").style.display = "none";
   }
 }
 
-// Input events
 document.getElementById("sendBtn").addEventListener("click", sendMessage);
 document.getElementById("msgInput").addEventListener("keydown", function(e) {
   if (e.key === "Enter" && !e.shiftKey) {
