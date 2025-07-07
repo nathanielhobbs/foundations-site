@@ -76,6 +76,34 @@ def chat(section):
 
     return render_template("chat.html", section=section, messages=messages)
 
+@socketio.on("poll")
+def handle_poll(data):
+    section = data.get("section")
+    question = data.get("question")
+    options = data.get("options")
+    netid = data.get("netid", "unknown")
+
+    if not section or not question or not options or not isinstance(options, list):
+        return
+
+    timestamp = datetime.now().strftime("%H:%M")
+
+    poll_id = f"poll:{section}:{len(options)}:{hash(question) % 100000}"
+    r.hset(poll_id, mapping={"question": question, "options": "|".join(options)})
+    r.sadd(f"{poll_id}:voters", "")  # just to initialize
+
+    msg_obj = {
+        "type": "poll",
+        "netid": netid,
+        "question": question,
+        "options": options,
+        "timestamp": timestamp,
+        "poll_id": poll_id
+    }
+
+    r.rpush(f"chat:{section}", json.dumps(msg_obj))
+    socketio.emit("message", msg_obj, to=section)
+
 
 # When a user joins, assign them to a room
 @socketio.on("join")

@@ -133,6 +133,14 @@
 <div id="chatPage">
   <div id="messagesContainer">
     <h2>Live Chat – Section {{ section }}</h2>
+
+    <button onclick="showPollForm()">+ Create Poll</button>
+    <div id="pollForm" style="display:none;">
+      <input type="text" id="pollQuestion" placeholder="Poll question">
+      <input type="text" id="pollOptions" placeholder="Options (comma-separated)">
+      <button onclick="sendPoll()">Send Poll</button>
+    </div>
+
     <div id="messages">
       {% for m in messages %}
         <div class="message">
@@ -161,6 +169,28 @@
 {% block extra_scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
+
+function showPollForm() {
+  document.getElementById("pollForm").style.display = "block";
+}
+
+function sendPoll() {
+  const question = document.getElementById("pollQuestion").value.trim();
+  const options = document.getElementById("pollOptions").value.split(",").map(o => o.trim()).filter(Boolean);
+  const netid = localStorage.getItem("netid") || "unknown";
+
+  if (!question || options.length < 2) {
+    alert("Enter a question and at least two options.");
+    return;
+  }
+
+  socket.emit("poll", { section, question, options, netid });
+
+  document.getElementById("pollForm").style.display = "none";
+  document.getElementById("pollQuestion").value = "";
+  document.getElementById("pollOptions").value = "";
+}
+
 const section = {{ section }};
 const socket = io();
 let replyTo = null;
@@ -190,36 +220,36 @@ function stripNetid(msg) {
 }
 
 function addMessageObject(data) {
-  const div = document.createElement("div");
-  div.className = "message";
+  if (data.type === "poll") {
+    const div = document.createElement("div");
+    div.className = "message";
 
-  const meta = document.createElement("div");
-  meta.className = "meta";
-  meta.textContent = `${data.netid} — ${data.timestamp}${data.edited ? " (edited)" : ""}`;
-  div.appendChild(meta);
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = `${data.netid} — ${data.timestamp} (poll)`;
+    div.appendChild(meta);
 
-  if (data.reply) {
-    const reply = document.createElement("div");
-    reply.className = "reply-box";
-    reply.textContent = data.reply.length > 100 ? data.reply.slice(0, 100) + "..." : data.reply;
-    div.appendChild(reply);
+    const question = document.createElement("div");
+    question.textContent = data.question;
+    question.style.fontWeight = "bold";
+    div.appendChild(question);
+
+    data.options.forEach(option => {
+      const btn = document.createElement("button");
+      btn.textContent = option;
+      btn.onclick = () => voteOnPoll(data.poll_id, option);
+      div.appendChild(btn);
+    });
+
+    document.getElementById("messages").appendChild(div);
+    div.scrollIntoView({ behavior: "smooth" });
+    return;
   }
+}
 
-  const contentDiv = document.createElement("div");
-  contentDiv.className = "content";
-  contentDiv.innerHTML = `<pre><code class="language-python">${escapeHtml(stripNetid(data.msg))}</code></pre>`;
-  div.appendChild(contentDiv);
-
-  div.addEventListener("click", () => {
-    replyTo = stripNetid(data.msg);
-    const box = document.getElementById("replyPreview");
-    box.textContent = "↪ " + replyTo.slice(0, 80);
-    box.style.display = "block";
-  });
-
-  document.getElementById("messages").appendChild(div);
-  Prism.highlightAllUnder(div);
-  div.scrollIntoView({ behavior: "smooth" });
+function voteOnPoll(pollId, option) {
+  const netid = localStorage.getItem("netid") || "unknown";
+  socket.emit("vote", { poll_id: pollId, option, netid });
 }
 
 // Socket setup
