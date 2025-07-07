@@ -104,6 +104,29 @@ def handle_poll(data):
     r.rpush(f"chat:{section}", json.dumps(msg_obj))
     socketio.emit("message", msg_obj, to=section)
 
+@socketio.on("vote")
+def handle_vote(data):
+    poll_id = data.get("poll_id")
+    option = data.get("option")
+    netid = data.get("netid")
+
+    if not poll_id or not option or not netid:
+        return
+
+    # Only allow one vote per person per poll
+    if r.sismember(f"{poll_id}:voters", netid):
+        return
+
+    r.sadd(f"{poll_id}:voters", netid)
+    r.hincrby(f"{poll_id}:votes", option, 1)
+
+    # Emit updated results
+    results = r.hgetall(f"{poll_id}:votes")
+    socketio.emit("poll_results", {
+        "poll_id": poll_id,
+        "results": results
+    })
+
 
 # When a user joins, assign them to a room
 @socketio.on("join")

@@ -26,9 +26,46 @@
   }
 
   :root {
+    color-scheme: light dark;
+    --bg: white;
+    --text: CanvasText;
     --bubble-bg: #e6f7ff;
     --bubble-border: #1e90ff;
-    --message-text: black;
+    --poll-bar-bg: #4ea1f3;
+    --poll-bar-text: white;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: Canvas;
+      --bubble-bg: #1e1e1e;
+      --bubble-border: #4ea1f3;
+      --poll-bar-bg: light-dark(#5693f4, #2a6ad0);
+      --poll-bar-text: #e0e0e0;
+    }
+  } 
+
+  /* Poll result bar readability */
+  .result-bar {
+    background-color: var(--poll-bar-bg);
+    color: var(--poll-bar-text);
+    padding: 4px 8px;
+    font-size: 0.85em;
+    font-weight: bold;
+    border-radius: 4px;
+  }
+
+  /* Ensure contrast ratio 4.5:1+ for text on bar */
+  :root {
+    --poll-bar-bg: #3b78e7;       /* Medium blue for light mode */
+    --poll-bar-text: #ffffff;     /* White text */
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --poll-bar-bg: #6699ff;     /* Lighter blue for dark mode */
+      --poll-bar-text: #000000;   /* Black text */
+    }
   }
 
   [data-theme="dark"] {
@@ -126,6 +163,14 @@
   background-color: var(--bg);
 }
 
+.result-bar {
+  background-color: #4ea1f3;
+  color: white;
+  font-size: 0.75em;
+  transition: width 0.3s ease;
+}
+
+
 </style>
 {% endblock %}
 
@@ -170,6 +215,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
 
+
+
+
 function showPollForm() {
   document.getElementById("pollForm").style.display = "block";
 }
@@ -194,6 +242,22 @@ function sendPoll() {
 const section = {{ section }};
 const socket = io();
 let replyTo = null;
+
+socket.on("poll_results", function(data) {
+  const div = document.querySelector(`[data-poll-id="${data.poll_id}"]`);
+  if (!div) return;
+
+  const results = data.results;
+  const total = Object.values(results).reduce((sum, val) => sum + parseInt(val || -1), 0);
+
+  const bars = div.querySelectorAll(".result-bar");
+  bars.forEach(bar => {
+    const val = results[bar.dataset.option] || -1;
+    const pct = total ? Math.round((val / total) * 99) : 0;
+    bar.style.width = `${pct}%`;
+    bar.textContent = `${val} vote${val !== "0" ? "s" : ""} (${pct}%)`;
+  });
+});
 
 // Prompt NetID (once per day)
 function promptNetid() {
@@ -223,6 +287,7 @@ function addMessageObject(data) {
   if (data.type === "poll") {
     const div = document.createElement("div");
     div.className = "message";
+    div.dataset.pollId = data.poll_id;
 
     const meta = document.createElement("div");
     meta.className = "meta";
@@ -235,17 +300,67 @@ function addMessageObject(data) {
     div.appendChild(question);
 
     data.options.forEach(option => {
+      const wrapper = document.createElement("div");
+      wrapper.style.marginTop = "5px";
+
       const btn = document.createElement("button");
       btn.textContent = option;
       btn.onclick = () => voteOnPoll(data.poll_id, option);
-      div.appendChild(btn);
+      wrapper.appendChild(btn);
+
+      const result = document.createElement("div");
+      result.className = "result-bar";
+      result.dataset.option = option;
+      result.style.backgroundColor = "#ccc";
+      result.style.padding = "2px 4px";
+      result.style.marginTop = "2px";
+      result.style.width = "0";
+      wrapper.appendChild(result);
+
+      div.appendChild(wrapper);
     });
 
     document.getElementById("messages").appendChild(div);
     div.scrollIntoView({ behavior: "smooth" });
     return;
   }
+
+ // 🛠️ Fallback for regular message
+  const div = document.createElement("div");
+  div.className = "message";
+
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.textContent = `${data.netid} — ${data.timestamp}${data.edited ? " (edited)" : ""}`;
+
+  const contentDiv = document.createElement("div");
+  const content = stripNetid(data.msg || "");
+  contentDiv.className = "content";
+  contentDiv.innerHTML = `<pre><code class="language-python">${escapeHtml(content)}</code></pre>`;
+
+  div.appendChild(meta);
+
+  if (data.reply) {
+    const reply = document.createElement("div");
+    reply.className = "reply-box";
+    reply.textContent = data.reply.length > 100 ? data.reply.slice(0, 100) + "..." : data.reply;
+    div.appendChild(reply);
+  }
+
+  div.appendChild(contentDiv);
+
+  div.addEventListener("click", () => {
+    replyTo = data.msg;
+    const box = document.getElementById("replyPreview");
+    box.textContent = "↪ " + content.slice(0, 80);
+    box.style.display = "block";
+  });
+
+  document.getElementById("messages").appendChild(div);
+  Prism.highlightAllUnder(div);
+  div.scrollIntoView({ behavior: "smooth" }); 
 }
+
 
 function voteOnPoll(pollId, option) {
   const netid = localStorage.getItem("netid") || "unknown";
