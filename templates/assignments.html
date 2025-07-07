@@ -1,3 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Assignments{% endblock %}
+{% block content %}
 <h2>Assignments</h2>
 {% for a in assignments %}
   <h3>{{ a.name }}</h3>
@@ -10,3 +13,4 @@
   </ul>
 {% endfor %}
 
+{% endblock %}

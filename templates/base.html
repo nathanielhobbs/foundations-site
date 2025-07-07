@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <title>{% block title %}Foundations Site{% endblock %}</title>
+
+  <style>
+    :root {
+      --bg: white;
+      --text: black;
+      --link: #0645AD;
+    }
+    [data-theme="dark"] {
+      --bg: #121212;
+      --text: #e0e0e0;
+      --link: #4ea1f3;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: sans-serif;
+      margin: 0;
+      padding: 1em;
+    }
+    a { color: var(--link); }
+
+    nav {
+      background: var(--bg);
+      padding: 1em;
+      border-bottom: 1px solid #ccc;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-left a {
+      margin-right: 1em;
+      text-decoration: none;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+    }
+
+    select, button {
+      margin-left: 1em;
+    }
+  </style>
+
+  {% block extra_head %}{% endblock %}
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav style="background: var(--bg); border-bottom: 1px solid #ccc; padding: 0.5em 1em; display: flex; align-items: center; justify-content: space-between;">
+    <div style="font-weight: bold; font-size: 1.25em;">
+      Foundations
+    </div>
+    <div style="flex-grow: 1; margin-left: 2em;">
+      <a href="/" style="margin-right: 1em; text-decoration: none;">Home</a>
+      <a href="/assignments" style="margin-right: 1em; text-decoration: none;">Assignments</a>
+      <a id="chatLink" href="/chat/1" style="margin-right: 1em; text-decoration: none;">Live Chat</a>
+      <a href="/participation_search" style="margin-right: 1em; text-decoration: none;">Participation</a>
+    </div>
+    <div>
+      Section:
+      <select id="sectionSelect" style="margin-left: 0.5em;">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+      </select>
+      <button onclick="toggleTheme()">🌓</button>
+    </div>
+  </nav>
+
+  {% block content %}{% endblock %}
+
+  <script>
+    const savedSection = localStorage.getItem("section") || "1";
+    document.getElementById("sectionSelect").value = savedSection;
+    document.getElementById("chatLink").href = "/chat/" + savedSection;
+
+    document.getElementById("sectionSelect").addEventListener("change", (e) => {
+      const value = e.target.value;
+      localStorage.setItem("section", value);
+      document.getElementById("chatLink").href = "/chat/" + value;
+    });
+
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute("data-theme");
+      const next = current === "dark" ? "light" : "dark";
+      html.setAttribute("data-theme", next);
+      localStorage.setItem("theme", next);
+    }
+
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme) {
+      document.documentElement.setAttribute("data-theme", savedTheme);
+    }
+  </script>
+
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

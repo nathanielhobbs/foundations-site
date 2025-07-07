@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Participation Dashboard{% endblock %}
+{% block content %}
+
+<h2>Participation Dashboard</h2>
+<p>
+  <a href="/participation_csv_all?code={{ passcode }}">Download all participation as CSV</a><br><br>
+  <form action="/participation_search" method="get">
+    <input type="hidden" name="code" value="{{ passcode }}">
+    Search NetID: <input name="netid" required>
+    <input type="submit" value="Search">
+  </form>
+</p>
+<ul>
+  {% for date, section in entries %}
+    <li>
+      {{ date }} – Section {{ section }}:
+      <a href="/participation/{{ date }}/{{ section }}?code={{ passcode }}">View</a> |
+      <a href="/participation_csv/{{ date }}/{{ section }}?code={{ passcode }}">CSV</a>
+    </li>
+  {% endfor %}
+</ul>
+
+{% endblock %}
+

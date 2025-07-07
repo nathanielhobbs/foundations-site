@@ -1,0 +1,13 @@
+[Unit]
+Description=Foundations Flask App
+After=network.target
+
+[Service]
+User=nhobbs
+WorkingDirectory=/home/nhobbs/foundations-site
+Environment="PATH=/home/nhobbs/foundations-site/venv/bin"
+ExecStart=/home/nhobbs/foundations-site/venv/bin/python app.py
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,0 +1,7 @@
+flask
+flask-socketio
+eventlet
+redis
+requests
+python-dotenv
+

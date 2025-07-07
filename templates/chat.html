@@ -1,76 +1,186 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Class Chat - Section {{ section }}</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
-  <style>
-    body { font-family: sans-serif; margin: 2em; }
-    textarea { width: 100%; height: 120px; font-family: monospace; }
-    ul#messages { list-style-type: none; padding: 0; }
-    li.message { margin-bottom: 1em; border-bottom: 1px solid #ddd; padding-bottom: 0.5em; }
-    pre { background: #f0f0f0; padding: 0.5em; overflow-x: auto; }
-  </style>
-</head>
-<body>
-  <h1>Chat — Section {{ section }}</h1>
-  <ul id="messages">
-    {% for msg in messages %}
-      <li class="message">
-        {% if '\n' in msg %}
-          <pre><code>{{ msg }}</code></pre>
-        {% else %}
-          {{ msg }}
-        {% endif %}
-      </li>
-    {% endfor %}
-  </ul>
+{% extends "base.html" %}
+{% block title %}Live Chat – Section {{ section }}{% endblock %}
 
-  <textarea id="msg" placeholder="Paste code or message here..."></textarea><br>
-  <button onclick="sendMsg()">Send</button>
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<style>
+  :root {
+    --bubble-bg: #e6f7ff;
+    --bubble-border: #1e90ff;
+    --message-text: black;
+  }
+  [data-theme="dark"] {
+    --bubble-bg: #1e1e1e;
+    --bubble-border: #4ea1f3;
+    --message-text: #e0e0e0;
+  }
 
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script>
-    let name = localStorage.getItem("netid");
-    if (!name) {
-      name = prompt("Enter your NetID:");
-      if (!name) name = "Anonymous";
-      localStorage.setItem("netid", name);
+  #messages {
+    border: 1px solid #ccc;
+    height: 300px;
+    overflow-y: scroll;
+    padding: 10px;
+    margin-bottom: 10px;
+    background-color: var(--bg);
+  }
+  .message {
+    margin-bottom: 10px;
+    padding: 8px;
+    background-color: var(--bubble-bg);
+    border-left: 4px solid var(--bubble-border);
+    border-radius: 6px;
+    position: relative;
+    cursor: pointer;
+  }
+  .meta {
+    font-size: 0.75em;
+    color: var(--link);
+    margin-bottom: 4px;
+  }
+  .content pre, .content code {
+    margin: 0;
+    background: transparent;
+    white-space: pre-wrap;
+    color: var(--message-text);
+  }
+  .reply-box {
+    font-size: 0.8em;
+    color: gray;
+    padding: 4px;
+    border-left: 2px solid var(--bubble-border);
+    margin-bottom: 5px;
+  }
+  #inputBox {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #msgInput {
+    width: 100%;
+    padding: 8px;
+    min-height: 60px;
+    resize: vertical;
+  }
+  #sendBtn {
+    align-self: flex-end;
+    padding: 8px 16px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>Live Chat – Section {{ section }}</h2>
+<div id="messages"></div>
+
+<div id="inputBox">
+  <div id="replyPreview" class="reply-box" style="display: none;"></div>
+  <textarea id="msgInput" placeholder="Type your message (Shift+Enter for newline)"></textarea>
+  <button id="sendBtn">Send</button>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const section = {{ section }};
+const socket = io();
+
+let replyTo = null;
+
+// Prompt for netid once per day
+function promptNetid() {
+  const storedDate = localStorage.getItem("netidDate");
+  const today = new Date().toISOString().slice(0, 10);
+  if (storedDate !== today || !localStorage.getItem("netid")) {
+    const netid = prompt("Enter your NetID (only once per day):");
+    if (netid && netid.trim()) {
+      localStorage.setItem("netid", netid.trim());
+      localStorage.setItem("netidDate", today);
     }
-    const section = {{ section }};
-    const socket = io();
+  }
+}
+promptNetid();
 
-    socket.emit("join", { section });
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;");
+}
 
-    socket.on("message", function(msg) {
-      const item = document.createElement('li');
-      item.className = 'message';
-      if (msg.includes('\n')) {
-        item.innerHTML = `<pre><code>${escapeHtml(msg)}</code></pre>`;
-      } else {
-        item.textContent = msg;
-      }
-      document.getElementById('messages').appendChild(item);
-      hljs.highlightAll();
-    });
+// Add a message to the DOM
+function addMessage(msg, timestamp) {
+  const div = document.createElement("div");
+  div.className = "message";
 
-    function sendMsg() {
-      const input = document.getElementById("msg");
-      if (input.value.trim() !== "") {
-        socket.emit("message", { 
-	  section,
-	  msg: `${name}:\n${input.value}` 
-	});
-        input.value = "";
-      }
-    }
+  const parts = msg.split("|||reply|||");
+  const body = parts[0];
+  const quoted = parts[1] || null;
 
-    function escapeHtml(text) {
-      return text.replace(/&/g, "&amp;")
-                 .replace(/</g, "&lt;")
-                 .replace(/>/g, "&gt;");
-    }
-  </script>
-</body>
-</html>
+  const netid = body.includes(":") ? body.split(":")[0].trim() : "";
+  const content = escapeHtml(body);
 
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.textContent = `${netid} — ${timestamp}`;
+
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "content";
+  contentDiv.innerHTML = `<pre><code class="language-python">${content}</code></pre>`;
+
+  div.appendChild(meta);
+
+  if (quoted) {
+    const reply = document.createElement("div");
+    reply.className = "reply-box";
+    reply.textContent = quoted.length > 100 ? quoted.slice(0, 100) + "..." : quoted;
+    div.appendChild(reply);
+  }
+
+  div.appendChild(contentDiv);
+
+  div.addEventListener("click", () => {
+    replyTo = body;
+    const box = document.getElementById("replyPreview");
+    box.textContent = "↪ " + body.slice(0, 80);
+    box.style.display = "block";
+  });
+
+  document.getElementById("messages").appendChild(div);
+  Prism.highlightAllUnder(div);
+  div.scrollIntoView({ behavior: "smooth" });
+}
+
+// Socket setup
+socket.emit("join", { section });
+
+socket.on("message", function(data) {
+  addMessage(data.msg, data.timestamp);
+});
+
+function sendMessage() {
+  const input = document.getElementById("msgInput");
+  const text = input.value.trim();
+  const netid = localStorage.getItem("netid") || "unknown";
+
+  if (text) {
+    const full = `${netid}: ${text}`;
+    const message = replyTo ? `${full}|||reply|||${replyTo}` : full;
+    socket.emit("message", { section, msg: message });
+    input.value = "";
+    replyTo = null;
+    document.getElementById("replyPreview").style.display = "none";
+  }
+}
+
+// Input events
+document.getElementById("sendBtn").addEventListener("click", sendMessage);
+document.getElementById("msgInput").addEventListener("keydown", function(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+</script>
+{% endblock %}

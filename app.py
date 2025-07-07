@@ -55,23 +55,25 @@ def handle_message(data):
     section = data.get("section")
     msg = data.get("msg")
     today = datetime.now().strftime("%Y-%m-%d")
+    timestamp = datetime.now().strftime("%H:%M")
 
-    # Extract NetID (before first colon)
     if ':' in msg:
         netid = msg.split(':')[0].strip()
         r.sadd(f"participation:{today}:{section}", netid)
 
-    # Save message
-    r.rpush(f"chat:{section}", msg)
-    emit("message", msg, to=section)
+    # Save and emit as JSON
+    record = f"{msg}|||{timestamp}"
+    r.rpush(f"chat:{section}", record)
+    emit("message", {"msg": msg, "timestamp": timestamp}, to=section)
 
+    
 @app.route("/participation_dashboard")
 def participation_dashboard():
     check_admin_access()
     passcode = request.args.get("code")
+
     keys = r.keys("participation:*:*")
     entries = []
-
     for key in keys:
         try:
             _, date, section = key.split(":")
@@ -79,35 +81,13 @@ def participation_dashboard():
         except ValueError:
             continue
 
-    # Remove duplicates and sort
     entries = sorted(set(entries))
 
-    html = f"""
-    <h2>Participation Dashboard</h2>
-    <p>
-      <a href="/participation_csv_all?code={passcode}">Download all participation as CSV</a><br><br>
-      <form action="/participation_search" method="get">
-        <input type="hidden" name="code" value="{passcode}">
-        Search NetID: <input name="netid" required>
-        <input type="submit" value="Search">
-      </form>
-    </p>
-    <ul>
-    """
+    return render_template("participation_dashboard.html",
+                           entries=entries,
+                           passcode=passcode)
 
-    for date, section in entries:
-        html += f"""
-        <li>
-          {date} – Section {section}:
-          <a href="/participation/{date}/{section}?code={passcode}">View</a> |
-          <a href="/participation_csv/{date}/{section}?code={passcode}">CSV</a>
-        </li>
-        """
 
-    html += "</ul>"
-    return html
-
-    
 # e.g. https://foundations.hobbsresearch.com/participation/2025-07-04/1
 @app.route("/participation/<day>/<int:section>")
 def view_participation(day, section):
@@ -148,7 +128,6 @@ def export_all_participation():
 
 @app.route("/participation_search")
 def search_netid():
-    check_admin_access()
     query = request.args.get("netid", "").strip().lower()
     if not query:
         return "<form><input name='netid' placeholder='Enter NetID'><input type='submit'></form>"
