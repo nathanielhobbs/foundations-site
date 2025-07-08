@@ -1,0 +1,29 @@
+<!-- templates/tutorials/git.html -->
+{% extends "base.html" %}
+{% block title %}Git and GitHub Setup{% endblock %}
+{% block content %}
+<h1>Git and GitHub Setup</h1>
+
+<h2>Create a GitHub Account</h2>
+<p>You should already be added to the GitHub Classroom for this course. If not, I suggest reaching out to me first.  Otherwise, if you have your own reasons, you can create an account at <a href="https://github.com">github.com</a>. </p>
+
+<h2>Install Git</h2>
+<ul>
+  <li><strong>Windows:</strong> Download <a href="https://git-scm.com/download/win">Git for Windows</a>. This includes <strong>Git Bash</strong>, which is a great terminal for beginners.</li>
+  <li><strong>Mac:</strong> Install Xcode Command Line Tools: <code>xcode-select --install</code></li>
+  <li><strong>Linux:</strong> Use your package manager, e.g., <code>sudo apt install git</code> or <code>sudo dnf install git</code></li>
+</ul>
+
+<h2>Configure Git</h2>
+<pre><code>git config --global user.name "Your Name"
+git config --global user.email "you@example.com"</code></pre>
+
+<h2>Set Up SSH Authentication</h2>
+<p>Once you've generated your SSH keypair (see <a href="/tutorials/ssh">this guide</a>), upload your public key to GitHub at <a href="https://github.com/settings/ssh/new">github.com/settings/ssh/new</a>.</p>
+
+<h2>Test SSH Connection</h2>
+Inside of the terminal, run the following command:
+<pre><code>ssh -T git@github.com</code></pre>
+<p>If successful, you'll see a greeting message.</p>
+
+{% endblock %}

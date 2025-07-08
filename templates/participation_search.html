@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Participation Search{% endblock %}
+{% block content %}
+<h2>Participation Search</h2>
+<form method="get" action="/participation_search" style="margin-bottom: 1em;">
+  <input name="netid" placeholder="Enter NetID" value="{{ query or '' }}" required>
+  <input type="submit" value="Search">
+</form>
+
+{% if query is not none %}
+  {% if results and results|length > 0 %}
+    <h3>Participation for <b>{{ query }}</b></h3>
+    <ul>
+      {% for date, section in results|sort %}
+        <li>{{ date }} — Section {{ section }}</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No participation found for <b>{{ query }}</b>.</p>
+  {% endif %}
+{% endif %}
+{% endblock %} 

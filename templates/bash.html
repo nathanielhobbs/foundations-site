@@ -1,0 +1,74 @@
+<!-- templates/tutorials/bash.html -->
+{% extends "base.html" %}
+{% block title %}Bash Basics{% endblock %}
+{% block content %}
+<h1>Bash Basics: Navigating the Command Line</h1>
+
+<h2>Why Use the Command Line?</h2>
+<p>The command line gives you powerful control over your files and programs. While you can use the GUI for many things, you'll need to be comfortable with basic navigation for Git and Python.</p>
+
+<h2>Jargon</h2>
+<ul>
+  <li><strong>Terminal</strong> – The program you use to interact with the command line</li>
+  <li><strong>Directory</strong> – A directory is a folder.  It can contain files and other directories.</li>
+  <li><strong>Shell</strong> – The shell is the program that interprets your commands.  Common shells include Bash ($), Zsh (%), and PowerShell (PS).</li>
+  <li><strong>Command</strong> – A command is a program that does something.  For example, <code>ls</code> is a command that lists files in a directory.</li>
+  <li><strong>Argument</strong> – An argument is a value that you pass to a command.  For example, <code>ls -l</code> has an argument, <code>-l</code>, which tells the <code>ls</code> command to list files in a long format.</li>
+</ul>
+
+<h2>Essential Commands</h2>
+<ul>
+  <li><code>pwd</code> – Print Working Directory: shows your current location</li>
+  <li><code>ls</code> – List files in the current directory</li>
+  <li><code>cd foldername</code> – Change into a directory</li>
+  <li><code>cd ..</code> – Go up one level</li>
+  <li><code>ls -la</code> – List all files, including hidden ones, with details</li>
+  <li><code>mkdir new_folder</code> – Create a new folder</li>
+  <li><code>touch file.txt</code> – Create an empty file</li>
+  <li><code>rm file.txt</code> – Delete a file</li>
+  <li><code>mv file.txt ../</code> – Move or rename a file</li>
+  <li><code>cp file.txt copy.txt</code> – Copy a file</li>
+</ul>
+
+<h2>Understanding Paths</h2>
+<ul>
+  <li><strong>Absolute path:</strong> Starts from the root, e.g., <code>/Users/you/Documents</code></li>
+  <li><strong>Relative path:</strong> Based on current directory, e.g., <code>../projects</code></li>
+  <li><code>.</code> refers to the current directory; <code>..</code> refers to the parent directory</li>
+</ul>
+
+<h2>Examples</h2>
+<p>Suppose you're in <code>/home/user</code>. Here's what happens with each command:</p>
+<ul>
+  <li><code>cd Documents</code> – goes to <code>/home/user/Documents</code></li>
+  <li><code>cd ../Downloads</code> – goes to <code>/home/Downloads</code> (the previous command put you in the <code>/home/user/Documents</code> directory, so this "puts you back")</li>
+  <li><code>ls -lh</code> – lists files with sizes in human-readable format</li>
+</ul>
+
+<h2>Interactive Exercises</h2>
+<p>Try these in your terminal:</p>
+<ol>
+  <li>Determine your location: <code>pwd</code></li>
+  <li>List the files <code>ls</code></li>
+  <li>Create a new directory: <code>mkdir my_test</code></li>
+  <li>List the file again and verify you can find the directory my_test: <code>ls</code></li>
+  <li>Navigate into the folder: <code>cd my_test</code></li>
+  <li>Create a file: <code>touch hello.txt</code></li>
+  <li>List the files: <code>ls</code></li>
+  <li>Go up: <code>cd ..</code></li>
+</ol>
+
+<!-- <h2>Visual Examples</h2>
+<p><img src="/static/img/bash_ls_example.png" alt="Example of ls command" width="600"></p>
+<p><img src="/static/img/bash_cd_example.png" alt="Example of cd command" width="600"></p> -->
+
+<h2>Downloadable Cheat Sheet</h2>
+<p><a href="https://github.com/RehanSaeed/Bash-Cheat-Sheet" download>Bash Cheat Sheet</a></p>
+
+<h2>More Resources</h2>
+<ul>
+  <li><a href="https://linuxcommand.org/lc3_learning_the_shell.php" target="_blank">LinuxCommand.org Beginner's Guide</a></li>
+  <li><a href="https://ryanstutorials.net/linuxtutorial/" target="_blank">Ryan's Linux Tutorial</a></li>
+</ul>
+
+{% endblock %}

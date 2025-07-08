@@ -1,0 +1,49 @@
+<!-- /notebooks page template -->
+{% extends "base.html" %}
+{% block title %}Jupyter Notebooks{% endblock %}
+
+{% block content %}
+<h2>Jupyter Notebooks</h2>
+<p>Click a notebook to open in Google Colab. You can view, edit, or copy it to your own Google Drive. If you're new to Colab, visit <a href="https://colab.research.google.com/" target="_blank">colab.research.google.com</a> and make sure you're signed into your Google account.</p>
+
+
+{% if instructor %}
+  <h2>All Sections</h2>
+  {% for sec, links in all_sections.items() %}
+    <h3>Section {{ section }}</h3>
+    <ul>
+      {% for item in links %}
+        <li><a href="https://colab.research.google.com/github/YOUR_ORG/{{ item.github_path }}" target="_blank">{{ item.title }}</a></li>
+      {% endfor %}
+    </ul>
+  {% endfor %}
+{% else %}
+  <h2>Notebooks for Section {{ section }}</h2>
+  <ul>
+    {% for item in links %}
+      <li><a href="https://colab.research.google.com/github/YOUR_ORG/{{ item.github_path }}" target="_blank">{{ item.title }}</a></li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Ensure section select updates Notebooks page like Chat
+  document.addEventListener("DOMContentLoaded", function() {
+    var sectionSelect = document.getElementById("sectionSelect");
+    if (sectionSelect) {
+      sectionSelect.addEventListener("change", function(e) {
+        var value = e.target.value;
+        localStorage.setItem("section", value);
+        // Only redirect if we're on the notebooks page
+        if (window.location.pathname.startsWith("/notebooks")) {
+          window.location.href = "/notebooks?section=" + value;
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}

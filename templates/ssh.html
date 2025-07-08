@@ -1,0 +1,23 @@
+<!-- templates/tutorials/ssh.html -->
+{% extends "base.html" %}
+{% block title %}Generating SSH Keypairs{% endblock %}
+{% block content %}
+<h1>Generating SSH Keypairs</h1>
+
+<h2>What is an SSH Keypair?</h2>
+<p>An SSH keypair allows you to authenticate securely with GitHub and other services without entering your password each time. It consists of a private key (kept secret) and a public key (shared).</p>
+
+<h2>Generate a Keypair</h2>
+<p>Open your terminal (or Git Bash on Windows) and run:</p>
+<pre><code>ssh-keygen -t ed25519 -C "you@example.com"</code></pre>
+<p>Press Enter to accept the default save location. When prompted for a passphrase, just press Enter to skip.</p>
+
+<h2>Upload Your Public Key to GitHub</h2>
+<pre><code>cat ~/.ssh/id_ed25519.pub</code></pre>
+<p>Copy the output, then visit <a href="https://github.com/settings/ssh/new">github.com/settings/ssh/new</a> and paste it in.</p>
+
+<h2>Verify Setup</h2>
+<pre><code>ssh -T git@github.com</code></pre>
+<p>If everything is set up correctly, you’ll see a success message.</p>
+
+{% endblock %}

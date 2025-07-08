@@ -38,6 +38,28 @@ def check_admin_access():
     if code != app.config['ADMIN_PASSCODE']:
         abort(403)
 
+@app.route("/notebooks")
+def notebooks():
+    section = request.args.get("section")
+    instructor = request.args.get("code") == app.config["ADMIN_PASSCODE"]
+
+    if instructor:
+        keys = r.keys("notebooks:section:*")
+        all_links = {}
+        for key in keys:
+            sec_id = key.split(":")[-1]
+            raw = r.get(key)
+            links = json.loads(raw) if raw else []
+            all_links[sec_id] = links
+        return render_template("notebooks.html", all_sections=all_links, instructor=True)
+    else:
+        key = f"notebooks:section:{section}"
+        raw = r.get(key)
+        links = json.loads(raw) if raw else []
+        return render_template("notebooks.html", section=section, links=links)
+
+
+
 # Route: chat by section
 @app.route("/chat/<int:section>")
 def chat(section):
@@ -231,7 +253,8 @@ def export_all_participation():
 def search_netid():
     query = request.args.get("netid", "").strip().lower()
     if not query:
-        return "<form><input name='netid' placeholder='Enter NetID'><input type='submit'></form>"
+        # Render a search form with the nav bar
+        return render_template("participation_search.html", query=None, results=None)
 
     keys = r.keys("participation:*:*")
     results = []
@@ -245,15 +268,23 @@ def search_netid():
         except ValueError:
             continue
 
-    if not results:
-        return f"<p>No participation found for <b>{query}</b>.</p>"
+    return render_template("participation_search.html", query=query, results=results)
 
-    html = f"<h3>Participation for {query}</h3><ul>"
-    for date, section in sorted(results):
-        html += f"<li>{date} — Section {section}</li>"
-    html += "</ul>"
-    return html
+@app.route("/tutorials")
+def tutorials():
+    return render_template("tutorials.html")
 
+@app.route("/tutorials/git")
+def git():
+    return render_template("git.html")
+
+@app.route("/tutorials/ssh")
+def ssh():
+    return render_template("ssh.html")
+
+@app.route("/tutorials/bash")
+def bash():
+    return render_template("bash.html")
 
 @app.route("/")
 def index():
@@ -273,14 +304,30 @@ def show_assignments():
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json"
     }
-    repos = requests.get(f"https://api.github.com/orgs/{GITHUB_ORG}/repos", headers=headers).json()
+    url = f"https://api.github.com/orgs/{GITHUB_ORG}/repos"
 
-    for assignment in assignments:
-        prefix = assignment['slug']
-        matching_repos = [repo for repo in repos if repo['name'].startswith(prefix)]
-        assignment['count'] = len(matching_repos)
-        assignment['repos'] = [{"name": repo["name"], "url": repo["html_url"], "pushed_at": repo["pushed_at"]} for repo in matching_repos]
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        repos = response.json()
 
-    return render_template("assignments.html", assignments=assignments)
+        for assignment in assignments:
+            prefix = assignment['slug']
+            matching_repos = [repo for repo in repos if repo.get('name', '').startswith(prefix)]
+            assignment['count'] = len(matching_repos)
+            assignment['repos'] = [
+                {
+                    "name": repo["name"],
+                    "url": repo["html_url"],
+                    "pushed_at": repo["pushed_at"]
+                }
+                for repo in matching_repos
+            ]
+
+        return render_template("assignments.html", assignments=assignments)
+
+    except Exception as e:
+        return f"<h2>Failed to load assignments</h2><pre>{e}</pre><p>Check GITHUB_TOKEN and GITHUB_ORG.</p>", 500
+
 
 socketio.run(app, host="0.0.0.0", port=5000)
