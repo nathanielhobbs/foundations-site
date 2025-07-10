@@ -27,40 +27,145 @@
     box-sizing: border-box;
   }
 
-  #chatPage {
-    flex: 1 1 auto;
+  /* Toggle switch styles */
+  .toggle-switch {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
+    margin-right: 12px;
+  }
+  .toggle-label {
+    font-size: 0.95em;
+    color: #666;
+    margin-bottom: 2px;
+  }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 24px;
+  }
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc;
+    transition: .2s;
+    border-radius: 24px;
+  }
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .2s;
+    border-radius: 50%;
+  }
+  input:checked + .slider {
+    background-color: #4ea1f3;
+  }
+  input:checked + .slider:before {
+    transform: translateX(24px);
+  }
+  .toggle-text {
+    font-size: 0.9em;
+    margin-left: 8px;
+    vertical-align: middle;
+    color: #333;
+  }
+  #chatPage {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
     min-height: 0;
   }
-
-  #messagesContainer {
+  #mainRow {
+    display: flex;
     flex: 1 1 auto;
+    min-height: 0;
+  }
+  #messagesContainer {
+    flex: 1 1 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    min-width: 0;
     min-height: 0;
+    overflow: hidden;
     background-color: var(--bg);
     padding: 1em 0 0 0;
   }
-
   #messages {
     flex: 1 1 auto;
     overflow-y: auto;
+    min-height: 0;
     border: 1px solid #ccc;
     padding: 10px;
     margin-bottom: 10px;
     background-color: var(--bg);
-    min-height: 0;
   }
-
-  #inputBox {
+  #participantsSidebar {
+    display: none;
+    width: 220px;
+    background: var(--bg);
+    border-left: 1px solid #ccc;
+    padding: 1em;
+    overflow-y: auto;
+    color: var(--text);
+    max-height: 100%;
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding-top: 5px;
-    background: var(--bg);
   }
+[data-theme="dark"] #participantsSidebar {
+  background: #23272e;
+  color: #e0e0e0;
+}
+#participantsSidebar h3 {
+  margin-top: 0;
+  margin-bottom: 0.7em;
+}
+#participantsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+#participantsList li {
+  padding: 2px 0 2px 0.5em;
+  font-size: 1em;
+  color: inherit;
+  display: flex;
+  align-items: center;
+}
+#participantsList li::before {
+  content: '\2022'; /* bullet */
+  color: #4ea1f3;
+  font-size: 1.2em;
+  margin-right: 0.5em;
+  display: inline-block;
+}
+#chatButtonsRow {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+#inputBox {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 5px;
+}
 
   #msgInput {
     width: 100%;
@@ -121,47 +226,79 @@
 
 {% block content %}
 <div id="chatPage">
-  <div id="messagesContainer">
-    <h2>Live Chat – Section {{ section }}</h2>
-
-    <button onclick="showPollForm()">+ Create Poll</button>
-    <div id="pollForm" style="display:none;">
-      <input type="text" id="pollQuestion" placeholder="Poll question">
-      <input type="text" id="pollOptions" placeholder="Options (comma-separated)">
-      <button onclick="sendPoll()">Send Poll</button>
-    </div>
-
-    <div id="messages">
-      {% for m in messages %}
-        <div class="message" {% if m.type == 'poll' %}data-poll-id="{{ m.poll_id }}"{% endif %}>
-          <div class="meta">
-            {{ m.netid }} — {{ m.timestamp }}{% if m.edited %} (edited){% endif %}{% if m.type == 'poll' %} (poll){% endif %}
-          </div>
-          {% if m.type == 'poll' %}
-            <div style="font-weight: bold;">{{ m.question }}</div>
-            {% for option in m.options %}
-              <div style="margin-top: 5px;">
-                <button onclick="voteOnPoll('{{ m.poll_id }}', '{{ option }}')">{{ option }}</button>
-                <div class="result-bar" data-option="{{ option }}" style="background-color: #ccc; padding: 2px 4px; margin-top: 2px; width: 0;"></div>
-              </div>
-            {% endfor %}
-          {% else %}
-            {% if m.reply %}
-              <div class="reply-box">{{ m.reply }}</div>
-            {% endif %}
-            <div class="content">
-              <pre><code class="language-python">{{ m.msg.split(':', 1)[1] if ':' in m.msg else m.msg }}</code></pre>
+  <div id="mainRow">
+    <div id="messagesContainer">
+      <div style="display: flex; align-items: flex-end; gap: 12px; margin-bottom: 0.5em;">
+        <h2 style="margin: 0; font-size: 1.5em; line-height: 1.2;">Live Chat – Section {{ section }}</h2>
+        <span id="participantsCount" style="font-weight:normal; color:#4ea1f3; font-size:1.1em; line-height:1.2; padding-bottom:2px;">0 joined</span>
+      </div>
+      <div id="chatButtonsRow">
+        <button id="toggleParticipants" type="button">Show Participants</button>
+        <button onclick="showPollForm()" type="button">Create Poll</button>
+      </div>
+      <div id="pollForm" style="display:none;">
+        <input type="text" id="pollQuestion" placeholder="Poll question">
+        <input type="text" id="pollOptions" placeholder="Options (comma-separated)">
+        <button onclick="sendPoll()">Send Poll</button>
+      </div>
+      <div id="messages">
+        {% for m in messages %}
+          <div class="message" {% if m.type == 'poll' %}data-poll-id="{{ m.poll_id }}"{% endif %}>
+            <div class="meta">
+              {{ m.netid }} — {{ m.timestamp }}{% if m.edited %} (edited){% endif %}{% if m.type == 'poll' %} (poll){% endif %}
             </div>
-          {% endif %}
-        </div>
-      {% endfor %}
+            {% if m.type == 'poll' %}
+              <div style="font-weight: bold;">{{ m.question }}</div>
+              {% for option in m.options %}
+                <div style="margin-top: 5px;">
+                  <button onclick="voteOnPoll('{{ m.poll_id }}', '{{ option }}')">{{ option }}</button>
+                  <div class="result-bar" data-option="{{ option }}" style="background-color: #ccc; padding: 2px 4px; margin-top: 2px; width: 0;"></div>
+                </div>
+              {% endfor %}
+            {% else %}
+              {% if m.reply %}
+                <div class="reply-box">{{ m.reply }}</div>
+              {% endif %}
+              <div class="content">
+                {% set blocks = m.msg|split_code_blocks %}
+                {% if blocks|length > 1 or (blocks and blocks[0].type == 'code') %}
+                  {% for block in blocks %}
+                    {% if block.type == 'code' %}
+                      <pre><code class="language-python">{{ block.content|e }}</code></pre>
+                    {% else %}
+                      <span>{{ block.content|e }}</span>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <span>{{ m.msg|e }}</span>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div id="participantsSidebar">
+      <h3 style="margin-bottom: 1em; display: flex; align-items: center; justify-content: space-between;">
+        Participants
+        <span id="sidebarParticipantsCount" style="font-weight:normal; color:#4ea1f3; font-size:0.98em; margin-left:0.7em;">(0)</span>
+      </h3>
+      <ul id="participantsList" style="display:block;"></ul>
     </div>
   </div>
-
   <div id="inputBox">
     <div id="replyPreview" class="reply-box" style="display: none;"></div>
-    <textarea id="msgInput" placeholder="Type your message (Shift+Enter for newline)"></textarea>
-    <button id="sendBtn">Send</button>
+    <div style="display: flex; align-items: flex-end; gap: 16px;">
+      <div class="toggle-switch">
+        <span class="toggle-label">Render as:</span>
+        <label class="switch">
+          <input type="checkbox" id="inputModeToggle" checked>
+          <span class="slider"></span>
+        </label>
+        <span id="toggleText" class="toggle-text">Code</span>
+      </div>
+      <textarea id="msgInput" placeholder="Ctrl+Enter to send."></textarea>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -169,65 +306,170 @@
 {% block extra_scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
+// Use a fallback for section in JS
+var section = {{ section|tojson }};
+const socket = io();
+let replyTo = null;
 
+document.addEventListener('DOMContentLoaded', function() {
+  // Prompt NetID (once per day)
+  function promptNetid() {
+    const today = new Date().toISOString().slice(0, 10);
+    const storedDate = localStorage.getItem("netidDate");
+    if (storedDate !== today || !localStorage.getItem("netid")) {
+      const netid = prompt("Enter your NetID (once per day):");
+      if (netid && netid.trim()) {
+        localStorage.setItem("netid", netid.trim());
+        localStorage.setItem("netidDate", today);
+      }
+    }
+  }
+  promptNetid();
 
+  // Toggle switch JS
+  let inputMode = 'code';
+  const inputModeToggle = document.getElementById('inputModeToggle');
+  const msgInput = document.getElementById('msgInput');
+  const toggleText = document.getElementById('toggleText');
+  if (msgInput) {
+    msgInput.style.fontFamily = 'monospace';
+    msgInput.style.background = '#f7f7f7';
+  }
+  if (inputModeToggle) {
+    inputModeToggle.onchange = function() {
+      if (inputModeToggle.checked) {
+        inputMode = 'code';
+        toggleText.textContent = 'Code';
+        msgInput.style.fontFamily = 'monospace';
+        msgInput.style.background = '#f7f7f7';
+        msgInput.placeholder = 'Ctrl+Enter to send.';
+      } else {
+        inputMode = 'text';
+        toggleText.textContent = 'Text';
+        msgInput.style.fontFamily = '';
+        msgInput.style.background = '';
+        msgInput.placeholder = 'Use triple backticks (```) for code blocks.\nCtrl+Enter to send.';
+      }
+    };
+  }
 
+  // Participants sidebar logic
+  const sidebar = document.getElementById('participantsSidebar');
+  const toggleBtn = document.getElementById('toggleParticipants');
+  const participantsList = document.getElementById('participantsList');
+  let sidebarVisible = false;
+  if (toggleBtn && sidebar) {
+    toggleBtn.onclick = function() {
+      sidebarVisible = !sidebarVisible;
+      console.log('Participants button clicked. Sidebar visible:', sidebarVisible);
+      sidebar.style.display = sidebarVisible ? 'flex' : 'none';
+      toggleBtn.textContent = sidebarVisible ? 'Hide Participants' : 'Show Participants';
+      if (sidebarVisible) {
+        socket.emit('get_participants', { section });
+      }
+    };
+  }
 
+  // Socket event handlers
+  socket.on('participants', function(data) {
+    console.log('Received participants event:', data);
+    if (data.section != section) return;
+    if (participantsList) participantsList.innerHTML = '';
+    var count = (data.participants || []).length;
+    const participantsCount = document.getElementById('participantsCount');
+    const sidebarParticipantsCount = document.getElementById('sidebarParticipantsCount');
+    if (participantsCount) participantsCount.textContent = `${count} joined`;
+    if (sidebarParticipantsCount) sidebarParticipantsCount.textContent = `(${count})`;
+    if (participantsList) {
+      (data.participants || []).forEach(function(netid) {
+        const li = document.createElement('li');
+        li.textContent = netid;
+        participantsList.appendChild(li);
+      });
+    }
+  });
+
+  socket.on("poll_results", function(data) {
+    const div = document.querySelector(`[data-poll-id="${data.poll_id}"]`);
+    if (!div) return;
+
+    const results = data.results;
+    const total = Object.values(results).reduce((sum, val) => sum + parseInt(val || -1), 0);
+
+    const bars = div.querySelectorAll(".result-bar");
+    bars.forEach(bar => {
+      const val = results[bar.dataset.option] || -1;
+      const pct = total ? Math.round((val / total) * 99) : 0;
+      bar.style.width = `${pct}%`;
+      bar.textContent = `${val} vote${val !== "0" ? "s" : ""} (${pct}%)`;
+    });
+  });
+
+  socket.on("message", function(data) {
+    if (typeof data === "string") {
+      addMessageObject({ msg: data, timestamp: "[old]", netid: "?", edited: false });
+    } else {
+      addMessageObject(data);
+    }
+  });
+
+  // NetID prompt and join
+  var netid = localStorage.getItem("netid") || "unknown";
+  console.log('Joining section', section, 'with netid', netid);
+  socket.emit("join", { section, netid });
+
+  // Scroll to bottom on load
+  const messagesDiv = document.getElementById("messages");
+  if (messagesDiv) messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  setupMessageToggles();
+  // Ensure participants sidebar is hidden initially
+  if (sidebar) sidebar.style.display = 'none';
+
+  // Message input event handlers
+  if (msgInput) {
+    msgInput.addEventListener('focus', function handler(e) {
+      if (e.target.value === '' && e.target.placeholder) {
+        e.target.placeholder = '';
+        e.target.removeEventListener('focus', handler);
+      }
+    });
+    msgInput.addEventListener("keydown", function(e) {
+      if (e.key === "Enter" && e.ctrlKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+  }
+});
+
+// Functions that don't depend on DOM elements
 function showPollForm() {
-  document.getElementById("pollForm").style.display = "block";
+  const pollForm = document.getElementById("pollForm");
+  if (pollForm) pollForm.style.display = "block";
 }
 
 function sendPoll() {
-  const question = document.getElementById("pollQuestion").value.trim();
-  const options = document.getElementById("pollOptions").value.split(",").map(o => o.trim()).filter(Boolean);
+  const question = document.getElementById("pollQuestion");
+  const options = document.getElementById("pollOptions");
+  const pollForm = document.getElementById("pollForm");
+  
+  if (!question || !options || !pollForm) return;
+  
+  const questionText = question.value.trim();
+  const optionsList = options.value.split(",").map(o => o.trim()).filter(Boolean);
   const netid = localStorage.getItem("netid") || "unknown";
 
-  if (!question || options.length < 2) {
+  if (!questionText || optionsList.length < 2) {
     alert("Enter a question and at least two options.");
     return;
   }
 
-  socket.emit("poll", { section, question, options, netid });
+  socket.emit("poll", { section, question: questionText, options: optionsList, netid });
 
-  document.getElementById("pollForm").style.display = "none";
-  document.getElementById("pollQuestion").value = "";
-  document.getElementById("pollOptions").value = "";
+  pollForm.style.display = "none";
+  question.value = "";
+  options.value = "";
 }
-
-// Use a fallback for section in JS
-var section = {{ section|default(1, true) }};
-const socket = io();
-let replyTo = null;
-
-socket.on("poll_results", function(data) {
-  const div = document.querySelector(`[data-poll-id="${data.poll_id}"]`);
-  if (!div) return;
-
-  const results = data.results;
-  const total = Object.values(results).reduce((sum, val) => sum + parseInt(val || -1), 0);
-
-  const bars = div.querySelectorAll(".result-bar");
-  bars.forEach(bar => {
-    const val = results[bar.dataset.option] || -1;
-    const pct = total ? Math.round((val / total) * 99) : 0;
-    bar.style.width = `${pct}%`;
-    bar.textContent = `${val} vote${val !== "0" ? "s" : ""} (${pct}%)`;
-  });
-});
-
-// Prompt NetID (once per day)
-function promptNetid() {
-  const today = new Date().toISOString().slice(0, 10);
-  const storedDate = localStorage.getItem("netidDate");
-  if (storedDate !== today || !localStorage.getItem("netid")) {
-    const netid = prompt("Enter your NetID (once per day):");
-    if (netid && netid.trim()) {
-      localStorage.setItem("netid", netid.trim());
-      localStorage.setItem("netidDate", today);
-    }
-  }
-}
-promptNetid();
 
 function escapeHtml(text) {
   return text.replace(/&/g, "&amp;")
@@ -239,7 +481,33 @@ function stripNetid(msg) {
   return msg.includes(":") ? msg.split(":").slice(1).join(":").trim() : msg;
 }
 
+function splitCodeBlocksJS(value) {
+  // Returns [{type: 'code'|'text', content: ...}]
+  const parts = value.split(/(```)/);
+  let inCode = false;
+  let buffer = '';
+  const result = [];
+  for (const part of parts) {
+    if (part === '```') {
+      if (buffer) {
+        result.push({ type: inCode ? 'code' : 'text', content: buffer });
+        buffer = '';
+      }
+      inCode = !inCode;
+    } else {
+      buffer += part;
+    }
+  }
+  if (buffer) {
+    result.push({ type: inCode ? 'code' : 'text', content: buffer });
+  }
+  return result;
+}
+
 function addMessageObject(data) {
+  const messages = document.getElementById("messages");
+  if (!messages) return;
+  
   if (data.type === "poll") {
     const div = document.createElement("div");
     div.className = "message";
@@ -276,24 +544,17 @@ function addMessageObject(data) {
       div.appendChild(wrapper);
     });
 
-    document.getElementById("messages").appendChild(div);
+    messages.appendChild(div);
     div.scrollIntoView({ behavior: "smooth" });
     return;
   }
 
- // 🛠️ Fallback for regular message
   const div = document.createElement("div");
   div.className = "message";
 
   const meta = document.createElement("div");
   meta.className = "meta";
   meta.textContent = `${data.netid} — ${data.timestamp}${data.edited ? " (edited)" : ""}`;
-
-  const contentDiv = document.createElement("div");
-  const content = stripNetid(data.msg || "");
-  contentDiv.className = "content";
-  contentDiv.innerHTML = `<pre><code class="language-python">${escapeHtml(content)}</code></pre>`;
-
   div.appendChild(meta);
 
   if (data.reply) {
@@ -303,64 +564,98 @@ function addMessageObject(data) {
     div.appendChild(reply);
   }
 
+  const content = stripNetid(data.msg || "");
+  const blocks = splitCodeBlocksJS(content);
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "content";
+
+  if (blocks.length > 1 || (blocks.length && blocks[0].type === 'code')) {
+    blocks.forEach(block => {
+      if (block.type === 'code') {
+        const pre = document.createElement('pre');
+        const code = document.createElement('code');
+        code.className = 'language-python';
+        code.textContent = block.content;
+        pre.appendChild(code);
+        contentDiv.appendChild(pre);
+        Prism.highlightElement(code);
+      } else {
+        const span = document.createElement('span');
+        span.textContent = block.content;
+        contentDiv.appendChild(span);
+      }
+    });
+  } else {
+    const span = document.createElement('span');
+    span.textContent = content;
+    contentDiv.appendChild(span);
+  }
+
   div.appendChild(contentDiv);
 
   div.addEventListener("click", () => {
     replyTo = data.msg;
     const box = document.getElementById("replyPreview");
-    box.textContent = "↪ " + content.slice(0, 80);
-    box.style.display = "block";
+    if (box) {
+      box.textContent = "↪ " + content.slice(0, 80);
+      box.style.display = "block";
+    }
   });
 
-  document.getElementById("messages").appendChild(div);
-  Prism.highlightAllUnder(div);
+  messages.appendChild(div);
   div.scrollIntoView({ behavior: "smooth" }); 
 }
-
 
 function voteOnPoll(pollId, option) {
   const netid = localStorage.getItem("netid") || "unknown";
   socket.emit("vote", { poll_id: pollId, option, netid });
 }
 
-// Socket setup
-socket.emit("join", { section });
-
-
-socket.on("message", function(data) {
-  if (typeof data === "string") {
-    addMessageObject({ msg: data, timestamp: "[old]", netid: "?", edited: false });
-  } else {
-    addMessageObject(data);
-  }
-});
-
 function sendMessage() {
   const input = document.getElementById("msgInput");
-  const text = input.value.trim();
+  const replyPreview = document.getElementById("replyPreview");
+  
+  if (!input) return;
+  
+  let text = input.value.trim();
   const netid = localStorage.getItem("netid") || "unknown";
 
   if (text) {
+    // If in code mode, wrap in triple backticks if not already
+    if (inputMode === 'code' && !/^```[\s\S]*```$/.test(text)) {
+      text = '```\n' + text + '\n```';
+    }
     const full = `${netid}: ${text}`;
     const msg = replyTo ? `${full}|||reply|||${replyTo}` : full;
     socket.emit("message", { section, msg });
     input.value = "";
     replyTo = null;
-    document.getElementById("replyPreview").style.display = "none";
+    if (replyPreview) replyPreview.style.display = "none";
   }
 }
 
-document.getElementById("sendBtn").addEventListener("click", sendMessage);
-document.getElementById("msgInput").addEventListener("keydown", function(e) {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-
-window.onload = function () {
-  const messagesDiv = document.getElementById("messages");
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-};
+// Add toggle logic for message display mode
+function setupMessageToggles() {
+  document.querySelectorAll('.content').forEach(function(content) {
+    const btn = content.querySelector('.msg-toggle-btn');
+    const textSpan = content.querySelector('.msg-text');
+    const codePre = content.querySelector('.msg-code');
+    if (!btn || !textSpan || !codePre) return;
+    btn.onclick = function() {
+      if (textSpan.style.display === 'none') {
+        textSpan.style.display = 'inline';
+        codePre.style.display = 'none';
+        btn.textContent = 'Show as code';
+      } else {
+        textSpan.style.display = 'none';
+        codePre.style.display = 'block';
+        btn.textContent = 'Show as text';
+        Prism.highlightAllUnder(codePre); // Highlight all code blocks within this content div
+      }
+    };
+  });
+}
 </script>
 {% endblock %}
+
+

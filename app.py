@@ -6,6 +6,8 @@ from flask_socketio import SocketIO, emit, join_room
 import redis
 from datetime import datetime
 import json
+import re
+from flask import session as flask_session
 
 load_dotenv()
 
@@ -154,7 +156,33 @@ def handle_vote(data):
 @socketio.on("join")
 def on_join(data):
     section = data["section"]
+    netid = data.get("netid") or flask_session.get("netid") or "unknown"
     join_room(section)
+    if netid:
+        r.sadd(f"chat:participants:{section}", netid)
+        # Broadcast updated list to room
+        participants = list(r.smembers(f"chat:participants:{section}"))
+        socketio.emit("participants", {"section": section, "participants": participants}, to=section)
+        # Also emit to the joining user directly
+        emit("participants", {"section": section, "participants": participants})
+
+@socketio.on("disconnect")
+def on_disconnect():
+    # Remove user from all participant sets (not perfect, but works for demo)
+    netid = flask_session.get("netid") or "unknown"
+    for key in r.keys("chat:participants:*"):
+        r.srem(key, netid)
+        section = key.split(":")[-1]
+        participants = list(r.smembers(key))
+        socketio.emit("participants", {"section": section, "participants": participants}, to=section)
+
+@socketio.on("get_participants")
+def handle_get_participants(data):
+    section = data.get("section")
+    if not section:
+        return
+    participants = list(r.smembers(f"chat:participants:{section}"))
+    emit("participants", {"section": section, "participants": participants})
 
 # Handle sending message to correct section
 @socketio.on("message")
@@ -329,5 +357,48 @@ def show_assignments():
     except Exception as e:
         return f"<h2>Failed to load assignments</h2><pre>{e}</pre><p>Check GITHUB_TOKEN and GITHUB_ORG.</p>", 500
 
+
+def split_code_blocks(value):
+    """
+    Splits a string into a list of dicts: {type: 'code'|'text'|'inline_code', content: ...}
+    using triple backticks as code block delimiters and single backticks for inline code.
+    """
+    import re
+    parts = re.split(r'(```)', value)
+    result = []
+    in_code = False
+    buffer = ''
+    for part in parts:
+        if part == '```':
+            if buffer:
+                # Further split text blocks for inline code
+                if not in_code:
+                    result.extend(_split_inline_code(buffer))
+                else:
+                    result.append({'type': 'code', 'content': buffer})
+                buffer = ''
+            in_code = not in_code
+        else:
+            buffer += part
+    if buffer:
+        if not in_code:
+            result.extend(_split_inline_code(buffer))
+        else:
+            result.append({'type': 'code', 'content': buffer})
+    return result
+
+def _split_inline_code(text):
+    """Helper: splits text into text and inline_code blocks using single backticks."""
+    import re
+    segments = re.split(r'(`[^`]+`)', text)
+    result = []
+    for seg in segments:
+        if seg.startswith('`') and seg.endswith('`') and len(seg) > 2:
+            result.append({'type': 'inline_code', 'content': seg[1:-1]})
+        elif seg:
+            result.append({'type': 'text', 'content': seg})
+    return result
+
+app.jinja_env.filters['split_code_blocks'] = split_code_blocks
 
 socketio.run(app, host="0.0.0.0", port=5000)
