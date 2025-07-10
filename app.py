@@ -189,15 +189,13 @@ def handle_get_participants(data):
 def handle_message(data):
     section = data.get("section")
     raw_msg = data.get("msg")
+    netid = data.get("netid", "unknown")  # Get netid from data parameter
     reply = None
     if "|||reply|||" in raw_msg:
         raw_msg, reply = raw_msg.split("|||reply|||", 1)
 
     timestamp = datetime.now().strftime("%H:%M")
     today = datetime.now().strftime("%Y-%m-%d")
-
-    # Extract netid from start of msg
-    netid = raw_msg.split(":")[0].strip() if ":" in raw_msg else "unknown"
 
     # Track participation
     r.sadd(f"participation:{today}:{section}", netid)

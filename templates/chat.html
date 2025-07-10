@@ -3,6 +3,7 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-solarizedlight.min.css" id="prism-light-theme" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
 <style>
@@ -182,13 +183,19 @@
   .message {
     margin-bottom: 10px;
     padding: 8px;
-    background-color: var(--bubble-bg);
+    background-color: #f0f0f0; /* Darker in light mode */
     border-left: 4px solid var(--bubble-border);
     border-radius: 6px;
     position: relative;
     cursor: pointer;
     box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     border: 1px solid #e0e0e0;
+  }
+  /* Dark mode message styling */
+  [data-theme="dark"] .message {
+    background-color: #2d3748; /* Darker background for dark mode */
+    border: 1px solid #4a5568;
+    color: #e2e8f0; /* Light text for dark mode */
   }
   #messages .message + .message {
     margin-top: 8px;
@@ -203,8 +210,22 @@
   .content pre {
     margin: 0;
     white-space: pre-wrap;
-    background: transparent;
-    color: var(--message-text);
+    background: #f8f9fa; /* Light background for code in light mode */
+    color: #000000; /* Pure black text for maximum contrast in light mode */
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+  }
+  /* Dark mode code styling */
+  [data-theme="dark"] .content pre {
+    background: #2d3748; /* Dark background for code in dark mode */
+    color: #e2e8f0; /* Light text for dark background */
+    border: 1px solid #4a5568;
+  }
+  /* Remove Coy theme's box-shadow and background gradient in light mode */
+  .content pre[class*="language-"] {
+    box-shadow: none !important;
+    background-image: none !important;
   }
 
   .reply-box {
@@ -440,6 +461,66 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
+
+  // Define sendMessage function inside DOMContentLoaded to access inputMode
+  window.sendMessage = function() {
+    const input = document.getElementById("msgInput");
+    const replyPreview = document.getElementById("replyPreview");
+    
+    if (!input) return;
+    
+    let text = input.value.trim();
+    const netid = localStorage.getItem("netid") || "unknown";
+
+    if (text) {
+      // If in code mode, wrap in triple backticks if not already
+      if (inputMode === 'code' && !/^```[\s\S]*```$/.test(text)) {
+        text = '```' + text + '```'; // Remove the \n to prevent extra newlines
+      }
+      // Remove username prefix - just send the message content
+      const msg = replyTo ? `${text}|||reply|||${replyTo}` : text;
+      socket.emit("message", { section, msg, netid });
+      input.value = "";
+      replyTo = null;
+      if (replyPreview) replyPreview.style.display = "none";
+    }
+  };
+
+  // Function to switch Prism theme based on current theme
+  function switchPrismTheme() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const lightTheme = document.getElementById('prism-light-theme');
+    const darkTheme = document.querySelector('link[href*="prism-tomorrow"]');
+    
+    if (isDark) {
+      // Use dark theme
+      if (lightTheme) lightTheme.disabled = true;
+      if (darkTheme) darkTheme.disabled = false;
+    } else {
+      // Use light theme
+      if (lightTheme) lightTheme.disabled = false;
+      if (darkTheme) darkTheme.disabled = true;
+    }
+    
+    // Re-highlight all code blocks
+    if (window.Prism) {
+      Prism.highlightAll();
+    }
+  }
+
+  // Switch theme on page load
+  switchPrismTheme();
+
+  // Listen for theme changes (if your theme system triggers events)
+  // Now, use a MutationObserver to watch for data-theme changes
+  const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+        switchPrismTheme();
+      }
+    });
+  });
+  observer.observe(document.documentElement, { attributes: true });
 });
 
 // Functions that don't depend on DOM elements
@@ -554,7 +635,9 @@ function addMessageObject(data) {
 
   const meta = document.createElement("div");
   meta.className = "meta";
-  meta.textContent = `${data.netid} — ${data.timestamp}${data.edited ? " (edited)" : ""}`;
+  // Use proper timestamp instead of "old"
+  const timestamp = data.timestamp === "[old]" ? new Date().toLocaleTimeString() : data.timestamp;
+  meta.textContent = `${data.netid} — ${timestamp}${data.edited ? " (edited)" : ""}`;
   div.appendChild(meta);
 
   if (data.reply) {
@@ -564,7 +647,16 @@ function addMessageObject(data) {
     div.appendChild(reply);
   }
 
-  const content = stripNetid(data.msg || "");
+  // Handle both old messages (with username prefix) and new messages (without prefix)
+  let content = data.msg || "";
+  if (content.includes(":") && !content.startsWith("```")) {
+    // This is likely an old message with username prefix, strip it
+    const colonIndex = content.indexOf(":");
+    if (colonIndex > 0) {
+      content = content.substring(colonIndex + 1).trim();
+    }
+  }
+  
   const blocks = splitCodeBlocksJS(content);
   const contentDiv = document.createElement("div");
   contentDiv.className = "content";
@@ -609,29 +701,6 @@ function addMessageObject(data) {
 function voteOnPoll(pollId, option) {
   const netid = localStorage.getItem("netid") || "unknown";
   socket.emit("vote", { poll_id: pollId, option, netid });
-}
-
-function sendMessage() {
-  const input = document.getElementById("msgInput");
-  const replyPreview = document.getElementById("replyPreview");
-  
-  if (!input) return;
-  
-  let text = input.value.trim();
-  const netid = localStorage.getItem("netid") || "unknown";
-
-  if (text) {
-    // If in code mode, wrap in triple backticks if not already
-    if (inputMode === 'code' && !/^```[\s\S]*```$/.test(text)) {
-      text = '```\n' + text + '\n```';
-    }
-    const full = `${netid}: ${text}`;
-    const msg = replyTo ? `${full}|||reply|||${replyTo}` : full;
-    socket.emit("message", { section, msg });
-    input.value = "";
-    replyTo = null;
-    if (replyPreview) replyPreview.style.display = "none";
-  }
 }
 
 // Add toggle logic for message display mode
