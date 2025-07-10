@@ -9,78 +9,69 @@
   html, body {
     height: 100%;
     margin: 0;
-    /* padding: 0; */
+    padding: 0;
+    box-sizing: border-box;
   }
 
   body {
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
   }
 
-  main {
-    flex: 1;
+  #siteWrapper {
+    height: 100vh;
     display: flex;
     flex-direction: column;
     padding: 1em;
+    box-sizing: border-box;
+  }
+
+  #chatPage {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  #messagesContainer {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
     background-color: var(--bg);
-  }
-
-  :root {
-    color-scheme: light dark;
-    --bg: white;
-    --text: CanvasText;
-    --bubble-bg: #e6f7ff;
-    --bubble-border: #1e90ff;
-    --poll-bar-bg: #4ea1f3;
-    --poll-bar-text: white;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: Canvas;
-      --bubble-bg: #1e1e1e;
-      --bubble-border: #4ea1f3;
-      --poll-bar-bg: light-dark(#5693f4, #2a6ad0);
-      --poll-bar-text: #e0e0e0;
-    }
-  } 
-
-  /* Poll result bar readability */
-  .result-bar {
-    background-color: var(--poll-bar-bg);
-    color: var(--poll-bar-text);
-    padding: 4px 8px;
-    font-size: 0.85em;
-    font-weight: bold;
-    border-radius: 4px;
-  }
-
-  /* Ensure contrast ratio 4.5:1+ for text on bar */
-  :root {
-    --poll-bar-bg: #3b78e7;       /* Medium blue for light mode */
-    --poll-bar-text: #ffffff;     /* White text */
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --poll-bar-bg: #6699ff;     /* Lighter blue for dark mode */
-      --poll-bar-text: #000000;   /* Black text */
-    }
-  }
-
-  [data-theme="dark"] {
-    --bubble-bg: #1e1e1e;
-    --bubble-border: #4ea1f3;
-    --message-text: #e0e0e0;
+    padding: 1em 0 0 0;
   }
 
   #messages {
-    flex-grow: 1;
+    flex: 1 1 auto;
     overflow-y: auto;
     border: 1px solid #ccc;
     padding: 10px;
     margin-bottom: 10px;
     background-color: var(--bg);
+    min-height: 0;
+  }
+
+  #inputBox {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 5px;
+    background: var(--bg);
+  }
+
+  #msgInput {
+    width: 100%;
+    padding: 8px;
+    min-height: 60px;
+    resize: vertical;
+  }
+
+  #sendBtn {
+    align-self: flex-end;
+    padding: 8px 16px;
   }
 
   .message {
@@ -91,6 +82,11 @@
     border-radius: 6px;
     position: relative;
     cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    border: 1px solid #e0e0e0;
+  }
+  #messages .message + .message {
+    margin-top: 8px;
   }
 
   .meta {
@@ -114,63 +110,12 @@
     margin-bottom: 5px;
   }
 
-  #inputBox {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 5px;
+  .result-bar {
+    background-color: #4ea1f3;
+    color: white;
+    font-size: 0.75em;
+    transition: width 0.3s ease;
   }
-
-  #msgInput {
-    width: 100%;
-    padding: 8px;
-    min-height: 60px;
-    resize: vertical;
-  }
-
-  #sendBtn {
-    align-self: flex-end;
-    padding: 8px 16px;
-  }
-  #chatPage {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-
-  #messagesContainer {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    overflow-y: hidden;
-    padding: 1em;
-    background-color: var(--bg);
-  } 
-
-  #messages {
-  flex-grow: 1;
-  overflow-y: auto;
-  padding: 10px;
-  border: 1px solid #ccc;
-  background-color: var(--bg);
-}
-
-#messages {
-  flex-grow: 1;
-  overflow-y: auto;
-  padding: 10px;
-  border: 1px solid #ccc;
-  background-color: var(--bg);
-}
-
-.result-bar {
-  background-color: #4ea1f3;
-  color: white;
-  font-size: 0.75em;
-  transition: width 0.3s ease;
-}
-
-
 </style>
 {% endblock %}
 
@@ -188,16 +133,26 @@
 
     <div id="messages">
       {% for m in messages %}
-        <div class="message">
+        <div class="message" {% if m.type == 'poll' %}data-poll-id="{{ m.poll_id }}"{% endif %}>
           <div class="meta">
-            {{ m.netid }} — {{ m.timestamp }}{% if m.edited %} (edited){% endif %}
+            {{ m.netid }} — {{ m.timestamp }}{% if m.edited %} (edited){% endif %}{% if m.type == 'poll' %} (poll){% endif %}
           </div>
-          {% if m.reply %}
-            <div class="reply-box">{{ m.reply }}</div>
+          {% if m.type == 'poll' %}
+            <div style="font-weight: bold;">{{ m.question }}</div>
+            {% for option in m.options %}
+              <div style="margin-top: 5px;">
+                <button onclick="voteOnPoll('{{ m.poll_id }}', '{{ option }}')">{{ option }}</button>
+                <div class="result-bar" data-option="{{ option }}" style="background-color: #ccc; padding: 2px 4px; margin-top: 2px; width: 0;"></div>
+              </div>
+            {% endfor %}
+          {% else %}
+            {% if m.reply %}
+              <div class="reply-box">{{ m.reply }}</div>
+            {% endif %}
+            <div class="content">
+              <pre><code class="language-python">{{ m.msg.split(':', 1)[1] if ':' in m.msg else m.msg }}</code></pre>
+            </div>
           {% endif %}
-          <div class="content">
-            <pre><code class="language-python">{{ m.msg.split(':', 1)[1] if ':' in m.msg else m.msg }}</code></pre>
-          </div>
         </div>
       {% endfor %}
     </div>
@@ -239,7 +194,8 @@ function sendPoll() {
   document.getElementById("pollOptions").value = "";
 }
 
-const section = {{ section }};
+// Use a fallback for section in JS
+var section = {{ section|default(1, true) }};
 const socket = io();
 let replyTo = null;
 
