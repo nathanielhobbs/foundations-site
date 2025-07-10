@@ -1,11 +1,92 @@
 {% extends "base.html" %}
 {% block title %}Participation Search{% endblock %}
+
+{% block extra_head %}
+<style>
+  .netid-form {
+    background: var(--bg);
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    max-width: 400px;
+  }
+  
+  .netid-form input[type="text"] {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+  }
+  
+  .netid-form button {
+    background: #4ea1f3;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 10px;
+  }
+  
+  .netid-form button:hover {
+    background: #3182ce;
+  }
+  
+  .remember-me {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  
+  .remember-me input[type="checkbox"] {
+    margin-right: 8px;
+  }
+  
+  .stored-netid {
+    background: #f0f8ff;
+    border: 1px solid #4ea1f3;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 15px;
+    color: #2563eb;
+  }
+  
+  [data-theme="dark"] .stored-netid {
+    background: #1e3a8a;
+    border-color: #4ea1f3;
+    color: #93c5fd;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <h2>Participation Search</h2>
-<form method="get" action="/participation_search" style="margin-bottom: 1em;">
-  <input name="netid" placeholder="Enter NetID" value="{{ query or '' }}" required>
-  <input type="submit" value="Search">
-</form>
+
+<div id="netidForm" class="netid-form" style="display: none;">
+  <h3>Enter Your NetID</h3>
+  <input type="text" id="netidInput" placeholder="Enter your NetID" required>
+  <div class="remember-me">
+    <input type="checkbox" id="rememberMe">
+    <label for="rememberMe">Remember me (don't ask again)</label>
+  </div>
+  <button onclick="saveNetID()">Save NetID</button>
+  <button onclick="skipNetID()">Skip</button>
+</div>
+
+<div id="storedNetID" class="stored-netid" style="display: none;">
+  <strong>Using NetID:</strong> <span id="displayNetID"></span>
+  <button onclick="changeNetID()" style="margin-left: 10px; background: #6b7280; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">Change</button>
+</div>
+
+<div id="searchForm" style="display: none;">
+  <form method="get" action="/participation_search" style="margin-bottom: 1em;">
+    <input name="netid" id="searchNetID" placeholder="Enter NetID" value="{{ query or '' }}" required>
+    <input type="submit" value="Search">
+  </form>
+</div>
 
 {% if query is not none %}
   {% if results and results|length > 0 %}
@@ -19,4 +100,75 @@
     <p>No participation found for <b>{{ query }}</b>.</p>
   {% endif %}
 {% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const netidForm = document.getElementById('netidForm');
+  const storedNetID = document.getElementById('storedNetID');
+  const searchForm = document.getElementById('searchForm');
+  const displayNetID = document.getElementById('displayNetID');
+  const searchNetID = document.getElementById('searchNetID');
+  
+  // Check if we have a stored NetID
+  const storedNetid = localStorage.getItem('netid');
+  const rememberMe = localStorage.getItem('rememberMe') === 'true';
+  
+  if (storedNetid && rememberMe) {
+    // User has chosen to remember their NetID
+    displayNetID.textContent = storedNetid;
+    storedNetID.style.display = 'block';
+    searchForm.style.display = 'block';
+    searchNetID.value = storedNetid;
+  } else if (storedNetid) {
+    // User has a NetID but hasn't chosen to remember it
+    displayNetID.textContent = storedNetid;
+    storedNetID.style.display = 'block';
+    searchForm.style.display = 'block';
+    searchNetID.value = storedNetid;
+  } else {
+    // No NetID stored, show the form
+    netidForm.style.display = 'block';
+  }
+});
+
+function saveNetID() {
+  const netidInput = document.getElementById('netidInput');
+  const rememberMe = document.getElementById('rememberMe');
+  const netid = netidInput.value.trim();
+  
+  if (netid) {
+    localStorage.setItem('netid', netid);
+    localStorage.setItem('netidDate', new Date().toISOString().slice(0, 10));
+    
+    if (rememberMe.checked) {
+      localStorage.setItem('rememberMe', 'true');
+    }
+    
+    // Hide form and show stored NetID
+    document.getElementById('netidForm').style.display = 'none';
+    document.getElementById('storedNetID').style.display = 'block';
+    document.getElementById('searchForm').style.display = 'block';
+    document.getElementById('displayNetID').textContent = netid;
+    document.getElementById('searchNetID').value = netid;
+  }
+}
+
+function skipNetID() {
+  // Hide form and show search form without NetID
+  document.getElementById('netidForm').style.display = 'none';
+  document.getElementById('searchForm').style.display = 'block';
+}
+
+function changeNetID() {
+  // Clear stored NetID and show form again
+  localStorage.removeItem('netid');
+  localStorage.removeItem('rememberMe');
+  localStorage.removeItem('netidDate');
+  
+  document.getElementById('storedNetID').style.display = 'none';
+  document.getElementById('netidForm').style.display = 'block';
+  document.getElementById('netidInput').value = '';
+  document.getElementById('rememberMe').checked = false;
+}
+</script>
 {% endblock %} 

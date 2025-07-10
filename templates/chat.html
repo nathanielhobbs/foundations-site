@@ -241,6 +241,167 @@
     color: white;
     font-size: 0.75em;
     transition: width 0.3s ease;
+    padding: 4px 8px;
+    border-radius: 3px;
+    margin-top: 4px;
+    font-weight: 500;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    min-height: 20px;
+    display: flex;
+    align-items: center;
+  }
+  
+  /* Dark mode poll results */
+  [data-theme="dark"] .result-bar {
+    background-color: #3182ce;
+    color: #e2e8f0;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
+  
+  /* Light mode poll results */
+  [data-theme="light"] .result-bar {
+    background-color: #2563eb;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  }
+  
+  /* Admin flags and support styling */
+  .message-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    align-items: center;
+  }
+  
+  .admin-actions {
+    display: flex;
+    gap: 4px;
+  }
+  
+  .admin-btn {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 3px;
+    font-size: 0.75em;
+    cursor: pointer;
+    color: white;
+  }
+  
+  .admin-btn.delete {
+    background-color: #dc2626;
+  }
+  
+  .admin-btn.delete:hover {
+    background-color: #b91c1c;
+  }
+  
+  .admin-btn.correct {
+    background-color: #059669;
+  }
+  
+  .admin-btn.correct:hover {
+    background-color: #047857;
+  }
+  
+  .admin-btn.incorrect {
+    background-color: #dc2626;
+  }
+  
+  .admin-btn.incorrect:hover {
+    background-color: #b91c1c;
+  }
+  
+  .admin-btn.flagged {
+    opacity: 0.7;
+  }
+  
+  .support-btn {
+    padding: 4px 8px;
+    border: 1px solid #4ea1f3;
+    background: transparent;
+    border-radius: 3px;
+    font-size: 0.75em;
+    cursor: pointer;
+    color: #4ea1f3;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .support-btn:hover {
+    background-color: #4ea1f3;
+    color: white;
+  }
+  
+  .support-btn.supported {
+    background-color: #4ea1f3;
+    color: white;
+  }
+  
+  .admin-flags {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+  
+  .flag-badge {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.7em;
+    font-weight: 500;
+    color: white;
+  }
+  
+  .flag-badge.correct {
+    background-color: #059669;
+  }
+  
+  .flag-badge.incorrect {
+    background-color: #dc2626;
+  }
+  
+  .admin-password-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  
+  .admin-password-modal .modal-content {
+    background: var(--bg);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    min-width: 300px;
+  }
+  
+  .admin-password-modal input {
+    width: 100%;
+    padding: 8px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+  }
+  
+  .admin-password-modal button {
+    background: #4ea1f3;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 8px;
+  }
+  
+  .admin-password-modal button:hover {
+    background: #3182ce;
   }
 </style>
 {% endblock %}
@@ -264,16 +425,26 @@
       </div>
       <div id="messages">
         {% for m in messages %}
-          <div class="message" {% if m.type == 'poll' %}data-poll-id="{{ m.poll_id }}"{% endif %}>
+          <div class="message" {% if m.type == 'poll' %}data-poll-id="{{ m.poll_id }}"{% endif %} data-message-id="{{ m.message_id }}">
             <div class="meta">
               {{ m.netid }} — {{ m.timestamp }}{% if m.edited %} (edited){% endif %}{% if m.type == 'poll' %} (poll){% endif %}
+              {% if m.admin_flags %}
+                <div class="admin-flags">
+                  {% if m.admin_flags.correct %}
+                    <span class="flag-badge correct">✓ Correct</span>
+                  {% endif %}
+                  {% if m.admin_flags.incorrect %}
+                    <span class="flag-badge incorrect">✗ Incorrect</span>
+                  {% endif %}
+                </div>
+              {% endif %}
             </div>
             {% if m.type == 'poll' %}
               <div style="font-weight: bold;">{{ m.question }}</div>
               {% for option in m.options %}
                 <div style="margin-top: 5px;">
                   <button onclick="voteOnPoll('{{ m.poll_id }}', '{{ option }}')">{{ option }}</button>
-                  <div class="result-bar" data-option="{{ option }}" style="background-color: #ccc; padding: 2px 4px; margin-top: 2px; width: 0;"></div>
+                  <div class="result-bar" data-option="{{ option }}" style="width: 0;"></div>
                 </div>
               {% endfor %}
             {% else %}
@@ -295,6 +466,16 @@
                 {% endif %}
               </div>
             {% endif %}
+            <div class="message-actions">
+              <button class="support-btn" onclick="supportMessage('{{ m.message_id }}')" data-supported="{{ 'true' if m.support_votes and netid in m.support_votes else 'false' }}">
+                👍 Support {% if m.support_count > 0 %}({{ m.support_count }}){% endif %}
+              </button>
+              <div class="admin-actions" style="display: none;">
+                <button class="admin-btn delete" onclick="deleteMessage('{{ m.message_id }}')">Delete</button>
+                <button class="admin-btn correct" onclick="flagMessage('{{ m.message_id }}', 'correct')" {% if m.admin_flags.correct %}class="flagged"{% endif %}>✓ Correct</button>
+                <button class="admin-btn incorrect" onclick="flagMessage('{{ m.message_id }}', 'incorrect')" {% if m.admin_flags.incorrect %}class="flagged"{% endif %}>✗ Incorrect</button>
+              </div>
+            </div>
           </div>
         {% endfor %}
       </div>
@@ -322,6 +503,19 @@
     </div>
   </div>
 </div>
+
+<!-- Admin Password Modal -->
+<div id="adminPasswordModal" class="admin-password-modal" style="display: none;">
+  <div class="modal-content">
+    <h3>Admin Authentication</h3>
+    <p>Enter your admin password to perform this action:</p>
+    <input type="password" id="adminPassword" placeholder="Admin password">
+    <div style="margin-top: 15px;">
+      <button onclick="submitAdminAction()">Submit</button>
+      <button onclick="cancelAdminAction()">Cancel</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -333,10 +527,18 @@ const socket = io();
 let replyTo = null;
 
 document.addEventListener('DOMContentLoaded', function() {
-  // Prompt NetID (once per day)
+  // Prompt NetID (once per day or based on remember me setting)
   function promptNetid() {
     const today = new Date().toISOString().slice(0, 10);
     const storedDate = localStorage.getItem("netidDate");
+    const rememberMe = localStorage.getItem("rememberMe") === 'true';
+    
+    // If remember me is enabled, don't prompt daily
+    if (rememberMe && localStorage.getItem("netid")) {
+      return;
+    }
+    
+    // If not remembering, check if it's a new day
     if (storedDate !== today || !localStorage.getItem("netid")) {
       const netid = prompt("Enter your NetID (once per day):");
       if (netid && netid.trim()) {
@@ -673,9 +875,6 @@ function addMessageObject(data) {
       const result = document.createElement("div");
       result.className = "result-bar";
       result.dataset.option = option;
-      result.style.backgroundColor = "#ccc";
-      result.style.padding = "2px 4px";
-      result.style.marginTop = "2px";
       result.style.width = "0";
       wrapper.appendChild(result);
 

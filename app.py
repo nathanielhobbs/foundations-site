@@ -15,6 +15,8 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'foundationsP4ss;'
 app.config['ADMIN_PASSCODE'] = 'fnP4ssword;'  
+app.config['ADMIN_NETID'] = 'nh385'
+app.config['ADMIN_PASSWORD'] = 'foudnationsP4ss;'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
@@ -43,6 +45,10 @@ def check_admin_access():
     code = request.args.get("code")
     if code != app.config['ADMIN_PASSCODE']:
         abort(403)
+
+def check_admin_auth(netid, password):
+    """Check if user is admin with correct credentials"""
+    return netid == app.config['ADMIN_NETID'] and password == app.config['ADMIN_PASSWORD']
 
 def get_est_timestamp():
     """Get current timestamp in EST with date"""
@@ -119,6 +125,10 @@ def chat(section):
                 msg_obj.setdefault("timestamp", "[unknown]")
                 msg_obj.setdefault("reply", None)
                 msg_obj.setdefault("edited", False)
+                msg_obj.setdefault("message_id", f"{section}:{msg_obj.get('timestamp', '[unknown]')}:{hash(msg_obj.get('msg', '')) % 1000000}")
+                msg_obj.setdefault("admin_flags", {})
+                msg_obj.setdefault("support_count", 0)
+                msg_obj.setdefault("support_votes", [])
                 # Format timestamp for display
                 msg_obj["timestamp"] = format_timestamp_for_display(msg_obj["timestamp"])
                 messages.append(msg_obj)
@@ -129,7 +139,11 @@ def chat(section):
                     "msg": str(item),
                     "timestamp": "[old]",
                     "reply": None,
-                    "edited": False
+                    "edited": False,
+                    "message_id": f"{section}:[old]:{hash(str(item)) % 1000000}",
+                    "admin_flags": {},
+                    "support_count": 0,
+                    "support_votes": []
                 })
         except json.JSONDecodeError:
             # fallback for old string messages
@@ -138,7 +152,11 @@ def chat(section):
                 "msg": item,
                 "timestamp": "[old]",
                 "reply": None,
-                "edited": False
+                "edited": False,
+                "message_id": f"{section}:[old]:{hash(item) % 1000000}",
+                "admin_flags": {},
+                "support_count": 0,
+                "support_votes": []
             })
 
     return render_template("chat.html", section=section, messages=messages)
@@ -263,7 +281,10 @@ def handle_message(data):
         "msg": raw_msg.strip(),
         "timestamp": timestamp,
         "reply": reply,
-        "edited": False
+        "edited": False,
+        "message_id": f"{section}:{timestamp}:{hash(raw_msg.strip()) % 1000000}",
+        "admin_flags": {},
+        "support_count": 0
     }
 
     # Store JSON in Redis
@@ -271,6 +292,120 @@ def handle_message(data):
 
     # Send structured message to clients
     socketio.emit("message", msg_obj, to=section)
+
+@socketio.on("admin_delete_message")
+def handle_admin_delete(data):
+    section = data.get("section")
+    message_id = data.get("message_id")
+    netid = data.get("netid")
+    password = data.get("password")
+    
+    if not check_admin_auth(netid, password):
+        emit("admin_error", {"message": "Invalid admin credentials"})
+        return
+    
+    # Find and remove the message from Redis
+    messages = r.lrange(f"chat:{section}", 0, -1)
+    for i, msg_str in enumerate(messages):
+        try:
+            msg_obj = json.loads(msg_str)
+            if msg_obj.get("message_id") == message_id:
+                r.lrem(f"chat:{section}", 1, msg_str)
+                socketio.emit("message_deleted", {"message_id": message_id}, to=section)
+                return
+        except:
+            continue
+    
+    emit("admin_error", {"message": "Message not found"})
+
+@socketio.on("admin_flag_message")
+def handle_admin_flag(data):
+    section = data.get("section")
+    message_id = data.get("message_id")
+    flag_type = data.get("flag_type")  # "correct" or "incorrect"
+    netid = data.get("netid")
+    password = data.get("password")
+    
+    if not check_admin_auth(netid, password):
+        emit("admin_error", {"message": "Invalid admin credentials"})
+        return
+    
+    if flag_type not in ["correct", "incorrect"]:
+        emit("admin_error", {"message": "Invalid flag type"})
+        return
+    
+    # Find and update the message in Redis
+    messages = r.lrange(f"chat:{section}", 0, -1)
+    for i, msg_str in enumerate(messages):
+        try:
+            msg_obj = json.loads(msg_str)
+            if msg_obj.get("message_id") == message_id:
+                msg_obj["admin_flags"][flag_type] = True
+                # Remove opposite flag if it exists
+                opposite_flag = "incorrect" if flag_type == "correct" else "correct"
+                if opposite_flag in msg_obj["admin_flags"]:
+                    del msg_obj["admin_flags"][opposite_flag]
+                
+                # Update in Redis
+                r.lset(f"chat:{section}", i, json.dumps(msg_obj))
+                socketio.emit("message_flagged", {
+                    "message_id": message_id,
+                    "flag_type": flag_type,
+                    "admin_flags": msg_obj["admin_flags"]
+                }, to=section)
+                return
+        except:
+            continue
+    
+    emit("admin_error", {"message": "Message not found"})
+
+@socketio.on("support_message")
+def handle_support_message(data):
+    section = data.get("section")
+    message_id = data.get("message_id")
+    netid = data.get("netid")
+    
+    if not netid:
+        emit("support_error", {"message": "NetID required"})
+        return
+    
+    # Find and update the message in Redis
+    messages = r.lrange(f"chat:{section}", 0, -1)
+    for i, msg_str in enumerate(messages):
+        try:
+            msg_obj = json.loads(msg_str)
+            if msg_obj.get("message_id") == message_id:
+                # Initialize support tracking if not exists
+                if "support_votes" not in msg_obj:
+                    msg_obj["support_votes"] = set()
+                
+                # Convert set to list for JSON serialization
+                support_votes = set(msg_obj.get("support_votes", []))
+                
+                if netid in support_votes:
+                    # Remove support
+                    support_votes.remove(netid)
+                    msg_obj["support_count"] = len(support_votes)
+                else:
+                    # Add support
+                    support_votes.add(netid)
+                    msg_obj["support_count"] = len(support_votes)
+                
+                # Convert back to list for storage
+                msg_obj["support_votes"] = list(support_votes)
+                
+                # Update in Redis
+                r.lset(f"chat:{section}", i, json.dumps(msg_obj))
+                socketio.emit("message_supported", {
+                    "message_id": message_id,
+                    "support_count": msg_obj["support_count"],
+                    "supported": netid in support_votes
+                }, to=section)
+                return
+        except:
+            continue
+    
+    emit("support_error", {"message": "Message not found"})
 
     
 @app.route("/participation_dashboard")
