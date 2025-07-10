@@ -8,6 +8,7 @@ from datetime import datetime
 import json
 import re
 from flask import session as flask_session
+import pytz
 
 load_dotenv()
 
@@ -16,6 +17,9 @@ app.config['SECRET_KEY'] = 'foundationsP4ss;'
 app.config['ADMIN_PASSCODE'] = 'fnP4ssword;'  
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+
+# EST timezone
+est = pytz.timezone('US/Eastern')
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_ORG = os.environ.get("GITHUB_ORG")
@@ -39,6 +43,43 @@ def check_admin_access():
     code = request.args.get("code")
     if code != app.config['ADMIN_PASSCODE']:
         abort(403)
+
+def get_est_timestamp():
+    """Get current timestamp in EST with date"""
+    now = datetime.now(est)
+    return now.strftime("%m/%d %H:%M")
+
+def format_timestamp_for_display(timestamp_str):
+    """Format timestamp for display, showing date if not today"""
+    try:
+        # Parse the timestamp (assuming it's in MM/DD HH:MM format)
+        if ' ' in timestamp_str and timestamp_str != "[old]" and timestamp_str != "[unknown]":
+            date_part, time_part = timestamp_str.split(' ', 1)
+            month, day = date_part.split('/')
+            hour, minute = time_part.split(':')
+            
+            # Create datetime object
+            timestamp_dt = datetime.now(est).replace(
+                month=int(month), 
+                day=int(day), 
+                hour=int(hour), 
+                minute=int(minute),
+                second=0, 
+                microsecond=0
+            )
+            
+            # Compare with today
+            today = datetime.now(est).date()
+            if timestamp_dt.date() == today:
+                return time_part  # Just show time if today
+            else:
+                return timestamp_str  # Show full date/time if different day
+        else:
+            # For old messages or unknown timestamps, return as is
+            return timestamp_str
+    except:
+        # If parsing fails, return original
+        return timestamp_str
 
 @app.route("/notebooks")
 def notebooks():
@@ -78,6 +119,8 @@ def chat(section):
                 msg_obj.setdefault("timestamp", "[unknown]")
                 msg_obj.setdefault("reply", None)
                 msg_obj.setdefault("edited", False)
+                # Format timestamp for display
+                msg_obj["timestamp"] = format_timestamp_for_display(msg_obj["timestamp"])
                 messages.append(msg_obj)
             else:
                 # fallback for malformed entries
@@ -110,7 +153,7 @@ def handle_poll(data):
     if not section or not question or not options or not isinstance(options, list):
         return
 
-    timestamp = datetime.now().strftime("%H:%M")
+    timestamp = get_est_timestamp()
 
     poll_id = f"poll:{section}:{len(options)}:{hash(question) % 100000}"
     r.hset(poll_id, mapping={"question": question, "options": "|".join(options)})
@@ -184,6 +227,20 @@ def handle_get_participants(data):
     participants = list(r.smembers(f"chat:participants:{section}"))
     emit("participants", {"section": section, "participants": participants})
 
+@socketio.on("get_poll_results")
+def handle_get_poll_results(data):
+    poll_id = data.get("poll_id")
+    if not poll_id:
+        return
+    
+    # Fetch current results from Redis
+    results = r.hgetall(f"{poll_id}:votes")
+    if results:
+        emit("poll_results", {
+            "poll_id": poll_id,
+            "results": results
+        })
+
 # Handle sending message to correct section
 @socketio.on("message")
 def handle_message(data):
@@ -194,8 +251,8 @@ def handle_message(data):
     if "|||reply|||" in raw_msg:
         raw_msg, reply = raw_msg.split("|||reply|||", 1)
 
-    timestamp = datetime.now().strftime("%H:%M")
-    today = datetime.now().strftime("%Y-%m-%d")
+    timestamp = get_est_timestamp()
+    today = datetime.now(est).strftime("%Y-%m-%d")
 
     # Track participation
     r.sadd(f"participation:{today}:{section}", netid)

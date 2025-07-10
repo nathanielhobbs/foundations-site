@@ -446,6 +446,16 @@ document.addEventListener('DOMContentLoaded', function() {
   // Ensure participants sidebar is hidden initially
   if (sidebar) sidebar.style.display = 'none';
 
+  // Fetch poll results for historical polls
+  const pollMessages = document.querySelectorAll('.message[data-poll-id]');
+  pollMessages.forEach(function(pollDiv) {
+    const pollId = pollDiv.getAttribute('data-poll-id');
+    if (pollId) {
+      console.log('Fetching results for poll:', pollId);
+      socket.emit('get_poll_results', { poll_id: pollId });
+    }
+  });
+
   // Message input event handlers
   if (msgInput) {
     msgInput.addEventListener('focus', function handler(e) {
@@ -585,6 +595,53 @@ function splitCodeBlocksJS(value) {
   return result;
 }
 
+function getESTTimestamp() {
+  const now = new Date();
+  const estTime = new Date(now.toLocaleString("en-US", {timeZone: "America/New_York"}));
+  
+  return estTime.toLocaleDateString('en-US', { 
+    month: '2-digit', 
+    day: '2-digit' 
+  }) + ' ' + estTime.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: false 
+  });
+}
+
+function formatTimestampForDisplay(timestampStr) {
+  // If it's an old message or unknown, generate current EST time
+  if (timestampStr === "[old]" || timestampStr === "[unknown]") {
+    return getESTTimestamp();
+  }
+  
+  // If it already has a date format (MM/DD HH:MM), check if it's today
+  if (timestampStr.includes(' ') && timestampStr.includes('/')) {
+    try {
+      const [datePart, timePart] = timestampStr.split(' ');
+      const [month, day] = datePart.split('/');
+      
+      const now = new Date();
+      const estTime = new Date(now.toLocaleString("en-US", {timeZone: "America/New_York"}));
+      const today = estTime.toLocaleDateString('en-US', { 
+        month: '2-digit', 
+        day: '2-digit' 
+      });
+      
+      // If it's today, just show time
+      if (datePart === today) {
+        return timePart;
+      } else {
+        return timestampStr; // Show full date/time if different day
+      }
+    } catch (e) {
+      return timestampStr; // If parsing fails, return original
+    }
+  }
+  
+  return timestampStr; // Return as is if not in expected format
+}
+
 function addMessageObject(data) {
   const messages = document.getElementById("messages");
   if (!messages) return;
@@ -635,8 +692,8 @@ function addMessageObject(data) {
 
   const meta = document.createElement("div");
   meta.className = "meta";
-  // Use proper timestamp instead of "old"
-  const timestamp = data.timestamp === "[old]" ? new Date().toLocaleTimeString() : data.timestamp;
+  // Use proper timestamp formatting
+  const timestamp = formatTimestampForDisplay(data.timestamp);
   meta.textContent = `${data.netid} — ${timestamp}${data.edited ? " (edited)" : ""}`;
   div.appendChild(meta);
 
