@@ -16,7 +16,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'foundationsP4ss;'
 app.config['ADMIN_PASSCODE'] = 'fnP4ssword;'  
 app.config['ADMIN_NETID'] = 'nh385'
-app.config['ADMIN_PASSWORD'] = 'foudnationsP4ss;'
+app.config['ADMIN_PASSWORD'] = 'foundationsP4ss;'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
@@ -374,12 +374,21 @@ def handle_support_message(data):
     for i, msg_str in enumerate(messages):
         try:
             msg_obj = json.loads(msg_str)
+            
+            # Handle old messages that might not have message_id
+            if not msg_obj.get("message_id"):
+                # Generate message_id for old messages
+                msg_content = msg_obj.get("msg", "")
+                msg_timestamp = msg_obj.get("timestamp", "[old]")
+                generated_id = f"{section}:{msg_timestamp}:{hash(msg_content) % 1000000}"
+                msg_obj["message_id"] = generated_id
+            
             if msg_obj.get("message_id") == message_id:
                 # Initialize support tracking if not exists
                 if "support_votes" not in msg_obj:
-                    msg_obj["support_votes"] = set()
+                    msg_obj["support_votes"] = []
                 
-                # Convert set to list for JSON serialization
+                # Convert to set for easier manipulation
                 support_votes = set(msg_obj.get("support_votes", []))
                 
                 if netid in support_votes:
@@ -402,7 +411,8 @@ def handle_support_message(data):
                     "supported": netid in support_votes
                 }, to=section)
                 return
-        except:
+        except Exception as e:
+            print(f"Error processing support for message {i}: {e}")
             continue
     
     emit("support_error", {"message": "Message not found"})

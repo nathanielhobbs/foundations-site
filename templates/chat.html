@@ -267,97 +267,126 @@
   
   /* Admin flags and support styling */
   .message-actions {
+    display: none;
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 8px;
+    box-shadow: none;
+    z-index: 100;
+    gap: 4px;
+    flex-direction: column;
+    min-width: auto;
+  }
+  
+  .message:hover .message-actions {
     display: flex;
-    gap: 8px;
-    margin-top: 8px;
-    align-items: center;
   }
   
   .admin-actions {
     display: flex;
     gap: 4px;
+    flex-direction: row;
   }
   
-  .admin-btn {
-    padding: 4px 8px;
+  .action-btn {
+    padding: 8px;
     border: none;
-    border-radius: 3px;
-    font-size: 0.75em;
+    border-radius: 4px;
+    font-size: 16px;
     cursor: pointer;
-    color: white;
+    background: transparent;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    width: 32px;
+    height: 32px;
   }
   
-  .admin-btn.delete {
-    background-color: #dc2626;
+  .action-btn:hover {
+    color: #333;
+    transform: scale(1.1);
   }
   
-  .admin-btn.delete:hover {
-    background-color: #b91c1c;
+  .action-btn.delete {
+    color: #dc2626;
   }
   
-  .admin-btn.correct {
-    background-color: #059669;
+  .action-btn.delete:hover {
+    color: #b91c1c;
   }
   
-  .admin-btn.correct:hover {
-    background-color: #047857;
+  .action-btn.correct {
+    color: #059669;
   }
   
-  .admin-btn.incorrect {
-    background-color: #dc2626;
+  .action-btn.correct:hover {
+    color: #047857;
   }
   
-  .admin-btn.incorrect:hover {
-    background-color: #b91c1c;
+  .action-btn.incorrect {
+    color: #dc2626;
   }
   
-  .admin-btn.flagged {
+  .action-btn.incorrect:hover {
+    color: #b91c1c;
+  }
+  
+  .action-btn.support {
+    color: #4ea1f3;
+  }
+  
+  .action-btn.support:hover {
+    color: #3182ce;
+  }
+  
+  .action-btn.flagged {
     opacity: 0.7;
   }
   
-  .support-btn {
-    padding: 4px 8px;
-    border: 1px solid #4ea1f3;
-    background: transparent;
-    border-radius: 3px;
-    font-size: 0.75em;
-    cursor: pointer;
-    color: #4ea1f3;
+  /* Persistent status icons */
+  .message-status {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: flex;
+    gap: 4px;
+    z-index: 50;
+  }
+  
+  .status-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
-    gap: 4px;
-  }
-  
-  .support-btn:hover {
-    background-color: #4ea1f3;
+    justify-content: center;
+    font-size: 12px;
     color: white;
+    font-weight: bold;
   }
   
-  .support-btn.supported {
-    background-color: #4ea1f3;
-    color: white;
-  }
-  
-  .admin-flags {
-    display: flex;
-    gap: 4px;
-    margin-left: auto;
-  }
-  
-  .flag-badge {
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 0.7em;
-    font-weight: 500;
-    color: white;
-  }
-  
-  .flag-badge.correct {
+  .status-icon.correct {
     background-color: #059669;
   }
   
-  .flag-badge.incorrect {
+  .status-icon.incorrect {
     background-color: #dc2626;
+  }
+  
+  .status-icon.support {
+    background-color: #4ea1f3;
+    font-size: 10px;
+  }
+  
+  /* Make messages relative positioned for absolute positioning of popups */
+  .message {
+    position: relative;
   }
   
   .admin-password-modal {
@@ -417,6 +446,7 @@
       <div id="chatButtonsRow">
         <button id="toggleParticipants" type="button">Show Participants</button>
         <button onclick="showPollForm()" type="button">Create Poll</button>
+        <button id="loginButton" type="button" style="margin-left: auto;">Login</button>
       </div>
       <div id="pollForm" style="display:none;">
         <input type="text" id="pollQuestion" placeholder="Poll question">
@@ -426,18 +456,42 @@
       <div id="messages">
         {% for m in messages %}
           <div class="message" {% if m.type == 'poll' %}data-poll-id="{{ m.poll_id }}"{% endif %} data-message-id="{{ m.message_id }}">
+            <!-- Persistent status icons -->
+            <div class="message-status">
+              {% if m.admin_flags.correct %}
+                <div class="status-icon correct" title="Marked as correct">✓</div>
+              {% endif %}
+              {% if m.admin_flags.incorrect %}
+                <div class="status-icon incorrect" title="Marked as incorrect">✗</div>
+              {% endif %}
+              {% if m.support_count > 0 %}
+                <div class="status-icon support" title="{{ m.support_count }} support(s)">{{ m.support_count }}</div>
+              {% endif %}
+            </div>
+            
+            <!-- Popup action menu -->
+            <div class="message-actions">
+              <div class="admin-actions" style="display: none;">
+                <button class="action-btn support" onclick="supportMessage('{{ m.message_id }}')" data-supported="{{ 'true' if m.support_votes and netid in m.support_votes else 'false' }}" title="Support this message">
+                  👍
+                </button>
+                <button class="action-btn delete" onclick="deleteMessage('{{ m.message_id }}')" title="Delete message">
+                  🗑️
+                </button>
+                <button class="action-btn correct" onclick="flagMessage('{{ m.message_id }}', 'correct')" {% if m.admin_flags.correct %}class="flagged"{% endif %} title="Mark as correct">
+                  ✓
+                </button>
+                <button class="action-btn incorrect" onclick="flagMessage('{{ m.message_id }}', 'incorrect')" {% if m.admin_flags.incorrect %}class="flagged"{% endif %} title="Mark as incorrect">
+                  ✗
+                </button>
+              </div>
+              <button class="action-btn support student-support" onclick="supportMessage('{{ m.message_id }}')" data-supported="{{ 'true' if m.support_votes and netid in m.support_votes else 'false' }}" title="Support this message">
+                👍
+              </button>
+            </div>
+            
             <div class="meta">
               {{ m.netid }} — {{ m.timestamp }}{% if m.edited %} (edited){% endif %}{% if m.type == 'poll' %} (poll){% endif %}
-              {% if m.admin_flags %}
-                <div class="admin-flags">
-                  {% if m.admin_flags.correct %}
-                    <span class="flag-badge correct">✓ Correct</span>
-                  {% endif %}
-                  {% if m.admin_flags.incorrect %}
-                    <span class="flag-badge incorrect">✗ Incorrect</span>
-                  {% endif %}
-                </div>
-              {% endif %}
             </div>
             {% if m.type == 'poll' %}
               <div style="font-weight: bold;">{{ m.question }}</div>
@@ -466,16 +520,6 @@
                 {% endif %}
               </div>
             {% endif %}
-            <div class="message-actions">
-              <button class="support-btn" onclick="supportMessage('{{ m.message_id }}')" data-supported="{{ 'true' if m.support_votes and netid in m.support_votes else 'false' }}">
-                👍 Support {% if m.support_count > 0 %}({{ m.support_count }}){% endif %}
-              </button>
-              <div class="admin-actions" style="display: none;">
-                <button class="admin-btn delete" onclick="deleteMessage('{{ m.message_id }}')">Delete</button>
-                <button class="admin-btn correct" onclick="flagMessage('{{ m.message_id }}', 'correct')" {% if m.admin_flags.correct %}class="flagged"{% endif %}>✓ Correct</button>
-                <button class="admin-btn incorrect" onclick="flagMessage('{{ m.message_id }}', 'incorrect')" {% if m.admin_flags.incorrect %}class="flagged"{% endif %}>✗ Incorrect</button>
-              </div>
-            </div>
           </div>
         {% endfor %}
       </div>
@@ -516,6 +560,23 @@
     </div>
   </div>
 </div>
+
+<!-- Login Modal -->
+<div id="loginModal" class="admin-password-modal" style="display: none;">
+  <div class="modal-content">
+    <h3>Login</h3>
+    <p>Enter your NetID to join the chat:</p>
+    <input type="text" id="loginNetID" placeholder="NetID">
+    <div id="adminPasswordSection" style="display: none; margin-top: 10px;">
+      <p>Admin password required:</p>
+      <input type="password" id="loginAdminPassword" placeholder="Admin password">
+    </div>
+    <div style="margin-top: 15px;">
+      <button onclick="submitLogin()">Login</button>
+      <button onclick="cancelLogin()">Cancel</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -527,27 +588,19 @@ const socket = io();
 let replyTo = null;
 
 document.addEventListener('DOMContentLoaded', function() {
-  // Prompt NetID (once per day or based on remember me setting)
-  function promptNetid() {
-    const today = new Date().toISOString().slice(0, 10);
-    const storedDate = localStorage.getItem("netidDate");
-    const rememberMe = localStorage.getItem("rememberMe") === 'true';
-    
-    // If remember me is enabled, don't prompt daily
-    if (rememberMe && localStorage.getItem("netid")) {
-      return;
-    }
-    
-    // If not remembering, check if it's a new day
-    if (storedDate !== today || !localStorage.getItem("netid")) {
-      const netid = prompt("Enter your NetID (once per day):");
-      if (netid && netid.trim()) {
-        localStorage.setItem("netid", netid.trim());
-        localStorage.setItem("netidDate", today);
-      }
-    }
+  // Check if user is already logged in
+  const storedNetid = localStorage.getItem("netid");
+  const loginButton = document.getElementById('loginButton');
+  
+  if (storedNetid) {
+    // User is logged in
+    loginButton.textContent = `Logged in as ${storedNetid}`;
+    loginButton.onclick = showLogoutConfirm;
+  } else {
+    // User needs to login
+    loginButton.textContent = 'Login';
+    loginButton.onclick = showLoginModal;
   }
-  promptNetid();
 
   // Toggle switch JS
   let inputMode = 'code';
@@ -636,10 +689,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // NetID prompt and join
-  var netid = localStorage.getItem("netid") || "unknown";
-  console.log('Joining section', section, 'with netid', netid);
-  socket.emit("join", { section, netid });
+  // Only join if user is logged in
+  const currentNetid = localStorage.getItem("netid");
+  if (currentNetid) {
+    console.log('Joining section', section, 'with netid', currentNetid);
+    socket.emit("join", { section, netid: currentNetid });
+  }
 
   // Scroll to bottom on load
   const messagesDiv = document.getElementById("messages");
@@ -647,6 +702,9 @@ document.addEventListener('DOMContentLoaded', function() {
   setupMessageToggles();
   // Ensure participants sidebar is hidden initially
   if (sidebar) sidebar.style.display = 'none';
+  
+  // Check admin status and show admin buttons if applicable
+  checkAdminStatus();
 
   // Fetch poll results for historical polls
   const pollMessages = document.querySelectorAll('.message[data-poll-id]');
@@ -733,6 +791,23 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
   observer.observe(document.documentElement, { attributes: true });
+
+  // Section dropdown auto-redirect (generalized)
+  function setupSectionDropdownRedirect() {
+    var dropdown = document.getElementById('sectionDropdown') || document.getElementById('sectionSelect');
+    if (dropdown) {
+      dropdown.addEventListener('change', function(e) {
+        var value = e.target.value;
+        localStorage.setItem('section', value);
+        if (window.location.pathname.startsWith('/chat/')) {
+          window.location.href = '/chat/' + value;
+        } else if (window.location.pathname.startsWith('/notebooks')) {
+          window.location.href = '/notebooks?section=' + value;
+        }
+      });
+    }
+  }
+  setupSectionDropdownRedirect();
 });
 
 // Functions that don't depend on DOM elements
@@ -763,6 +838,286 @@ function sendPoll() {
   question.value = "";
   options.value = "";
 }
+
+// Admin functionality
+let pendingAdminAction = null;
+let adminPassword = null;
+
+// Check if admin is already authenticated
+function checkAdminAuth() {
+  const netid = localStorage.getItem("netid");
+  const isAuthenticated = localStorage.getItem("adminAuthenticated") === "true";
+  
+  if (netid === 'nh385' && isAuthenticated) {
+    adminPassword = 'foundationsP4ss;';
+    return true;
+  }
+  return false;
+}
+
+function showAdminPasswordModal(action) {
+  pendingAdminAction = action;
+  document.getElementById('adminPasswordModal').style.display = 'flex';
+  document.getElementById('adminPassword').focus();
+}
+
+function submitAdminAction() {
+  const password = document.getElementById('adminPassword').value;
+  if (!password) {
+    alert('Please enter the admin password');
+    return;
+  }
+  
+  if (password === 'foundationsP4ss;') {
+    adminPassword = password;
+    localStorage.setItem("adminAuthenticated", "true");
+    document.getElementById('adminPasswordModal').style.display = 'none';
+    document.getElementById('adminPassword').value = '';
+    
+    if (pendingAdminAction) {
+      pendingAdminAction();
+      pendingAdminAction = null;
+    }
+  } else {
+    alert('Invalid admin password');
+    document.getElementById('adminPassword').value = '';
+  }
+}
+
+function cancelAdminAction() {
+  document.getElementById('adminPasswordModal').style.display = 'none';
+  document.getElementById('adminPassword').value = '';
+  pendingAdminAction = null;
+}
+
+function deleteMessage(messageId) {
+  if (!checkAdminAuth()) {
+    showAdminPasswordModal(() => deleteMessage(messageId));
+    return;
+  }
+  
+  const netid = localStorage.getItem("netid") || "unknown";
+  socket.emit("admin_delete_message", {
+    section: section,
+    message_id: messageId,
+    netid: netid,
+    password: adminPassword
+  });
+}
+
+function flagMessage(messageId, flagType) {
+  if (!checkAdminAuth()) {
+    showAdminPasswordModal(() => flagMessage(messageId, flagType));
+    return;
+  }
+  
+  const netid = localStorage.getItem("netid") || "unknown";
+  socket.emit("admin_flag_message", {
+    section: section,
+    message_id: messageId,
+    flag_type: flagType,
+    netid: netid,
+    password: adminPassword
+  });
+}
+
+function supportMessage(messageId) {
+  const netid = localStorage.getItem("netid") || "unknown";
+  socket.emit("support_message", {
+    section: section,
+    message_id: messageId,
+    netid: netid
+  });
+}
+
+// Login/Logout functionality
+function showLoginModal() {
+  document.getElementById('loginModal').style.display = 'flex';
+  document.getElementById('loginNetID').focus();
+}
+
+function cancelLogin() {
+  document.getElementById('loginModal').style.display = 'none';
+  document.getElementById('loginNetID').value = '';
+  document.getElementById('loginAdminPassword').value = '';
+  document.getElementById('adminPasswordSection').style.display = 'none';
+}
+
+function submitLogin() {
+  const netid = document.getElementById('loginNetID').value.trim();
+  const adminPassword = document.getElementById('loginAdminPassword').value;
+  
+  if (!netid) {
+    alert('Please enter your NetID');
+    return;
+  }
+  
+  // Check if admin login
+  if (netid === 'nh385') {
+    if (!adminPassword) {
+      document.getElementById('adminPasswordSection').style.display = 'block';
+      document.getElementById('loginAdminPassword').focus();
+      return;
+    }
+    
+    if (adminPassword !== 'foundationsP4ss;') {
+      alert('Invalid admin password');
+      document.getElementById('loginAdminPassword').value = '';
+      return;
+    }
+    
+    // Admin login successful
+    localStorage.setItem("netid", netid);
+    localStorage.setItem("adminAuthenticated", "true");
+    localStorage.setItem("netidDate", new Date().toISOString().slice(0, 10));
+  } else {
+    // Regular user login
+    localStorage.setItem("netid", netid);
+    localStorage.removeItem("adminAuthenticated");
+    localStorage.setItem("netidDate", new Date().toISOString().slice(0, 10));
+  }
+  
+  // Update UI
+  document.getElementById('loginButton').textContent = `Logged in as ${netid}`;
+  document.getElementById('loginButton').onclick = showLogoutConfirm;
+  
+  // Close modal
+  cancelLogin();
+  
+  // Join chat with new NetID
+  socket.emit("join", { section, netid });
+  
+  // Check admin status
+  checkAdminStatus();
+}
+
+function showLogoutConfirm() {
+  if (confirm('Are you sure you want to logout? This will clear your session.')) {
+    logout();
+  }
+}
+
+function logout() {
+  // Clear all stored data
+  localStorage.removeItem("netid");
+  localStorage.removeItem("adminAuthenticated");
+  localStorage.removeItem("netidDate");
+  localStorage.removeItem("rememberMe");
+  
+  // Update UI
+  document.getElementById('loginButton').textContent = 'Login';
+  document.getElementById('loginButton').onclick = showLoginModal;
+  
+  // Hide admin buttons
+  document.querySelectorAll('.admin-actions').forEach(el => {
+    el.style.display = 'none';
+  });
+  
+  // Clear admin password
+  adminPassword = null;
+}
+
+// Check if user is admin and show admin buttons
+function checkAdminStatus() {
+  const netid = localStorage.getItem("netid");
+  const isAuthenticated = localStorage.getItem("adminAuthenticated") === "true";
+  
+  if (netid === 'nh385' && isAuthenticated) {
+    document.querySelectorAll('.admin-actions').forEach(el => {
+      el.style.display = 'flex';
+    });
+    document.querySelectorAll('.student-support').forEach(el => {
+      el.style.display = 'none';
+    });
+  } else {
+    document.querySelectorAll('.admin-actions').forEach(el => {
+      el.style.display = 'none';
+    });
+    document.querySelectorAll('.student-support').forEach(el => {
+      el.style.display = 'flex';
+    });
+  }
+}
+
+// Handle admin action responses
+socket.on("admin_error", function(data) {
+  alert("Admin Error: " + data.message);
+  adminPassword = null; // Clear password on error
+});
+
+socket.on("message_deleted", function(data) {
+  const messageEl = document.querySelector(`[data-message-id="${data.message_id}"]`);
+  if (messageEl) {
+    messageEl.remove();
+  }
+});
+
+socket.on("message_flagged", function(data) {
+  const messageEl = document.querySelector(`[data-message-id="${data.message_id}"]`);
+  if (messageEl) {
+    // Update status icons
+    const statusDiv = messageEl.querySelector('.message-status');
+    if (statusDiv) {
+      statusDiv.innerHTML = '';
+      
+      if (data.admin_flags.correct) {
+        const correctIcon = document.createElement("div");
+        correctIcon.className = "status-icon correct";
+        correctIcon.title = "Marked as correct";
+        correctIcon.textContent = "✓";
+        statusDiv.appendChild(correctIcon);
+      }
+      
+      if (data.admin_flags.incorrect) {
+        const incorrectIcon = document.createElement("div");
+        incorrectIcon.className = "status-icon incorrect";
+        incorrectIcon.title = "Marked as incorrect";
+        incorrectIcon.textContent = "✗";
+        statusDiv.appendChild(incorrectIcon);
+      }
+    }
+    
+    // Update button states
+    const correctBtn = messageEl.querySelector('.action-btn.correct');
+    const incorrectBtn = messageEl.querySelector('.action-btn.incorrect');
+    if (correctBtn) correctBtn.classList.toggle('flagged', data.admin_flags.correct);
+    if (incorrectBtn) incorrectBtn.classList.toggle('flagged', data.admin_flags.incorrect);
+  }
+});
+
+socket.on("message_supported", function(data) {
+  const messageEl = document.querySelector(`[data-message-id="${data.message_id}"]`);
+  if (messageEl) {
+    // Update support button
+    const supportBtn = messageEl.querySelector('.action-btn.support');
+    if (supportBtn) {
+      supportBtn.classList.toggle('supported', data.supported);
+    }
+    
+    // Update status icons
+    const statusDiv = messageEl.querySelector('.message-status');
+    if (statusDiv) {
+      // Remove existing support icon
+      const existingSupport = statusDiv.querySelector('.status-icon.support');
+      if (existingSupport) {
+        existingSupport.remove();
+      }
+      
+      // Add new support icon if count > 0
+      if (data.support_count > 0) {
+        const supportIcon = document.createElement("div");
+        supportIcon.className = "status-icon support";
+        supportIcon.title = `${data.support_count} support(s)`;
+        supportIcon.textContent = data.support_count;
+        statusDiv.appendChild(supportIcon);
+      }
+    }
+  }
+});
+
+socket.on("support_error", function(data) {
+  alert("Support Error: " + data.message);
+});
 
 function escapeHtml(text) {
   return text.replace(/&/g, "&amp;")
@@ -852,6 +1207,7 @@ function addMessageObject(data) {
     const div = document.createElement("div");
     div.className = "message";
     div.dataset.pollId = data.poll_id;
+    div.dataset.messageId = data.message_id || `poll:${data.poll_id}`;
 
     const meta = document.createElement("div");
     meta.className = "meta";
@@ -888,12 +1244,27 @@ function addMessageObject(data) {
 
   const div = document.createElement("div");
   div.className = "message";
+  div.dataset.messageId = data.message_id || `msg:${Date.now()}:${Math.random()}`;
 
   const meta = document.createElement("div");
   meta.className = "meta";
   // Use proper timestamp formatting
   const timestamp = formatTimestampForDisplay(data.timestamp);
   meta.textContent = `${data.netid} — ${timestamp}${data.edited ? " (edited)" : ""}`;
+  
+  // Add admin flags if they exist
+  if (data.admin_flags && Object.keys(data.admin_flags).length > 0) {
+    const adminFlags = document.createElement("div");
+    adminFlags.className = "admin-flags";
+    if (data.admin_flags.correct) {
+      adminFlags.innerHTML += '<span class="flag-badge correct">✓ Correct</span>';
+    }
+    if (data.admin_flags.incorrect) {
+      adminFlags.innerHTML += '<span class="flag-badge incorrect">✗ Incorrect</span>';
+    }
+    meta.appendChild(adminFlags);
+  }
+  
   div.appendChild(meta);
 
   if (data.reply) {
@@ -941,6 +1312,81 @@ function addMessageObject(data) {
 
   div.appendChild(contentDiv);
 
+  // Add persistent status icons
+  const statusDiv = document.createElement("div");
+  statusDiv.className = "message-status";
+  
+  if (data.admin_flags && data.admin_flags.correct) {
+    const correctIcon = document.createElement("div");
+    correctIcon.className = "status-icon correct";
+    correctIcon.title = "Marked as correct";
+    correctIcon.textContent = "✓";
+    statusDiv.appendChild(correctIcon);
+  }
+  
+  if (data.admin_flags && data.admin_flags.incorrect) {
+    const incorrectIcon = document.createElement("div");
+    incorrectIcon.className = "status-icon incorrect";
+    incorrectIcon.title = "Marked as incorrect";
+    incorrectIcon.textContent = "✗";
+    statusDiv.appendChild(incorrectIcon);
+  }
+  
+  if (data.support_count > 0) {
+    const supportIcon = document.createElement("div");
+    supportIcon.className = "status-icon support";
+    supportIcon.title = `${data.support_count} support(s)`;
+    supportIcon.textContent = data.support_count;
+    statusDiv.appendChild(supportIcon);
+  }
+  
+  div.appendChild(statusDiv);
+
+  // Add popup action menu
+  const actionsDiv = document.createElement("div");
+  actionsDiv.className = "message-actions";
+  
+  // Support button
+  const supportBtn = document.createElement("button");
+  supportBtn.className = "action-btn support";
+  supportBtn.onclick = () => supportMessage(div.dataset.messageId);
+  supportBtn.title = "Support this message";
+  const isSupported = data.support_votes && data.support_votes.includes(localStorage.getItem("netid"));
+  if (isSupported) supportBtn.classList.add("supported");
+  supportBtn.innerHTML = "👍";
+  actionsDiv.appendChild(supportBtn);
+  
+  // Admin actions (hidden by default)
+  const adminActions = document.createElement("div");
+  adminActions.className = "admin-actions";
+  adminActions.style.display = "none";
+  
+  const deleteBtn = document.createElement("button");
+  deleteBtn.className = "action-btn delete";
+  deleteBtn.innerHTML = "🗑️";
+  deleteBtn.title = "Delete message";
+  deleteBtn.onclick = () => deleteMessage(div.dataset.messageId);
+  adminActions.appendChild(deleteBtn);
+  
+  const correctBtn = document.createElement("button");
+  correctBtn.className = "action-btn correct";
+  correctBtn.innerHTML = "✓";
+  correctBtn.title = "Mark as correct";
+  correctBtn.onclick = () => flagMessage(div.dataset.messageId, "correct");
+  if (data.admin_flags && data.admin_flags.correct) correctBtn.classList.add("flagged");
+  adminActions.appendChild(correctBtn);
+  
+  const incorrectBtn = document.createElement("button");
+  incorrectBtn.className = "action-btn incorrect";
+  incorrectBtn.innerHTML = "✗";
+  incorrectBtn.title = "Mark as incorrect";
+  incorrectBtn.onclick = () => flagMessage(div.dataset.messageId, "incorrect");
+  if (data.admin_flags && data.admin_flags.incorrect) incorrectBtn.classList.add("flagged");
+  adminActions.appendChild(incorrectBtn);
+  
+  actionsDiv.appendChild(adminActions);
+  div.appendChild(actionsDiv);
+
   div.addEventListener("click", () => {
     replyTo = data.msg;
     const box = document.getElementById("replyPreview");
@@ -951,7 +1397,10 @@ function addMessageObject(data) {
   });
 
   messages.appendChild(div);
-  div.scrollIntoView({ behavior: "smooth" }); 
+  div.scrollIntoView({ behavior: "smooth" });
+  
+  // Check if admin buttons should be shown
+  checkAdminStatus();
 }
 
 function voteOnPoll(pollId, option) {

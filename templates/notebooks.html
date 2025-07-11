@@ -31,19 +31,31 @@
 
 {% block extra_scripts %}
 <script>
-  // Ensure section select updates Notebooks page like Chat
-  document.addEventListener("DOMContentLoaded", function() {
-    var sectionSelect = document.getElementById("sectionSelect");
-    if (sectionSelect) {
-      sectionSelect.addEventListener("change", function(e) {
-        var value = e.target.value;
-        localStorage.setItem("section", value);
-        // Only redirect if we're on the notebooks page
-        if (window.location.pathname.startsWith("/notebooks")) {
-          window.location.href = "/notebooks?section=" + value;
-        }
-      });
-    }
-  });
+document.addEventListener('DOMContentLoaded', function() {
+  var dropdown = document.getElementById('sectionDropdown') || document.getElementById('sectionSelect');
+  var storedSection = localStorage.getItem('section');
+  var urlParams = new URLSearchParams(window.location.search);
+  var urlSection = urlParams.get('section');
+
+  // If no ?section= in URL but localStorage.section exists, redirect
+  if (!urlSection && storedSection) {
+    window.location.href = '/notebooks?section=' + storedSection;
+    return;
+  }
+
+  // Set dropdown to stored section if present
+  if (dropdown && storedSection) {
+    dropdown.value = storedSection;
+  }
+
+  // On dropdown change, update localStorage and redirect
+  if (dropdown) {
+    dropdown.addEventListener('change', function(e) {
+      var value = e.target.value;
+      localStorage.setItem('section', value);
+      window.location.href = '/notebooks?section=' + value;
+    });
+  }
+});
 </script>
 {% endblock %}
