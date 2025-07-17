@@ -21,6 +21,8 @@
   <label for="challengeSelect"><b>Select Challenge:</b></label>
   <div id="adminDropdown" style="display:none; position:relative; min-width:220px;"></div>
   <select id="challengeSelect" style="margin-left: 0.5em;"></select>
+  <button id="editChallengeBtn" style="display:none; font-size:1.1em; margin-left: 1em;" title="Edit Challenge">✏️ Edit</button>
+  <button id="toggleLayoutBtn" class="btn btn-sm btn-secondary" style="margin-left: 1em;">Switch to Top-Bottom</button>
 </div>
 <!-- Reorder Modal -->
 <div id="reorderModal" class="admin-password-modal" style="display:none; z-index:3200;">
@@ -36,13 +38,12 @@
 </div>
 <div id="challengeBox" style="display:none;">
   <div class="challenge-main-row">
-    <div class="challenge-left" id="problemPane">
+    <div class="challenge-left" id="problemPane" style="position:relative;">
+      <button id="collapseProblemBtn" title="Collapse/Expand" style="position:absolute; top:12px; right:0; z-index:30; font-size:1.2em;">⮜</button>
       <div class="challenge-box">
         <div style="display: flex; align-items: center; justify-content: space-between; position: relative;">
           <h3 id="challengeTitle" style="margin-bottom: 0;"></h3>
           <div style="display: flex; gap: 0.5em; align-items: center;">
-            <button id="editChallengeBtn" style="display:none; font-size:1.1em;" title="Edit Challenge">✏️</button>
-            <button id="collapseProblemBtn" title="Collapse/Expand" style="font-size:1.2em; position: relative;">⮜</button>
           </div>
         </div>
         <div id="challengeProblemMd"></div>
@@ -50,6 +51,7 @@
       </div>
     </div>
     <div class="challenge-divider" id="challengeDivider"></div>
+    <div class="challenge-divider-horizontal"></div>
     <div class="challenge-right">
       <div style="position: relative;">
         <textarea id="editor" style="width:100%;height:300px;">def solution():
@@ -84,6 +86,7 @@
     <label>Test Cases (JSON):<br><textarea id="editTestCases" style="width:100%;height:80px;"></textarea></label><br><br>
     <label>Starter Code (Python, optional):<br><textarea id="editStarterCode" style="width:100%;height:60px;"></textarea></label><br><br>
     <label>Solutions Available Date (YYYY-MM-DD):<br><input type="date" id="editSolutionsDate" style="width:100%"></label><br><br>
+    <label><input type="checkbox" id="editActive"> Active</label><br><br>
     <div style="margin-top:10px; text-align:right;">
       <button onclick="closeEditModal()">Cancel</button>
       <button id="saveEditBtn" class="btn btn-primary">Save</button>
@@ -186,8 +189,60 @@
   .challenge-divider:hover, .challenge-divider.dragging {
     background: #aaa;
   }
+  #collapseProblemBtn {
+    position: absolute;
+    top: 12px;
+    right: 0;
+    z-index: 30;
+    font-size: 1.2em;
+    background: #eee;
+    border-radius: 50%;
+    border: 1px solid #ccc;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    pointer-events: auto;
+  }
+  .challenge-left.collapsed #collapseProblemBtn {
+    left: 0;
+    right: auto;
+  }
+  .challenge-main-row.vertical {
+    flex-direction: column;
+    gap: 0;
+    min-height: 0;
+  }
+  .challenge-main-row.vertical .challenge-left {
+    flex: none !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    padding-left: 0 !important;
+  }
+  .challenge-main-row.vertical .challenge-right {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    padding-left: 0 !important;
+  }
+  .challenge-main-row.vertical .challenge-divider {
+    display: none;
+  }
+  .challenge-main-row.vertical .challenge-divider-horizontal {
+    display: block;
+    width: 100%;
+    height: 6px;
+    background: #ddd;
+    margin: 0.2em 0 0.2em 0;
+    cursor: default;
+    border: none;
+  }
+  .challenge-divider-horizontal {
+    display: none;
+  }
+  .challenge-main-row:not(.vertical) .challenge-divider-horizontal {
+    display: none;
+  }
   @media (max-width: 900px) {
-    .challenge-main-row { flex-direction: column; gap: 1em; }
+    .challenge-main-row { flex-direction: column; gap: 0.3em; }
     .challenge-left, .challenge-right { max-width: 100%; min-width: 0; }
     .challenge-divider { display: none; }
   }
@@ -272,6 +327,25 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
+
+  const layoutBtn = document.getElementById('toggleLayoutBtn');
+  const mainRow = document.querySelector('.challenge-main-row');
+  let layoutVertical = localStorage.getItem('challengeLayout') === 'vertical';
+  function updateLayout() {
+    if (layoutVertical) {
+      mainRow.classList.add('vertical');
+      layoutBtn.textContent = 'Switch to Side-by-Side';
+    } else {
+      mainRow.classList.remove('vertical');
+      layoutBtn.textContent = 'Switch to Top-Bottom';
+    }
+    localStorage.setItem('challengeLayout', layoutVertical ? 'vertical' : 'horizontal');
+  }
+  layoutBtn.onclick = function() {
+    layoutVertical = !layoutVertical;
+    updateLayout();
+  };
+  updateLayout();
 });
 
 // Dynamically update CodeMirror theme on theme toggle
@@ -426,7 +500,6 @@ async function loadChallengeList() {
         dropdownBtn.textContent = li.textContent;
         dropdownList.style.display = 'none';
         loadChallenge(chal.id);
-        showActiveToggle(chal.id, chal.active);
       };
       dropdownList.appendChild(li);
     });
@@ -473,7 +546,6 @@ async function loadChallengeList() {
     });
     // Auto-select first challenge
     loadChallenge(data[0].id);
-    showActiveToggle(data[0].id, data[0].active);
   } else {
     adminDropdown.style.display = 'none';
     select.style.display = '';
@@ -724,6 +796,7 @@ function openEditModal(chal) {
       document.getElementById('editTestCases').value = JSON.stringify(fullChal.test_cases || [], null, 2);
       document.getElementById('editSolutionsDate').value = (fullChal.solutions_available_date || '').slice(0,10);
       document.getElementById('editStarterCode').value = fullChal.starter_code || '';
+      document.getElementById('editActive').checked = !!fullChal.active;
       document.getElementById('editError').textContent = '';
       document.getElementById('saveEditBtn').onclick = async function() {
         let title = document.getElementById('editTitle').value.trim();
@@ -732,6 +805,7 @@ function openEditModal(chal) {
         let testCasesRaw = document.getElementById('editTestCases').value;
         let solutions_available_date = document.getElementById('editSolutionsDate').value;
         let starter_code = document.getElementById('editStarterCode').value;
+        let active = document.getElementById('editActive').checked;
         let test_cases;
         try {
           test_cases = JSON.parse(testCasesRaw);
@@ -742,7 +816,7 @@ function openEditModal(chal) {
         let resp = await fetch(`/weekly_challenge/edit/${currentChallengeId}?netid=${encodeURIComponent(admin_netid)}&password=${encodeURIComponent(admin_password)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, problem, examples, test_cases, solutions_available_date, starter_code })
+          body: JSON.stringify({ title, problem, examples, test_cases, solutions_available_date, starter_code, active })
         });
         if (resp.ok) {
           closeEditModal();
@@ -848,31 +922,6 @@ document.getElementById('saveAddBtn').onclick = async function() {
   }
 };
 
-function showActiveToggle(cid, isActive) {
-  let btn = document.getElementById('toggleActiveBtn');
-  if (!btn) {
-    btn = document.createElement('button');
-    btn.id = 'toggleActiveBtn';
-    btn.style.marginLeft = '1em';
-    btn.className = 'btn btn-sm btn-secondary';
-    document.getElementById('challengeSelect').parentNode.appendChild(btn);
-  }
-  btn.textContent = isActive ? 'Set Inactive' : 'Set Active';
-  btn.onclick = async function() {
-    let admin_netid = localStorage.getItem('netid');
-    let admin_password = 'foundationsP4ss;';
-    let resp = await fetch(`/weekly_challenge/toggle_active/${cid}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ admin_netid, admin_password })
-    });
-    if (resp.ok) {
-      await loadChallengeList();
-    } else {
-      alert('Failed to toggle active status.');
-    }
-  };
-}
 let reorderChallengesData = [];
 function showReorderModal() {
   let ul = document.getElementById('reorderList');
