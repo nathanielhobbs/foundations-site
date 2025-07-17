@@ -133,18 +133,26 @@
   .challenge-main-row {
     display: flex;
     gap: 0;
-    align-items: flex-start;
+    align-items: stretch;
     margin-bottom: 1.5em;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    width: 100%;
+    position: relative;
+    min-height: 350px;
   }
+  #challengeBox { position: relative; }
   .challenge-left {
-    flex: 1 1 350px;
-    min-width: 200px;
+    flex: 0 0 380px;
+    min-width: 260px;
     max-width: 500px;
     resize: none;
     overflow: auto;
     transition: max-width 0.2s;
     position: relative;
+    background: none;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
   }
   .challenge-left.collapsed {
     max-width: 40px !important;
@@ -156,15 +164,16 @@
   .challenge-left.collapsed .challenge-box > *:not(#collapseProblemBtn) {
     display: none;
   }
-  .challenge-left.collapsed #collapseProblemBtn {
-    right: -18px !important;
-    top: 8px !important;
-    position: absolute !important;
-    z-index: 30;
-    background: #eee;
-    border-radius: 50%;
-    border: 1px solid #ccc;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  .challenge-right {
+    flex: 1 1 0%;
+    min-width: 320px;
+    max-width: 100%;
+    position: relative;
+    padding-left: 0;
+    display: flex;
+    flex-direction: column;
+    background: none;
+    z-index: 2;
   }
   .challenge-divider {
     width: 6px;
@@ -176,56 +185,6 @@
   }
   .challenge-divider:hover, .challenge-divider.dragging {
     background: #aaa;
-  }
-  .challenge-right {
-    flex: 2 1 400px;
-    min-width: 320px;
-    max-width: 700px;
-    position: relative;
-    padding-left: 0;
-  }
-  #output { background: #222; color: #e0e0e0; font-family: monospace; padding: 1em; border-radius: 6px; border: 1px solid #444; margin-top: 1em; white-space: pre-wrap; min-height: 2em; max-width: 100%; }
-  [data-theme="light"] #output { background: #f7f7f7; color: #222; border: 1px solid #ccc; }
-  .CodeMirror { font-size: 1.1em; border-radius: 6px; border: 1px solid #444; background: #222; color: #e0e0e0; }
-  [data-theme="light"] .CodeMirror { background: #fff; color: #222; border: 1px solid #ccc; }
-  .challenge-box {
-    background: #f9f9fb;
-    border-radius: 8px;
-    border: 1px solid #e0e0e0;
-    padding: 1.2em 1.5em 1.2em 1.5em;
-    margin-bottom: 0.5em;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
-    font-size: 1.08em;
-  }
-  .challenge-box h3 {
-    font-size: 1.3em;
-    margin-bottom: 0.5em;
-  }
-  .challenge-box code {
-    background: #eee;
-    color: #c7254e;
-    border-radius: 4px;
-    padding: 2px 5px;
-    font-size: 1em;
-  }
-  .challenge-box pre {
-    background: #23272e;
-    color: #e0e0e0;
-    border-radius: 6px;
-    padding: 0.7em 1em;
-    font-size: 1em;
-    margin: 0.7em 0;
-    overflow-x: auto;
-  }
-  .challenge-box ul, .challenge-box ol {
-    margin-left: 1.5em;
-    margin-bottom: 0.7em;
-  }
-  .challenge-box strong {
-    color: #2d3748;
-  }
-  .challenge-box em {
-    color: #4a5568;
   }
   @media (max-width: 900px) {
     .challenge-main-row { flex-direction: column; gap: 1em; }
