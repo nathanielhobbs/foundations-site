@@ -19,7 +19,17 @@
 git config --global user.email "you@example.com"</code></pre>
 
 <h2>Set Up SSH Authentication</h2>
-<p>Once you've generated your SSH keypair (see <a href="/tutorials/ssh">this guide</a>), upload your public key to GitHub at <a href="https://github.com/settings/ssh/new">github.com/settings/ssh/new</a>.</p>
+
+<ol>
+  <li>Check to see if you already have a (public/private) key pair (by trying to print to the terminal the public part):</li>
+    <pre><code>cat ~/.ssh/id_rsa.pub</code></pre>
+    <p>If this prints an output, you can skip to step 3.</p>
+  <li>Generate an SSH keypair (see <a href="/tutorials/ssh">this guide</a>)</li>
+  <li>Upload public key to GitHub</li>
+    <pre><code>cat ~/.ssh/id_rsa.pub</code></pre>
+    <p>Copy the output, then visit github.com/settings/ssh/new and paste it in<a href="https://github.com/settings/ssh/new">github.com/settings/ssh/new</a> and paste it in.</p>
+</ol>
+
 
 <h2>Test SSH Connection</h2>
 Inside of the terminal, run the following command:

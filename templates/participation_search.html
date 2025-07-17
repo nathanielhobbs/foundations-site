@@ -63,112 +63,109 @@
 {% endblock %}
 
 {% block content %}
-<h2>Participation Search</h2>
+<!-- <h2 style="text-align:center;">Participation Search</h2> -->
+<h2 style="text-align:center;"></h2>
+<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%;">
+  <div id="participationCalendar"></div>
+  <div id="participationContent" style="width:100%; max-width:500px;"></div>
 
-<div id="netidForm" class="netid-form" style="display: none;">
-  <h3>Enter Your NetID</h3>
-  <input type="text" id="netidInput" placeholder="Enter your NetID" required>
-  <div class="remember-me">
-    <input type="checkbox" id="rememberMe">
-    <label for="rememberMe">Remember me (don't ask again)</label>
-  </div>
-  <button onclick="saveNetID()">Save NetID</button>
-  <button onclick="skipNetID()">Skip</button>
-</div>
-
-<div id="storedNetID" class="stored-netid" style="display: none;">
-  <strong>Using NetID:</strong> <span id="displayNetID"></span>
-  <button onclick="changeNetID()" style="margin-left: 10px; background: #6b7280; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">Change</button>
-</div>
-
-<div id="searchForm" style="display: none;">
-  <form method="get" action="/participation_search" style="margin-bottom: 1em;">
-    <input name="netid" id="searchNetID" placeholder="Enter NetID" value="{{ query or '' }}" required>
-    <input type="submit" value="Search">
-  </form>
-</div>
-
-{% if query is not none %}
-  {% if results and results|length > 0 %}
-    <h3>Participation for <b>{{ query }}</b></h3>
-    <ul>
-      {% for date, section in results|sort %}
-        <li>{{ date }} — Section {{ section }}</li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>No participation found for <b>{{ query }}</b>.</p>
+  {% if query is not none %}
+    {% if results and results|length > 0 %}
+      <h3 style="text-align:center;">Participation for <b>{{ query }}</b></h3>
+      <ul style="display:inline-block; text-align:left; margin:0 auto;">
+        {% for date, section in results|sort %}
+          <li>{{ date }} — Section {{ section }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p style="text-align:center;">No participation found for <b>{{ query }}</b>.</p>
+    {% endif %}
   {% endif %}
-{% endif %}
+</div>
 
 <script>
+// Participation dates from backend
+const participationDates = {{ participation_dates|tojson }};
+
+// Parse participation dates into a Set for fast lookup
+const participationSet = new Set(participationDates);
+
+function renderCalendar(year, month) {
+  const calendarDiv = document.getElementById('participationCalendar');
+  if (!calendarDiv) return;
+
+  // Build a calendar for the given month
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startDay = firstDay.getDay(); // 0=Sun
+  const daysInMonth = lastDay.getDate();
+
+  // Month/year header with navigation
+  let html = '<div style="display:flex; align-items:center; justify-content:center; margin-bottom:0.5em; gap:1em;">';
+  html += `<button id="prevMonthBtn" style="padding:2px 8px;">&#8592;</button>`;
+  html += `<span style="font-size:1.1em; min-width:120px; text-align:center;">${firstDay.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>`;
+  html += `<button id="nextMonthBtn" style="padding:2px 8px;">&#8594;</button>`;
+  html += '</div>';
+
+  html += '<table style="border-collapse:collapse; margin-bottom:1em;">';
+  html += '<tr>';
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => {
+    html += `<th style="padding:2px 6px; font-weight:normal; color:#888;">${d}</th>`;
+  });
+  html += '</tr><tr>';
+
+  // Pad start
+  for (let i = 0; i < startDay; i++) html += '<td></td>';
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const hasDot = participationSet.has(dateStr);
+    html += `<td style="text-align:center; padding:4px 0; width:32px; height:32px; position:relative;">${day}`;
+    if (hasDot) {
+      html += '<div style="width:7px; height:7px; background:#4ea1f3; border-radius:50%; position:absolute; left:50%; transform:translateX(-50%); bottom:4px;"></div>';
+    }
+    html += '</td>';
+    if ((startDay + day) % 7 === 0 && day !== daysInMonth) html += '</tr><tr>';
+  }
+  html += '</tr></table>';
+  calendarDiv.innerHTML = html;
+
+  // Add event listeners for navigation
+  document.getElementById('prevMonthBtn').onclick = function() {
+    let newMonth = month - 1;
+    let newYear = year;
+    if (newMonth < 0) {
+      newMonth = 11;
+      newYear--;
+    }
+    renderCalendar(newYear, newMonth);
+  };
+  document.getElementById('nextMonthBtn').onclick = function() {
+    let newMonth = month + 1;
+    let newYear = year;
+    if (newMonth > 11) {
+      newMonth = 0;
+      newYear++;
+    }
+    renderCalendar(newYear, newMonth);
+  };
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-  const netidForm = document.getElementById('netidForm');
-  const storedNetID = document.getElementById('storedNetID');
-  const searchForm = document.getElementById('searchForm');
-  const displayNetID = document.getElementById('displayNetID');
-  const searchNetID = document.getElementById('searchNetID');
-  
-  // Check if we have a stored NetID
+  const now = new Date();
+  renderCalendar(now.getFullYear(), now.getMonth());
+  const participationContent = document.getElementById('participationContent');
   const storedNetid = localStorage.getItem('netid');
-  const rememberMe = localStorage.getItem('rememberMe') === 'true';
-  
-  if (storedNetid && rememberMe) {
-    // User has chosen to remember their NetID
-    displayNetID.textContent = storedNetid;
-    storedNetID.style.display = 'block';
-    searchForm.style.display = 'block';
-    searchNetID.value = storedNetid;
-  } else if (storedNetid) {
-    // User has a NetID but hasn't chosen to remember it
-    displayNetID.textContent = storedNetid;
-    storedNetID.style.display = 'block';
-    searchForm.style.display = 'block';
-    searchNetID.value = storedNetid;
-  } else {
-    // No NetID stored, show the form
-    netidForm.style.display = 'block';
+  // Check if URL already has ?netid=...
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlNetid = urlParams.get('netid');
+  if (storedNetid && !urlNetid) {
+    // User is logged in and not already viewing their participation, redirect
+    window.location.href = '/participation_search?netid=' + encodeURIComponent(storedNetid);
+  } else if (!storedNetid && !urlNetid) {
+    // Not logged in and not searching, show message
+    participationContent.innerHTML = '<p>You are currently logged out. To view your participation, please log in on the <a href="/chat/1">Live Chat</a> page.</p>';
   }
 });
-
-function saveNetID() {
-  const netidInput = document.getElementById('netidInput');
-  const rememberMe = document.getElementById('rememberMe');
-  const netid = netidInput.value.trim();
-  
-  if (netid) {
-    localStorage.setItem('netid', netid);
-    localStorage.setItem('netidDate', new Date().toISOString().slice(0, 10));
-    
-    if (rememberMe.checked) {
-      localStorage.setItem('rememberMe', 'true');
-    }
-    
-    // Hide form and show stored NetID
-    document.getElementById('netidForm').style.display = 'none';
-    document.getElementById('storedNetID').style.display = 'block';
-    document.getElementById('searchForm').style.display = 'block';
-    document.getElementById('displayNetID').textContent = netid;
-    document.getElementById('searchNetID').value = netid;
-  }
-}
-
-function skipNetID() {
-  // Hide form and show search form without NetID
-  document.getElementById('netidForm').style.display = 'none';
-  document.getElementById('searchForm').style.display = 'block';
-}
-
-function changeNetID() {
-  // Clear stored NetID and show form again
-  localStorage.removeItem('netid');
-  localStorage.removeItem('rememberMe');
-  localStorage.removeItem('netidDate');
-  
-  document.getElementById('storedNetID').style.display = 'none';
-  document.getElementById('netidForm').style.display = 'block';
-  document.getElementById('netidInput').value = '';
-  document.getElementById('rememberMe').checked = false;
-}
 </script>
 {% endblock %} 

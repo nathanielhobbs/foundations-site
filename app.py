@@ -2,7 +2,7 @@ import os
 import requests
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, Response, abort#, redirect
-from flask_socketio import SocketIO, emit, join_room
+from flask_socketio import SocketIO, emit, join_room, disconnect
 import redis
 from datetime import datetime
 import json
@@ -40,6 +40,8 @@ assignments = [
     }
 ]
 
+# Track socket id to netid/section
+socket_to_user = {}
 
 def check_admin_access():
     code = request.args.get("code")
@@ -221,6 +223,8 @@ def on_join(data):
     join_room(section)
     if netid:
         r.sadd(f"chat:participants:{section}", netid)
+        # Track socket id to netid/section
+        socket_to_user[request.sid] = {"netid": netid, "section": section}
         # Broadcast updated list to room
         participants = list(r.smembers(f"chat:participants:{section}"))
         socketio.emit("participants", {"section": section, "participants": participants}, to=section)
@@ -229,13 +233,53 @@ def on_join(data):
 
 @socketio.on("disconnect")
 def on_disconnect():
-    # Remove user from all participant sets (not perfect, but works for demo)
-    netid = flask_session.get("netid") or "unknown"
-    for key in r.keys("chat:participants:*"):
-        r.srem(key, netid)
-        section = key.split(":")[-1]
-        participants = list(r.smembers(key))
+    sid = request.sid
+    user = socket_to_user.pop(sid, None)
+    if user:
+        netid = user["netid"]
+        section = user["section"]
+        print(f"Disconnect: removing {netid} from section {section}")
+        r.srem(f"chat:participants:{section}", netid)
+        participants = list(r.smembers(f"chat:participants:{section}"))
         socketio.emit("participants", {"section": section, "participants": participants}, to=section)
+    else:
+        print(f"Disconnect: sid {sid} not found in socket_to_user")
+
+@socketio.on("kick_user")
+def handle_kick_user(data):
+    section = data.get("section")
+    netid = data.get("netid")
+    admin_netid = data.get("admin_netid")
+    admin_password = data.get("admin_password")
+    # Only allow admin to kick
+    if not check_admin_auth(admin_netid, admin_password):
+        print(f"Kick denied: invalid admin credentials for {admin_netid}")
+        return
+    print(f"Admin {admin_netid} is attempting to kick {netid} from section {section}")
+    print(f"Current socket_to_user mapping: {socket_to_user}")
+    found = False
+    for sid, info in list(socket_to_user.items()):
+        print(f"Checking sid {sid}: {info}")
+        if info["netid"] == netid and str(info["section"]) == str(section):
+            print(f"Kicking user {netid} (sid {sid}) from section {section}")
+            # Remove from participants set
+            r.srem(f"chat:participants:{section}", netid)
+            participants = list(r.smembers(f"chat:participants:{section}"))
+            socketio.emit("participants", {"section": section, "participants": participants}, to=section)
+            # Notify and disconnect the user
+            socketio.emit("kicked", {"reason": "You have been removed from the chat by an administrator."}, to=sid)
+            disconnect(sid)
+            socket_to_user.pop(sid, None)
+            found = True
+            break
+    if not found:
+        print(f"Kick: user {netid} not found in socket_to_user, but will remove from Redis anyway.")
+        r.srem(f"chat:participants:{section}", netid)
+        participants = list(r.smembers(f"chat:participants:{section}"))
+        socketio.emit("participants", {"section": section, "participants": participants}, to=section)
+    # Emit updated participants list again to ensure frontend updates
+    participants = list(r.smembers(f"chat:participants:{section}"))
+    socketio.emit("participants", {"section": section, "participants": participants}, to=section)
 
 @socketio.on("get_participants")
 def handle_get_participants(data):
@@ -482,10 +526,11 @@ def search_netid():
     query = request.args.get("netid", "").strip().lower()
     if not query:
         # Render a search form with the nav bar
-        return render_template("participation_search.html", query=None, results=None)
+        return render_template("participation_search.html", query=None, results=None, participation_dates=[])
 
     keys = r.keys("participation:*:*")
     results = []
+    participation_dates = set()
 
     for key in keys:
         try:
@@ -493,10 +538,13 @@ def search_netid():
             section = int(section)
             if query in r.smembers(key):
                 results.append((date, section))
+                participation_dates.add(date)
         except ValueError:
             continue
 
-    return render_template("participation_search.html", query=query, results=results)
+    participation_dates = sorted(participation_dates)
+
+    return render_template("participation_search.html", query=query, results=results, participation_dates=participation_dates)
 
 @app.route("/tutorials")
 def tutorials():

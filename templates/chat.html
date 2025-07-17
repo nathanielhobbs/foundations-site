@@ -290,6 +290,7 @@
     display: flex;
     gap: 4px;
     flex-direction: row;
+    flex-wrap: nowrap; /* Ensure single row, no wrapping */
   }
   
   .action-btn {
@@ -446,7 +447,8 @@
       <div id="chatButtonsRow">
         <button id="toggleParticipants" type="button">Show Participants</button>
         <button onclick="showPollForm()" type="button">Create Poll</button>
-        <button id="loginButton" type="button" style="margin-left: auto;">Login</button>
+        <button id="loginButton" type="button" style="margin-left: auto; display: none;">Login</button>
+        <span id="loggedInMsg" style="margin-left: auto; color: #4ea1f3; font-size: 1em; display: none;"></span>
       </div>
       <div id="pollForm" style="display:none;">
         <input type="text" id="pollQuestion" placeholder="Poll question">
@@ -533,6 +535,7 @@
     </div>
   </div>
   <div id="inputBox">
+    <div id="loggedInMsg" style="font-size: 0.95em; color: #4ea1f3; margin-bottom: 4px; display: none;"></div>
     <div id="replyPreview" class="reply-box" style="display: none;"></div>
     <div style="display: flex; align-items: flex-end; gap: 16px;">
       <div class="toggle-switch">
@@ -591,15 +594,31 @@ document.addEventListener('DOMContentLoaded', function() {
   // Check if user is already logged in
   const storedNetid = localStorage.getItem("netid");
   const loginButton = document.getElementById('loginButton');
-  
-  if (storedNetid) {
-    // User is logged in
-    loginButton.textContent = `Logged in as ${storedNetid}`;
-    loginButton.onclick = showLogoutConfirm;
-  } else {
-    // User needs to login
-    loginButton.textContent = 'Login';
-    loginButton.onclick = showLoginModal;
+  const loggedInMsg = document.getElementById('loggedInMsg');
+  if (loginButton && loggedInMsg) {
+    if (storedNetid) {
+      loginButton.style.display = 'none';
+      const loginMessages = [
+        `Let's wrangle a python, ${storedNetid}!`,
+        `Ready to code, ${storedNetid}?`,
+        `Welcome to the snake pit, ${storedNetid}!`,
+        `Let's make some magic, ${storedNetid}!`,
+        `Time to debug, ${storedNetid}!`,
+        `Slither into some code, ${storedNetid}!`,
+        `Let's get those tests passing, ${storedNetid}!`,
+        `Show us your Pythonic moves, ${storedNetid}!`,
+        `Let's byte into some problems, ${storedNetid}!`,
+        `Keep calm and code on, ${storedNetid}!`
+      ];
+      const randomMsg = loginMessages[Math.floor(Math.random() * loginMessages.length)];
+      loggedInMsg.textContent = randomMsg;
+      loggedInMsg.style.display = 'inline-block';
+    } else {
+      loginButton.style.display = 'inline-block';
+      loginButton.textContent = 'Login';
+      loginButton.onclick = showLoginModal;
+      loggedInMsg.style.display = 'none';
+    }
   }
 
   // Toggle switch JS
@@ -660,6 +679,41 @@ document.addEventListener('DOMContentLoaded', function() {
       (data.participants || []).forEach(function(netid) {
         const li = document.createElement('li');
         li.textContent = netid;
+        // Add kick icon for admin
+        const isAdmin = localStorage.getItem('netid') === 'nh385' && localStorage.getItem('adminAuthenticated') === 'true';
+        if (isAdmin && netid !== 'nh385') {
+          const kickBtn = document.createElement('button');
+          kickBtn.className = 'kick-btn';
+          kickBtn.title = 'Kick user';
+          kickBtn.innerHTML = '🚫';
+          kickBtn.style.marginLeft = '8px';
+          kickBtn.style.display = 'none';
+          // Refactored: Use checkAdminAuth and showAdminPasswordModal if needed
+          kickBtn.onclick = function(e) {
+            e.stopPropagation();
+            function doKick() {
+              const adminNetid = localStorage.getItem('netid');
+              const adminPass = (typeof adminPassword !== 'undefined' ? adminPassword : null);
+              console.log('KICK DEBUG:', { section, netid, admin_netid: adminNetid, admin_password: adminPass });
+              socket.emit('kick_user', {
+                section,
+                netid,
+                admin_netid: adminNetid,
+                admin_password: adminPass
+              });
+            }
+            if (!checkAdminAuth()) {
+              showAdminPasswordModal(doKick);
+              return;
+            }
+            if (confirm('Kick ' + netid + ' from this chat?')) {
+              doKick();
+            }
+          };
+          li.appendChild(kickBtn);
+          li.onmouseenter = () => { kickBtn.style.display = 'inline-block'; };
+          li.onmouseleave = () => { kickBtn.style.display = 'none'; };
+        }
         participantsList.appendChild(li);
       });
     }
@@ -792,9 +846,24 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   observer.observe(document.documentElement, { attributes: true });
 
-  // Section dropdown auto-redirect (generalized)
+  // Section dropdown auto-redirect (generalized and persistent)
   function setupSectionDropdownRedirect() {
     var dropdown = document.getElementById('sectionDropdown') || document.getElementById('sectionSelect');
+    var storedSection = localStorage.getItem('section');
+    var urlSection = String(section);
+
+    // If the URL section does not match localStorage.section, redirect
+    if (storedSection && storedSection !== urlSection) {
+      window.location.href = '/chat/' + storedSection;
+      return;
+    }
+
+    // Set dropdown to stored section if present
+    if (dropdown && storedSection) {
+      dropdown.value = storedSection;
+    }
+
+    // On dropdown change, update localStorage and redirect
     if (dropdown) {
       dropdown.addEventListener('change', function(e) {
         var value = e.target.value;
@@ -808,6 +877,24 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
   setupSectionDropdownRedirect();
+
+  // Add this after the login modal is created, inside DOMContentLoaded
+  const loginNetID = document.getElementById('loginNetID');
+  const loginAdminPassword = document.getElementById('loginAdminPassword');
+  if (loginNetID) {
+    loginNetID.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        submitLogin();
+      }
+    });
+  }
+  if (loginAdminPassword) {
+    loginAdminPassword.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        submitLogin();
+      }
+    });
+  }
 });
 
 // Functions that don't depend on DOM elements
@@ -992,29 +1079,11 @@ function submitLogin() {
 }
 
 function showLogoutConfirm() {
-  if (confirm('Are you sure you want to logout? This will clear your session.')) {
-    logout();
-  }
+  // No longer needed: do nothing
 }
 
 function logout() {
-  // Clear all stored data
-  localStorage.removeItem("netid");
-  localStorage.removeItem("adminAuthenticated");
-  localStorage.removeItem("netidDate");
-  localStorage.removeItem("rememberMe");
-  
-  // Update UI
-  document.getElementById('loginButton').textContent = 'Login';
-  document.getElementById('loginButton').onclick = showLoginModal;
-  
-  // Hide admin buttons
-  document.querySelectorAll('.admin-actions').forEach(el => {
-    el.style.display = 'none';
-  });
-  
-  // Clear admin password
-  adminPassword = null;
+  // No longer needed: do nothing
 }
 
 // Check if user is admin and show admin buttons
@@ -1117,6 +1186,14 @@ socket.on("message_supported", function(data) {
 
 socket.on("support_error", function(data) {
   alert("Support Error: " + data.message);
+});
+
+// Handle being kicked from the chat
+socket.on('kicked', function(data) {
+  alert(data.reason || 'You have been removed from the chat.');
+  // Force logout and reload page
+  logout();
+  window.location.reload();
 });
 
 function escapeHtml(text) {
