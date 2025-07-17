@@ -17,9 +17,22 @@
   </div>
 </div>
 <h2>Weekly Challenge</h2>
-<div style="margin-bottom: 1em;">
+<div style="margin-bottom: 1em; display: flex; align-items: center; gap: 1em;">
   <label for="challengeSelect"><b>Select Challenge:</b></label>
+  <div id="adminDropdown" style="display:none; position:relative; min-width:220px;"></div>
   <select id="challengeSelect" style="margin-left: 0.5em;"></select>
+</div>
+<!-- Reorder Modal -->
+<div id="reorderModal" class="admin-password-modal" style="display:none; z-index:3200;">
+  <div class="modal-content" style="max-width:500px;">
+    <h3>Reorder Challenges</h3>
+    <ul id="reorderList" style="list-style:none; padding:0; margin:0;"></ul>
+    <div style="margin-top:10px; text-align:right;">
+      <button onclick="closeReorderModal()">Cancel</button>
+      <button id="saveReorderBtn" class="btn btn-primary">Save Order</button>
+    </div>
+    <div id="reorderError" style="color:red; margin-top:8px;"></div>
+  </div>
 </div>
 <div id="challengeBox" style="display:none;">
   <div class="challenge-main-row">
@@ -69,12 +82,43 @@
     <label>Description (Markdown):<br><textarea id="editProblem" style="width:100%;height:100px;"></textarea></label><br><br>
     <label>Examples (Markdown, optional):<br><textarea id="editExamples" style="width:100%;height:60px;"></textarea></label><br><br>
     <label>Test Cases (JSON):<br><textarea id="editTestCases" style="width:100%;height:80px;"></textarea></label><br><br>
+    <label>Starter Code (Python, optional):<br><textarea id="editStarterCode" style="width:100%;height:60px;"></textarea></label><br><br>
     <label>Solutions Available Date (YYYY-MM-DD):<br><input type="date" id="editSolutionsDate" style="width:100%"></label><br><br>
     <div style="margin-top:10px; text-align:right;">
       <button onclick="closeEditModal()">Cancel</button>
       <button id="saveEditBtn" class="btn btn-primary">Save</button>
     </div>
     <div id="editError" style="color:red; margin-top:8px;"></div>
+  </div>
+</div>
+<!-- Add Challenge Modal -->
+<div id="addChallengeModal" class="admin-password-modal" style="display:none; z-index:3000;">
+  <div class="modal-content" style="max-width:600px;">
+    <h3>Add New Challenge</h3>
+    <label>Title:<br><input type="text" id="addTitle" style="width:100%"></label><br><br>
+    <label>Description (Markdown):<br><textarea id="addProblem" style="width:100%;height:100px;"></textarea></label><br><br>
+    <label>Examples (Markdown, optional):<br><textarea id="addExamples" style="width:100%;height:60px;"></textarea></label><br><br>
+    <label>Test Cases (JSON):<br><textarea id="addTestCases" style="width:100%;height:80px;"></textarea></label><br><br>
+    <label>Starter Code (Python, optional):<br><textarea id="addStarterCode" style="width:100%;height:60px;"></textarea></label><br><br>
+    <label>Solutions Available Date (YYYY-MM-DD):<br><input type="date" id="addSolutionsDate" style="width:100%"></label><br><br>
+    <label><input type="checkbox" id="addActive"> Active (students can see/solve)</label><br><br>
+    <div style="margin-top:10px; text-align:right;">
+      <button onclick="closeAddModal()">Cancel</button>
+      <button id="validateAddBtn" class="btn btn-primary">Next</button>
+    </div>
+    <div id="addError" style="color:red; margin-top:8px;"></div>
+  </div>
+</div>
+<!-- Add Challenge Confirmation Modal -->
+<div id="addConfirmModal" class="admin-password-modal" style="display:none; z-index:3100;">
+  <div class="modal-content" style="max-width:600px;">
+    <h3>Confirm New Challenge</h3>
+    <div id="addConfirmSummary" style="max-height:300px; overflow:auto; margin-bottom:1em;"></div>
+    <div style="margin-top:10px; text-align:right;">
+      <button onclick="closeAddConfirmModal()">Cancel</button>
+      <button id="saveAddBtn" class="btn btn-success">Add Challenge</button>
+    </div>
+    <div id="addConfirmError" style="color:red; margin-top:8px;"></div>
   </div>
 </div>
 {% endblock %}
@@ -84,6 +128,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/monokai.min.css">
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <style>
   .challenge-main-row {
     display: flex;
@@ -343,6 +388,13 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   loadChallengeList();
+  let reorderBtn = document.getElementById('reorderBtn');
+  if (isAdmin()) {
+    reorderBtn.style.display = '';
+    reorderBtn.onclick = showReorderModal;
+  } else {
+    reorderBtn.style.display = 'none';
+  }
 });
 
 function isAdmin() {
@@ -350,9 +402,14 @@ function isAdmin() {
 }
 
 async function loadChallengeList() {
-  let select = document.getElementById('challengeSelect');
-  select.innerHTML = '';
-  let resp = await fetch('/weekly_challenge/challenges');
+  let is_admin = isAdmin();
+  let url = '/weekly_challenge/challenges';
+  if (is_admin) {
+    let admin_netid = localStorage.getItem('netid');
+    let admin_password = 'foundationsP4ss;';
+    url += `?admin_netid=${encodeURIComponent(admin_netid)}&admin_password=${encodeURIComponent(admin_password)}`;
+  }
+  let resp = await fetch(url);
   if (!resp.ok) {
     document.getElementById('challengeBox').style.display = 'none';
     document.getElementById('noChallengeMsg').style.display = 'block';
@@ -364,17 +421,116 @@ async function loadChallengeList() {
     document.getElementById('noChallengeMsg').style.display = 'block';
     return;
   }
-  data.forEach(chal => {
-    let opt = document.createElement('option');
-    opt.value = chal.id;
-    opt.textContent = chal.title;
-    select.appendChild(opt);
-  });
-  select.onchange = function() {
+  let adminDropdown = document.getElementById('adminDropdown');
+  let select = document.getElementById('challengeSelect');
+  if (is_admin) {
+    select.style.display = 'none';
+    adminDropdown.style.display = '';
+    adminDropdown.innerHTML = '';
+    // Custom dropdown
+    let dropdownBtn = document.createElement('div');
+    dropdownBtn.id = 'adminDropdownBtn';
+    dropdownBtn.tabIndex = 0;
+    dropdownBtn.style.border = '1px solid #ccc';
+    dropdownBtn.style.borderRadius = '4px';
+    dropdownBtn.style.padding = '6px 16px';
+    dropdownBtn.style.background = '#fff';
+    dropdownBtn.style.cursor = 'pointer';
+    dropdownBtn.style.userSelect = 'none';
+    dropdownBtn.style.minWidth = '200px';
+    dropdownBtn.textContent = data[0].title + (data[0].active ? ' (active)' : ' (inactive)');
+    adminDropdown.appendChild(dropdownBtn);
+    let dropdownList = document.createElement('ul');
+    dropdownList.id = 'adminDropdownList';
+    dropdownList.style.listStyle = 'none';
+    dropdownList.style.padding = '0';
+    dropdownList.style.margin = '0';
+    dropdownList.style.position = 'absolute';
+    dropdownList.style.left = '0';
+    dropdownList.style.top = '110%';
+    dropdownList.style.zIndex = '1000';
+    dropdownList.style.background = '#fff';
+    dropdownList.style.border = '1px solid #ccc';
+    dropdownList.style.borderRadius = '4px';
+    dropdownList.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+    dropdownList.style.display = 'none';
+    data.forEach((chal, idx) => {
+      let li = document.createElement('li');
+      li.textContent = chal.title + (chal.active ? ' (active)' : ' (inactive)');
+      li.dataset.id = chal.id;
+      li.style.padding = '6px 16px';
+      li.style.cursor = 'pointer';
+      li.style.background = '#fff';
+      li.onmouseenter = () => li.style.background = '#e6f7ff';
+      li.onmouseleave = () => li.style.background = '#fff';
+      li.onclick = function(e) {
+        dropdownBtn.textContent = li.textContent;
+        dropdownList.style.display = 'none';
+        loadChallenge(chal.id);
+        showActiveToggle(chal.id, chal.active);
+      };
+      dropdownList.appendChild(li);
+    });
+    // Add '+ Add New Challenge' option (not draggable)
+    let addLi = document.createElement('li');
+    addLi.textContent = '+ Add New Challenge';
+    addLi.style.fontWeight = 'bold';
+    addLi.style.background = '#f7f7f7';
+    addLi.style.cursor = 'pointer';
+    addLi.style.padding = '6px 16px';
+    addLi.onclick = function(e) {
+      dropdownList.style.display = 'none';
+      showAddModal();
+    };
+    dropdownList.appendChild(addLi);
+    adminDropdown.appendChild(dropdownList);
+    // Show/hide dropdown
+    dropdownBtn.onclick = function(e) {
+      dropdownList.style.display = dropdownList.style.display === 'none' ? '' : 'none';
+    };
+    document.addEventListener('click', function(e) {
+      if (!adminDropdown.contains(e.target)) {
+        dropdownList.style.display = 'none';
+      }
+    });
+    // Make list sortable except last item
+    new Sortable(dropdownList, {
+      animation: 150,
+      filter: 'li:last-child',
+      onEnd: async function(evt) {
+        if (evt.item === addLi) return;
+        let ids = Array.from(dropdownList.children).slice(0, -1).map(li => li.dataset.id);
+        let admin_netid = localStorage.getItem('netid');
+        let admin_password = 'foundationsP4ss;';
+        let resp = await fetch('/weekly_challenge/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ admin_netid, admin_password, ids })
+        });
+        if (!resp.ok) {
+          alert('Failed to reorder challenges.');
+        }
+      }
+    });
+    // Auto-select first challenge
+    loadChallenge(data[0].id);
+    showActiveToggle(data[0].id, data[0].active);
+  } else {
+    adminDropdown.style.display = 'none';
+    select.style.display = '';
+    select.innerHTML = '';
+    data.forEach(chal => {
+      let opt = document.createElement('option');
+      opt.value = chal.id;
+      opt.textContent = chal.title;
+      select.appendChild(opt);
+    });
+    select.onchange = function() {
+      loadChallenge(select.value);
+    };
+    // Load first challenge by default
     loadChallenge(select.value);
-  };
-  // Load first challenge by default
-  loadChallenge(select.value);
+  }
 }
 
 function highlightProblemText(text) {
@@ -394,13 +550,13 @@ async function loadChallenge(cid) {
   document.getElementById('challengeProblemMd').innerHTML = marked.parse(data.problem || '');
   // Optionally show examples if present in challenge data
   if (data.examples) {
-    document.getElementById('challengeExamples').innerHTML = `<b>Examples:</b><br>${data.examples}`;
+    document.getElementById('challengeExamples').innerHTML = `<b>Examples:</b><br>${marked.parse(data.examples)}`;
   } else {
     document.getElementById('challengeExamples').innerHTML = '';
   }
   document.getElementById('challengeBox').style.display = 'block';
   document.getElementById('noChallengeMsg').style.display = 'none';
-  document.getElementById('editor').value = 'def solution():\n    pass\n';
+  document.getElementById('editor').value = data.starter_code || 'def solution():\n    pass\n';
   setupEditor();
   loadLeaderboard();
   if (isAdmin()) loadSubmissions();
@@ -608,6 +764,7 @@ function openEditModal(chal) {
       document.getElementById('editExamples').value = fullChal.examples || '';
       document.getElementById('editTestCases').value = JSON.stringify(fullChal.test_cases || [], null, 2);
       document.getElementById('editSolutionsDate').value = (fullChal.solutions_available_date || '').slice(0,10);
+      document.getElementById('editStarterCode').value = fullChal.starter_code || '';
       document.getElementById('editError').textContent = '';
       document.getElementById('saveEditBtn').onclick = async function() {
         let title = document.getElementById('editTitle').value.trim();
@@ -615,6 +772,7 @@ function openEditModal(chal) {
         let examples = document.getElementById('editExamples').value;
         let testCasesRaw = document.getElementById('editTestCases').value;
         let solutions_available_date = document.getElementById('editSolutionsDate').value;
+        let starter_code = document.getElementById('editStarterCode').value;
         let test_cases;
         try {
           test_cases = JSON.parse(testCasesRaw);
@@ -625,7 +783,7 @@ function openEditModal(chal) {
         let resp = await fetch(`/weekly_challenge/edit/${currentChallengeId}?netid=${encodeURIComponent(admin_netid)}&password=${encodeURIComponent(admin_password)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, problem, examples, test_cases, solutions_available_date })
+          body: JSON.stringify({ title, problem, examples, test_cases, solutions_available_date, starter_code })
         });
         if (resp.ok) {
           closeEditModal();
@@ -640,5 +798,167 @@ function openEditModal(chal) {
 function closeEditModal() {
   document.getElementById('editChallengeModal').style.display = 'none';
 }
+
+function showAddModal() {
+  document.getElementById('addTitle').value = '';
+  document.getElementById('addProblem').value = '';
+  document.getElementById('addExamples').value = '';
+  document.getElementById('addTestCases').value = '';
+  let d = new Date();
+  d.setDate(d.getDate() + 7);
+  document.getElementById('addSolutionsDate').value = d.toISOString().slice(0,10);
+  document.getElementById('addActive').checked = false;
+  document.getElementById('addStarterCode').value = ''; // Clear starter code for new challenge
+  document.getElementById('addError').textContent = '';
+  document.getElementById('addChallengeModal').style.display = 'flex';
+}
+function closeAddModal() {
+  document.getElementById('addChallengeModal').style.display = 'none';
+}
+function closeAddConfirmModal() {
+  document.getElementById('addConfirmModal').style.display = 'none';
+}
+document.getElementById('validateAddBtn').onclick = function() {
+  let title = document.getElementById('addTitle').value.trim();
+  let problem = document.getElementById('addProblem').value;
+  let testCasesRaw = document.getElementById('addTestCases').value;
+  let solutions_available_date = document.getElementById('addSolutionsDate').value;
+  let starter_code = document.getElementById('addStarterCode').value;
+  let test_cases;
+  let error = '';
+  if (!title) error = 'Title is required.';
+  else if (!problem) error = 'Description is required.';
+  else if (!testCasesRaw) error = 'Test cases are required.';
+  else if (!solutions_available_date) error = 'Solutions date is required.';
+  else {
+    try {
+      test_cases = JSON.parse(testCasesRaw);
+      if (!Array.isArray(test_cases) || test_cases.length === 0) error = 'Test cases must be a non-empty array.';
+      else if (!test_cases.every(tc => tc.input !== undefined && tc.output !== undefined)) error = 'Each test case must have input and output.';
+    } catch (e) {
+      error = 'Test cases must be valid JSON.';
+    }
+  }
+  if (error) {
+    document.getElementById('addError').textContent = error;
+    return;
+  }
+  // Show confirmation modal
+  document.getElementById('addError').textContent = '';
+  let summary = `<b>Title:</b> ${title}<br>`;
+  summary += `<b>Description:</b><br><div style='background:#f7f7f7; padding:0.5em; border-radius:4px;'>${marked.parse(problem)}</div>`;
+  let examples = document.getElementById('addExamples').value;
+  if (examples) summary += `<b>Examples:</b><br><div style='background:#f7f7f7; padding:0.5em; border-radius:4px;'>${marked.parse(examples)}</div>`;
+  summary += `<b>Test Cases:</b><pre style='background:#f7f7f7; border-radius:4px;'>${JSON.stringify(test_cases, null, 2)}</pre>`;
+  if (starter_code) summary += `<b>Starter Code:</b><pre style='background:#f7f7f7; border-radius:4px;'>${starter_code}</pre>`;
+  summary += `<b>Solutions Available Date:</b> ${solutions_available_date}<br>`;
+  summary += `<b>Active:</b> ${document.getElementById('addActive').checked ? 'Yes' : 'No'}<br>`;
+  document.getElementById('addConfirmSummary').innerHTML = summary;
+  document.getElementById('addConfirmError').textContent = '';
+  document.getElementById('addChallengeModal').style.display = 'none';
+  document.getElementById('addConfirmModal').style.display = 'flex';
+};
+document.getElementById('saveAddBtn').onclick = async function() {
+  let title = document.getElementById('addTitle').value.trim();
+  let problem = document.getElementById('addProblem').value;
+  let examples = document.getElementById('addExamples').value;
+  let testCasesRaw = document.getElementById('addTestCases').value;
+  let solutions_available_date = document.getElementById('addSolutionsDate').value;
+  let active = document.getElementById('addActive').checked;
+  let starter_code = document.getElementById('addStarterCode').value;
+  let test_cases;
+  try {
+    test_cases = JSON.parse(testCasesRaw);
+  } catch (e) {
+    document.getElementById('addConfirmError').textContent = 'Test cases must be valid JSON.';
+    return;
+  }
+  let admin_netid = localStorage.getItem('netid');
+  let admin_password = 'foundationsP4ss;';
+  let resp = await fetch(`/weekly_challenge/add?netid=${encodeURIComponent(admin_netid)}&password=${encodeURIComponent(admin_password)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, problem, examples, test_cases, solutions_available_date, active, starter_code })
+  });
+  if (resp.ok) {
+    closeAddConfirmModal();
+    await loadChallengeList();
+  } else {
+    let data = await resp.json();
+    document.getElementById('addConfirmError').textContent = data.error || 'Failed to add.';
+  }
+};
+
+function showActiveToggle(cid, isActive) {
+  let btn = document.getElementById('toggleActiveBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'toggleActiveBtn';
+    btn.style.marginLeft = '1em';
+    btn.className = 'btn btn-sm btn-secondary';
+    document.getElementById('challengeSelect').parentNode.appendChild(btn);
+  }
+  btn.textContent = isActive ? 'Set Inactive' : 'Set Active';
+  btn.onclick = async function() {
+    let admin_netid = localStorage.getItem('netid');
+    let admin_password = 'foundationsP4ss;';
+    let resp = await fetch(`/weekly_challenge/toggle_active/${cid}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_netid, admin_password })
+    });
+    if (resp.ok) {
+      await loadChallengeList();
+    } else {
+      alert('Failed to toggle active status.');
+    }
+  };
+}
+let reorderChallengesData = [];
+function showReorderModal() {
+  let ul = document.getElementById('reorderList');
+  ul.innerHTML = '';
+  // Use the latest challenge list
+  fetch('/weekly_challenge/challenges?admin_netid=' + encodeURIComponent(localStorage.getItem('netid')) + '&admin_password=foundationsP4ss;')
+    .then(resp => resp.json())
+    .then(data => {
+      reorderChallengesData = data;
+      data.forEach(chal => {
+        let li = document.createElement('li');
+        li.textContent = chal.title + (chal.active ? ' (active)' : ' (inactive)');
+        li.dataset.id = chal.id;
+        li.style.padding = '8px 12px';
+        li.style.border = '1px solid #ccc';
+        li.style.marginBottom = '4px';
+        li.style.background = '#f7f7f7';
+        li.style.borderRadius = '4px';
+        li.style.cursor = 'move';
+        ul.appendChild(li);
+      });
+      document.getElementById('reorderModal').style.display = 'flex';
+      new Sortable(ul, { animation: 150 });
+    });
+}
+function closeReorderModal() {
+  document.getElementById('reorderModal').style.display = 'none';
+}
+document.getElementById('saveReorderBtn').onclick = async function() {
+  let ul = document.getElementById('reorderList');
+  let ids = Array.from(ul.children).map(li => li.dataset.id);
+  let admin_netid = localStorage.getItem('netid');
+  let admin_password = 'foundationsP4ss;';
+  let resp = await fetch('/weekly_challenge/reorder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ admin_netid, admin_password, ids })
+  });
+  if (resp.ok) {
+    closeReorderModal();
+    await loadChallengeList();
+  } else {
+    let data = await resp.json();
+    document.getElementById('reorderError').textContent = data.error || 'Failed to reorder.';
+  }
+};
 </script>
 {% endblock %} 

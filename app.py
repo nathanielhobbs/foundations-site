@@ -663,13 +663,18 @@ app.jinja_env.filters['split_code_blocks'] = split_code_blocks
 
 @app.route("/weekly_challenge/challenges", methods=["GET"])
 def list_challenges():
+    admin_netid = request.args.get("admin_netid")
+    admin_password = request.args.get("admin_password")
+    is_admin = admin_netid and admin_password and check_admin_auth(admin_netid, admin_password)
     ids = r.lrange("weekly_challenge:list", 0, -1)
     challenges = []
     for cid in ids:
         raw = r.get(f"weekly_challenge:challenge:{cid}")
         if raw:
             c = json.loads(raw)
-            challenges.append({"id": c["id"], "title": c.get("title", c["problem"][:40])})
+            # Only show active challenges to students
+            if is_admin or c.get("active", True):
+                challenges.append({"id": c["id"], "title": c.get("title", c["problem"][:40]), "active": c.get("active", True)})
     return jsonify(challenges)
 
 @app.route("/weekly_challenge/challenge/<cid>", methods=["GET"])
@@ -680,8 +685,12 @@ def get_challenge(cid):
     if not raw:
         return jsonify({"error": "Challenge not found."}), 404
     challenge = json.loads(raw)
+    is_admin = admin_netid and admin_password and check_admin_auth(admin_netid, admin_password)
+    # Only allow students to see active challenges
+    if not is_admin and not challenge.get("active", True):
+        return jsonify({"error": "Challenge not active."}), 403
     # If admin credentials are valid, return full challenge
-    if admin_netid and admin_password and check_admin_auth(admin_netid, admin_password):
+    if is_admin:
         return jsonify(challenge)
     # Otherwise, return student-safe version
     safe_challenge = {
@@ -771,6 +780,7 @@ def add_challenge():
     solutions_available_date = data.get("solutions_available_date")
     if not solutions_available_date:
         solutions_available_date = (datetime.now(est) + timedelta(days=7)).strftime("%Y-%m-%d")
+    active = data.get("active", False)  # New challenges default to inactive
     if not (problem and test_cases):
         return jsonify({"error": "Missing fields."}), 400
     challenge_id = str(uuid4())
@@ -779,7 +789,8 @@ def add_challenge():
         "problem": problem,
         "test_cases": test_cases,
         "title": title,
-        "solutions_available_date": solutions_available_date
+        "solutions_available_date": solutions_available_date,
+        "active": active
     }
     if "examples" in data:
         challenge["examples"] = data["examples"]
@@ -819,6 +830,35 @@ def edit_challenge(cid):
         challenge["test_cases"] = data["test_cases"]
     r.set(f"weekly_challenge:challenge:{cid}", json.dumps(challenge))
     return jsonify({"success": True, "challenge": challenge})
+
+@app.route("/weekly_challenge/toggle_active/<cid>", methods=["POST"])
+def toggle_challenge_active(cid):
+    admin_netid = request.json.get("admin_netid")
+    admin_password = request.json.get("admin_password")
+    if not check_admin_auth(admin_netid, admin_password):
+        return jsonify({"error": "Invalid admin credentials"}), 403
+    raw = r.get(f"weekly_challenge:challenge:{cid}")
+    if not raw:
+        return jsonify({"error": "Challenge not found."}), 404
+    challenge = json.loads(raw)
+    challenge["active"] = not challenge.get("active", False)
+    r.set(f"weekly_challenge:challenge:{cid}", json.dumps(challenge))
+    return jsonify({"success": True, "active": challenge["active"]})
+
+@app.route("/weekly_challenge/reorder", methods=["POST"])
+def reorder_challenges():
+    admin_netid = request.json.get("admin_netid")
+    admin_password = request.json.get("admin_password")
+    ids = request.json.get("ids")
+    if not check_admin_auth(admin_netid, admin_password):
+        return jsonify({"error": "Invalid admin credentials"}), 403
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        return jsonify({"error": "Invalid ids list"}), 400
+    # Remove all and re-add in new order
+    r.delete("weekly_challenge:list")
+    for cid in reversed(ids):
+        r.lpush("weekly_challenge:list", cid)
+    return jsonify({"success": True})
 
 # --- Code execution sandbox (updated for print output) ---
 def run_code_against_tests(code, test_cases):
