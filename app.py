@@ -4,11 +4,16 @@ from dotenv import load_dotenv
 from flask import Flask, render_template, request, Response, abort#, redirect
 from flask_socketio import SocketIO, emit, join_room, disconnect
 import redis
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import re
 from flask import session as flask_session
 import pytz
+from flask import jsonify
+from uuid import uuid4
+import io
+import contextlib
+from flask import make_response
 
 load_dotenv()
 
@@ -648,5 +653,252 @@ def _split_inline_code(text):
     return result
 
 app.jinja_env.filters['split_code_blocks'] = split_code_blocks
+
+# --- Multiple Challenge Support ---
+# Redis keys:
+#   weekly_challenge:list -> list of challenge IDs
+#   weekly_challenge:challenge:<id> -> JSON { 'id', 'problem', 'test_cases', 'title' }
+#   weekly_challenge:submissions:<id> -> list of JSON { netid, code, keystrokes, timestamp, passed, results }
+#   weekly_challenge:leaderboard:<id> -> sorted set (timestamp, netid)
+
+@app.route("/weekly_challenge/challenges", methods=["GET"])
+def list_challenges():
+    ids = r.lrange("weekly_challenge:list", 0, -1)
+    challenges = []
+    for cid in ids:
+        raw = r.get(f"weekly_challenge:challenge:{cid}")
+        if raw:
+            c = json.loads(raw)
+            challenges.append({"id": c["id"], "title": c.get("title", c["problem"][:40])})
+    return jsonify(challenges)
+
+@app.route("/weekly_challenge/challenge/<cid>", methods=["GET"])
+def get_challenge(cid):
+    admin_netid = request.args.get("admin_netid")
+    admin_password = request.args.get("admin_password")
+    raw = r.get(f"weekly_challenge:challenge:{cid}")
+    if not raw:
+        return jsonify({"error": "Challenge not found."}), 404
+    challenge = json.loads(raw)
+    # If admin credentials are valid, return full challenge
+    if admin_netid and admin_password and check_admin_auth(admin_netid, admin_password):
+        return jsonify(challenge)
+    # Otherwise, return student-safe version
+    safe_challenge = {
+        "id": challenge["id"],
+        "title": challenge.get("title", challenge["problem"][:40]),
+        "problem": challenge["problem"],
+        "test_cases": [{"input": tc["input"]} for tc in challenge.get("test_cases", [])]
+    }
+    if "examples" in challenge:
+        safe_challenge["examples"] = challenge["examples"]
+    return jsonify(safe_challenge)
+
+@app.route("/weekly_challenge/submit/<cid>", methods=["POST"])
+def submit_challenge(cid):
+    data = request.get_json()
+    netid = data.get("netid")
+    code = data.get("code")
+    keystrokes = data.get("keystrokes")
+    timestamp = datetime.now(est).isoformat()
+    if not (netid and code and keystrokes):
+        return jsonify({"error": "Missing fields."}), 400
+    raw = r.get(f"weekly_challenge:challenge:{cid}")
+    if not raw:
+        return jsonify({"error": "Challenge not found."}), 404
+    challenge = json.loads(raw)
+    test_cases = challenge.get("test_cases", [])
+    passed, results = run_code_against_tests(code, test_cases)
+    submission = {
+        "netid": netid,
+        "code": code,
+        "keystrokes": keystrokes,
+        "timestamp": timestamp,
+        "passed": passed,
+        "results": results
+    }
+    r.rpush(f"weekly_challenge:submissions:{cid}", json.dumps(submission))
+    if passed:
+        r.zadd(f"weekly_challenge:leaderboard:{cid}", {netid: datetime.now().timestamp()})
+    return jsonify({"passed": passed, "results": results})
+
+@app.route("/weekly_challenge/leaderboard/<cid>", methods=["GET"])
+def get_leaderboard(cid):
+    leaderboard = r.zrange(f"weekly_challenge:leaderboard:{cid}", 0, -1, withscores=True)
+    raw = r.get(f"weekly_challenge:challenge:{cid}")
+    solutions_available_date = None
+    if raw:
+        challenge = json.loads(raw)
+        solutions_available_date = challenge.get("solutions_available_date")
+    leaderboard_out = [
+        {"netid": netid, "timestamp": datetime.fromtimestamp(score, est).strftime("%Y-%m-%d %H:%M:%S")}
+        for netid, score in leaderboard
+    ]
+    return jsonify({"leaderboard": leaderboard_out, "solutions_available_date": solutions_available_date})
+
+@app.route("/weekly_challenge/submissions/<cid>", methods=["GET"])
+def get_submissions(cid):
+    admin_netid = request.args.get("admin_netid")
+    admin_password = request.args.get("admin_password")
+    if not check_admin_auth(admin_netid, admin_password):
+        return jsonify({"error": "Invalid admin credentials"}), 403
+    submissions = r.lrange(f"weekly_challenge:submissions:{cid}", 0, -1)
+    out = [json.loads(s) for s in submissions]
+    return jsonify(out)
+
+@app.route("/weekly_challenge/remove_leaderboard/<cid>", methods=["POST"])
+def remove_from_leaderboard_multi(cid):
+    admin_netid = request.json.get("admin_netid")
+    admin_password = request.json.get("admin_password")
+    netid = request.json.get("netid")
+    if not check_admin_auth(admin_netid, admin_password):
+        return jsonify({"error": "Invalid admin credentials"}), 403
+    r.zrem(f"weekly_challenge:leaderboard:{cid}", netid)
+    return jsonify({"success": True})
+
+# Admin: add/edit/delete challenges
+@app.route("/weekly_challenge/add", methods=["POST"])
+def add_challenge():
+    admin_netid = request.args.get("netid")
+    admin_password = request.args.get("password")
+    if not check_admin_auth(admin_netid, admin_password):
+        abort(403)
+    data = request.get_json()
+    problem = data.get("problem")
+    test_cases = data.get("test_cases")
+    title = data.get("title") or problem[:40]
+    # Set solutions_available_date to 1 week from now if not provided
+    solutions_available_date = data.get("solutions_available_date")
+    if not solutions_available_date:
+        solutions_available_date = (datetime.now(est) + timedelta(days=7)).strftime("%Y-%m-%d")
+    if not (problem and test_cases):
+        return jsonify({"error": "Missing fields."}), 400
+    challenge_id = str(uuid4())
+    challenge = {
+        "id": challenge_id,
+        "problem": problem,
+        "test_cases": test_cases,
+        "title": title,
+        "solutions_available_date": solutions_available_date
+    }
+    if "examples" in data:
+        challenge["examples"] = data["examples"]
+    r.set(f"weekly_challenge:challenge:{challenge_id}", json.dumps(challenge))
+    r.lpush("weekly_challenge:list", challenge_id)
+    return jsonify({"success": True, "id": challenge_id})
+
+@app.route("/weekly_challenge/delete/<cid>", methods=["POST"])
+def delete_challenge(cid):
+    admin_netid = request.args.get("netid")
+    admin_password = request.args.get("password")
+    if not check_admin_auth(admin_netid, admin_password):
+        abort(403)
+    r.delete(f"weekly_challenge:challenge:{cid}")
+    r.delete(f"weekly_challenge:submissions:{cid}")
+    r.delete(f"weekly_challenge:leaderboard:{cid}")
+    r.lrem("weekly_challenge:list", 0, cid)
+    return jsonify({"success": True})
+
+@app.route("/weekly_challenge/edit/<cid>", methods=["POST"])
+def edit_challenge(cid):
+    admin_netid = request.args.get("netid")
+    admin_password = request.args.get("password")
+    if not check_admin_auth(admin_netid, admin_password):
+        abort(403)
+    raw = r.get(f"weekly_challenge:challenge:{cid}")
+    if not raw:
+        return jsonify({"error": "Challenge not found."}), 404
+    challenge = json.loads(raw)
+    data = request.get_json()
+    # Update fields if present
+    for field in ["title", "problem", "examples", "solutions_available_date"]:
+        if field in data:
+            challenge[field] = data[field]
+    # Only update test_cases if present and not empty/null
+    if "test_cases" in data and data["test_cases"]:
+        challenge["test_cases"] = data["test_cases"]
+    r.set(f"weekly_challenge:challenge:{cid}", json.dumps(challenge))
+    return jsonify({"success": True, "challenge": challenge})
+
+# --- Code execution sandbox (updated for print output) ---
+def run_code_against_tests(code, test_cases):
+    """Run code against test cases. Distinguish between print and return-based challenges."""
+    results = []
+    passed = True
+    for tc in test_cases:
+        try:
+            local_vars = {}
+            f = io.StringIO()
+            with contextlib.redirect_stdout(f):
+                exec(code, {}, local_vars)
+                func = local_vars.get('solution')
+                if not func:
+                    raise Exception("No function named 'solution'")
+                # Support both positional and no-argument calls
+                if isinstance(tc["input"], list):
+                    result = func(*tc["input"])
+                else:
+                    result = func(tc["input"])
+            printed = f.getvalue()
+            # If expected output is not None, check if this is a print or return challenge
+            # If the expected output is a string and the function returns None, treat as print-based
+            # If the function returns a string, treat as return-based
+            # If the test case has a 'mode' key, use it ('print' or 'return')
+            mode = tc.get('mode')
+            if mode == 'print' or (mode is None and result is None and isinstance(tc["output"], str)):
+                # Print-based: compare printed output
+                ok = printed == tc["output"]
+            else:
+                # Return-based: compare return value
+                ok = result == tc["output"]
+            results.append({
+                "input": tc["input"],
+                "printed": printed,
+                "output": result,
+                "expected": tc["output"],
+                "passed": ok
+            })
+            if not ok:
+                passed = False
+        except Exception as e:
+            results.append({
+                "input": tc["input"],
+                "printed": None,
+                "output": None,
+                "expected": tc["output"],
+                "passed": False,
+                "error": str(e)
+            })
+            passed = False
+    return passed, results
+
+@app.route("/weekly_challenge")
+def weekly_challenge_page():
+    # For now, get netid from query param or session (customize as needed)
+    netid = request.args.get("netid") or flask_session.get("netid") or ""
+    raw = r.get("weekly_challenge:current")
+    challenge = json.loads(raw) if raw else None
+    return render_template("weekly_challenge.html", netid=netid, challenge=challenge)
+
+@app.route("/weekly_challenge/solution_replay/<cid>/<netid>", methods=["GET"])
+def solution_replay(cid, netid):
+    raw = r.get(f"weekly_challenge:challenge:{cid}")
+    if not raw:
+        return jsonify({"error": "Challenge not found."}), 404
+    challenge = json.loads(raw)
+    sol_date = challenge.get("solutions_available_date")
+    if not sol_date:
+        return jsonify({"error": "No solutions date set."}), 403
+    now = datetime.now(est).date()
+    sol_date_dt = datetime.strptime(sol_date, "%Y-%m-%d").date()
+    if now < sol_date_dt:
+        return jsonify({"error": "Solutions not available yet."}), 403
+    # Find the latest passed submission for this netid (iterate from end)
+    submissions = r.lrange(f"weekly_challenge:submissions:{cid}", 0, -1)
+    for s in reversed(submissions):
+        sub = json.loads(s)
+        if sub.get("netid") == netid and sub.get("passed"):
+            return jsonify({"keystrokes": sub.get("keystrokes", [])})
+    return jsonify({"error": "No passed solution found for this user."}), 404
 
 socketio.run(app, host="0.0.0.0", port=5000)
