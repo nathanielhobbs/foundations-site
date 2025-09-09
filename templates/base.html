@@ -34,9 +34,23 @@
       align-items: center;
     }
 
-    .nav-left a {
+    .nav-left a, nav a {
       margin-right: 1em;
       text-decoration: none;
+      border: 1px solid #bbb;
+      border-radius: 5px;
+      padding: 0.25em 0.7em;
+      transition: background 0.15s, border-color 0.15s;
+      background: transparent;
+      display: inline-block;
+    }
+    nav a:hover, nav a:focus {
+      background: #f3f3f3;
+      border-color: #888;
+    }
+    [data-theme="dark"] nav a:hover, [data-theme="dark"] nav a:focus {
+      background: #23272e;
+      border-color: #4ea1f3;
     }
 
     .nav-right {
