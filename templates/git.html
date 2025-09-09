@@ -14,6 +14,43 @@
   <li><strong>Linux:</strong> Use your package manager, e.g., <code>sudo apt install git</code> or <code>sudo dnf install git</code></li>
 </ul>
 
+<h2>(Windows users) Have Git Bash find conda</h2>
+Quick one-time setup (paste into Git Bash)
+
+This will find Miniconda in common Windows locations, add the right lines to ~/.bashrc (that's a configuration file that gets executed every time you open a new terminal), and auto-activate base each time:
+<pre><code># 1) Create ~/.bashrc if missing
+[ -f ~/.bashrc ] || touch ~/.bashrc
+
+# 2) Append a smart Conda bootstrap only if not already present
+if ! grep -q "### CONDA INIT (git-bash)" ~/.bashrc; then
+cat >> ~/.bashrc <<'EOF'
+### CONDA INIT (git-bash)
+# Try typical Windows installs of Miniconda/Anaconda and source conda.sh if found
+for CONDA_ROOT in \
+  "$HOME/miniconda3" \
+  "/c/Users/$USERNAME/miniconda3" \
+  "/c/ProgramData/miniconda3" \
+  "/c/Miniconda3" \
+  "$HOME/anaconda3" \
+  "/c/Users/$USERNAME/anaconda3" \
+  "/c/ProgramData/anaconda3" \
+  "/c/Anaconda3"
+do
+  if [ -f "$CONDA_ROOT/etc/profile.d/conda.sh" ]; then
+    . "$CONDA_ROOT/etc/profile.d/conda.sh"
+    # Auto-activate base on startup; change to 'false' if you don't want this
+    conda activate base >/dev/null 2>&1
+    break
+  fi
+done
+unset CONDA_ROOT
+### END CONDA INIT (git-bash)
+EOF
+fi
+
+# 3) Apply it to your current shell
+source ~/.bashrc</code></pre>
+
 <h2>Configure Git</h2>
 <pre><code>git config --global user.name "Your Name"
 git config --global user.email "you@example.com"</code></pre>
