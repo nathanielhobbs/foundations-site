@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Assignments{% endblock %}
+{% block content %}
+
+<h2>Link your GitHub Account</h2>
+
+{% if netid == "unknown" %}
+  <p>You must log in with your NetID before linking your GitHub username.</p>
+  <button onclick="showLoginModal()">Login with NetID</button>
+{% else %}
+  <p>NetID: {{ netid }}</p>
+  <form method="POST">
+    <label>GitHub Username:</label>
+    <input type="text" name="github_username" required>
+    <button type="submit">Submit</button>
+  </form>
+{% endif %}
+
+<!-- Login Modal -->
+<div id="loginModal" class="admin-password-modal" style="display: none;">
+  <div class="modal-content">
+    <h3>Login</h3>
+    <p>Enter your NetID:</p>
+    <input type="text" id="loginNetID" placeholder="NetID">
+    <div id="adminPasswordSection" style="display: none; margin-top: 10px;">
+      <p>Admin password required:</p>
+      <input type="password" id="loginAdminPassword" placeholder="Admin password">
+    </div>
+    <div style="margin-top: 15px;">
+      <button onclick="submitLogin()">Login</button>
+      <button onclick="cancelLogin()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+function showLoginModal() {
+  document.getElementById("loginModal").style.display = "block";
+}
+
+function cancelLogin() {
+  document.getElementById("loginModal").style.display = "none";
+}
+
+function submitLogin() {
+  const netid = document.getElementById("loginNetID").value.trim();
+  const adminPassword = document.getElementById("loginAdminPassword").value.trim();
+
+  if (!netid) {
+    alert("Please enter your NetID.");
+    return;
+  }
+
+  // Send POST to server to save NetID in session
+  fetch("{{ url_for('assignments') }}", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `netid=${encodeURIComponent(netid)}&admin_password=${encodeURIComponent(adminPassword)}`
+  })
+  .then(resp => {
+    if (resp.ok) {
+      window.location.reload(); // reload so session is updated
+    } else {
+      alert("Login failed.");
+    }
+  });
+}
+</script>
+
+
+{% endblock %}   

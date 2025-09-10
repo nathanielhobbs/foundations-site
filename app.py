@@ -1,7 +1,9 @@
 import os
 import requests
+import traceback
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, Response, abort#, redirect
+from flask import Flask, render_template, request, Response, abort, redirect, url_for, session
+import pandas as pd
 from flask_socketio import SocketIO, emit, join_room, disconnect
 import redis
 from datetime import datetime, timedelta
@@ -22,8 +24,12 @@ app.config['SECRET_KEY'] = 'foundationsP4ss;'
 app.config['ADMIN_PASSCODE'] = 'fnP4ssword;'  
 app.config['ADMIN_NETID'] = 'nh385'
 app.config['ADMIN_PASSWORD'] = 'foundationsP4ss;'
+app.config['ROSTER_FILE'] = "data/github_roster.csv"
+
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+
+ROSTER_FILE = 'data/github_roster.csv'
 
 # EST timezone
 est = pytz.timezone('US/Eastern')
@@ -47,6 +53,16 @@ assignments = [
 
 # Track socket id to netid/section
 socket_to_user = {}
+
+def load_roster():
+    return pd.read_csv(ROSTER_FILE)
+
+def save_roster(df):
+    df.to_csv(ROSTER_FILE, index=False)
+
+def github_user_exists(username):
+    r = requests.get(f"https://api.github.com/users/{username}")
+    return r.status_code == 200
 
 def check_admin_access():
     code = request.args.get("code")
@@ -93,6 +109,18 @@ def format_timestamp_for_display(timestamp_str):
     except:
         # If parsing fails, return original
         return timestamp_str
+
+@app.route("/login_netid", methods=["POST"])
+def login_netid():
+    netid = request.form.get("netid", "").strip().lower()
+    if not netid:
+        return "Invalid NetID", 400
+
+    # Save in session
+    flask_session["netid"] = netid
+
+    # Send them back to the username linking page
+    return redirect(url_for("assignments"))
 
 @app.route("/notebooks")
 def notebooks():
@@ -579,37 +607,84 @@ def index():
 #def handle_message(msg):
 #    emit("message", msg, broadcast=True)
 
-@app.route("/assignments")
-def show_assignments():
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json"
-    }
-    url = f"https://api.github.com/orgs/{GITHUB_ORG}/repos"
+#@app.route("/assignments")
+#def show_assignments():
+#    headers = {
+#        "Authorization": f"Bearer {GITHUB_TOKEN}",
+#        "Accept": "application/vnd.github+json"
+#    }
+#    url = f"https://api.github.com/orgs/{GITHUB_ORG}/repos"
+#
+#    try:
+#        response = requests.get(url, headers=headers)
+#        response.raise_for_status()
+#        repos = response.json()
+#
+#        for assignment in assignments:
+#            prefix = assignment['slug']
+#            matching_repos = [repo for repo in repos if repo.get('name', '').startswith(prefix)]
+#            assignment['count'] = len(matching_repos)
+#            assignment['repos'] = [
+#                {
+#                    "name": repo["name"],
+#                    "url": repo["html_url"],
+#                    "pushed_at": repo["pushed_at"]
+#                }
+#                for repo in matching_repos
+#            ]
+#
+#        return render_template("assignments.html", assignments=assignments)
+#
+#    except Exception as e:
+#        return f"<h2>Failed to load assignments</h2><pre>{e}</pre><p>Check GITHUB_TOKEN and GITHUB_ORG.</p>", 500
 
+@app.route("/assignments", methods=["GET", "POST"])
+def assignments():
     try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        repos = response.json()
+        netid = request.args.get("netid") or flask_session.get("netid") or "unknown"
+        roster = load_roster()
 
-        for assignment in assignments:
-            prefix = assignment['slug']
-            matching_repos = [repo for repo in repos if repo.get('name', '').startswith(prefix)]
-            assignment['count'] = len(matching_repos)
-            assignment['repos'] = [
-                {
-                    "name": repo["name"],
-                    "url": repo["html_url"],
-                    "pushed_at": repo["pushed_at"]
-                }
-                for repo in matching_repos
-            ]
+        # Check if student already linked
+        match = roster.loc[roster["NetID"] == netid]
+        if not match.empty and pd.notna(match.iloc[0]["GitHub Username"]):
+            github_username = match.iloc[0]["GitHub Username"]
+            section = match.iloc[0]["Section"]
 
-        return render_template("assignments.html", assignments=assignments)
+            # ✅ Already linked → show assignments
+            links = {
+                "01": "https://classroom.github.com/a/link_for_01",
+                "02": "https://classroom.github.com/a/link_for_02",
+                "03": "https://classroom.github.com/a/link_for_03",
+                "04": "https://classroom.github.com/a/link_for_04",
+            }
+            return render_template("assignments.html",
+                                   username=github_username,
+                                   section=section,
+                                   invite_link=links.get(str(section)))
 
+        # If POST: student is submitting GitHub username
+        if request.method == "POST":
+            if "netid" in request.form:  # coming from modal login
+                session["netid"] = request.form["netid"].strip().lower()
+                return redirect(url_for("assignments"))
+            elif "github_username" in request.form:  # coming from GitHub username form
+                username = request.form["github_username"].strip()
+                if github_user_exists(username):
+                    # Update roster
+                    idx = roster[roster["NetID"] == netid].index
+                    if not idx.empty:
+                        roster.at[idx[0], "GitHub Username"] = username
+                        save_roster(roster)
+                        return redirect(url_for("assignments"))
+                    else:
+                        return "NetID not found in roster.", 400
+                else:
+                    return "Invalid GitHub username.", 400
+
+        # If GET and no GitHub username yet → show form
+        return render_template("enter_username.html", netid=netid)
     except Exception as e:
-        return f"<h2>Failed to load assignments</h2><pre>{e}</pre><p>Check GITHUB_TOKEN and GITHUB_ORG.</p>", 500
-
+        return f"<pre>{traceback.format_exc()}</pre>", 500
 
 def split_code_blocks(value):
     """
