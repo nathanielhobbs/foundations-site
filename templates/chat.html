@@ -493,7 +493,7 @@
             </div>
             
             <div class="meta">
-              {{ m.netid }} — {{ m.timestamp }}{% if m.edited %} (edited){% endif %}{% if m.type == 'poll' %} (poll){% endif %}
+              {{ m.display_name }} — {{ m.timestamp }}{% if m.edited %} (edited){% endif %}{% if m.type == 'poll' %} (poll){% endif %}
             </div>
             {% if m.type == 'poll' %}
               <div style="font-weight: bold;">{{ m.question }}</div>
@@ -593,22 +593,24 @@ let replyTo = null;
 document.addEventListener('DOMContentLoaded', function() {
   // Check if user is already logged in
   const storedNetid = localStorage.getItem("netid");
+  //const storedDisplayName = localStorage.getItem("displayName");
+  const storedDisplayName = {{ display_name|tojson }};
   const loginButton = document.getElementById('loginButton');
   const loggedInMsg = document.getElementById('loggedInMsg');
   if (loginButton && loggedInMsg) {
     if (storedNetid) {
       loginButton.style.display = 'none';
       const loginMessages = [
-        `Let's wrangle a python, ${storedNetid}!`,
-        `Ready to code, ${storedNetid}?`,
-        `Welcome to the snake pit, ${storedNetid}!`,
-        `Let's make some magic, ${storedNetid}!`,
-        `Time to debug, ${storedNetid}!`,
-        `Slither into some code, ${storedNetid}!`,
-        `Let's get those tests passing, ${storedNetid}!`,
-        `Show us your Pythonic moves, ${storedNetid}!`,
-        `Let's byte into some problems, ${storedNetid}!`,
-        `Keep calm and code on, ${storedNetid}!`
+        `Let's wrangle a python, ${storedDisplayName}!`,
+        `Ready to code, ${storedDisplayName}?`,
+        `Welcome to the snake pit, ${storedDisplayName}!`,
+        `Let's make some magic, ${storedDisplayName}!`,
+        `Time to debug, ${storedDisplayName}!`,
+        `Slither into some code, ${storedDisplayName}!`,
+        `Let's get those tests passing, ${storedDisplayName}!`,
+        `Show us your Pythonic moves, ${storedDisplayName}!`,
+        `Let's byte into some problems, ${storedDisplayName}!`,
+        `Keep calm and code on, ${storedDisplayName}!`
       ];
       const randomMsg = loginMessages[Math.floor(Math.random() * loginMessages.length)];
       loggedInMsg.textContent = randomMsg;
@@ -1056,16 +1058,18 @@ function submitLogin() {
     // Admin login successful
     localStorage.setItem("netid", netid);
     localStorage.setItem("adminAuthenticated", "true");
+    localStorage.setItem("displayName", display_name);
     localStorage.setItem("netidDate", new Date().toISOString().slice(0, 10));
   } else {
     // Regular user login
     localStorage.setItem("netid", netid);
+    localStorage.setItem("displayName", display_name);
     localStorage.removeItem("adminAuthenticated");
     localStorage.setItem("netidDate", new Date().toISOString().slice(0, 10));
   }
   
   // Update UI
-  document.getElementById('loginButton').textContent = `Logged in as ${netid}`;
+  //document.getElementById('loginButton').textContent = `Logged in as ${netid}`;
   document.getElementById('loginButton').onclick = showLogoutConfirm;
   
   // Close modal
@@ -1327,7 +1331,7 @@ function addMessageObject(data) {
   meta.className = "meta";
   // Use proper timestamp formatting
   const timestamp = formatTimestampForDisplay(data.timestamp);
-  meta.textContent = `${data.netid} — ${timestamp}${data.edited ? " (edited)" : ""}`;
+  meta.textContent = `${data.display_name} — ${timestamp}${data.edited ? " (edited)" : ""}`;
   
   // Add admin flags if they exist
   if (data.admin_flags && Object.keys(data.admin_flags).length > 0) {

@@ -628,7 +628,7 @@ async function loadLeaderboard() {
   }
   data.leaderboard.forEach(entry => {
     let li = document.createElement('li');
-    li.textContent = `${entry.netid} (${entry.timestamp})`;
+	  li.textContent = `${entry.display_name} (${entry.timestamp})`;
     if (isAdmin()) {
       let btn = document.createElement('button');
       btn.innerHTML = '🗑️';
@@ -658,7 +658,7 @@ async function loadLeaderboard() {
       replayBtn.textContent = 'Replay';
       replayBtn.style.marginLeft = '10px';
       replayBtn.onclick = async function() {
-        console.log('Replay clicked:', {netid: entry.netid, cid: currentChallengeId});
+        console.log('Replay clicked:', {display_name: entry.display_name, cid: currentChallengeId});
         if (isAdmin()) {
           // Admins: fetch all submissions for keystrokes
           let admin_netid = localStorage.getItem("netid");
