@@ -1,7 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Assignments{% endblock %}
 {% block content %}
-<h2>Welcome, {{ username }}</h2>
-<p>Section {{ section }}</p>
-<p><a href="{{ invite_link }}">Accept your assignment here</a></p>
+<h1>You are set up with GitHub!</h1>
+<p>Your GitHub username is: <b><i>{{ username }}</b></i>. Your GitHub page is <a href="https://github.com/{{ username }}">here</a></p>
+
+<br>
+<p>Currently, we don't have any assignments released.</p>
+<p>When we do, there will be a link you click to accept the assignment, which will place a copy in your GitHub</p>
+<!--<p>Section {{ section }}</p>
+<p><a href="{{ invite_link }}">Accept your assignment here</a></p>-->
 {% endblock %}   
