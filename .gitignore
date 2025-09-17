@@ -3,4 +3,4 @@ __pycache__/
 *.pyc
 venv/
 *.sqlite3
-.env
+data/github_roster.csv
