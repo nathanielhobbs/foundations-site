@@ -60,6 +60,22 @@ def load_roster():
 def save_roster(df):
     df.to_csv(ROSTER_FILE, index=False)
 
+def get_display_name(netid):
+    try:
+        roster = load_roster()
+        row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+        if not row.empty:
+            first = row.iloc[0]["Full Name"].split(', ')[1].split()[0]
+            last_initial = row.iloc[0]["Full Name"][0]
+            #first = row.iloc[0]["First Name"]
+            #last_initial = row.iloc[0]["Last Name"][0] if pd.notna(row.iloc[0]["Last Name"]) else ""
+            section = row.iloc[0]["Section"]
+            return f"{first} {last_initial} (Section {section})"
+    except Exception as e:
+        print(f"Roster lookup failed for {netid}: {e}")
+    return netid  # fallback if not found
+
+
 def github_user_exists(username):
     r = requests.get(f"https://api.github.com/users/{username}")
     return r.status_code == 200
@@ -166,6 +182,7 @@ def chat(section):
                 msg_obj.setdefault("support_votes", [])
                 # Format timestamp for display
                 msg_obj["timestamp"] = format_timestamp_for_display(msg_obj["timestamp"])
+                msg_obj["display_name"] = get_display_name(msg_obj["netid"])
                 messages.append(msg_obj)
             else:
                 # fallback for malformed entries
@@ -178,7 +195,8 @@ def chat(section):
                     "message_id": f"{section}:[old]:{hash(str(item)) % 1000000}",
                     "admin_flags": {},
                     "support_count": 0,
-                    "support_votes": []
+                    "support_votes": [],
+                    "display_name": "unknown"
                 })
         except json.JSONDecodeError:
             # fallback for old string messages
@@ -194,7 +212,9 @@ def chat(section):
                 "support_votes": []
             })
 
-    return render_template("chat.html", section=section, messages=messages)
+    netid = flask_session.get("netid") or request.args.get("netid") or ""
+    display_name = get_display_name(netid).split('(')[0] if netid else ""
+    return render_template("chat.html", section=section, messages=messages, display_name=display_name)
 
 @socketio.on("poll")
 def handle_poll(data):
@@ -259,7 +279,8 @@ def on_join(data):
         # Track socket id to netid/section
         socket_to_user[request.sid] = {"netid": netid, "section": section}
         # Broadcast updated list to room
-        participants = list(r.smembers(f"chat:participants:{section}"))
+        #participants = list(r.smembers(f"chat:participants:{section}"))
+        participants = [get_display_name(n) for n in r.smembers(f"chat:participants:{section}")]
         socketio.emit("participants", {"section": section, "participants": participants}, to=section)
         # Also emit to the joining user directly
         emit("participants", {"section": section, "participants": participants})
@@ -273,7 +294,9 @@ def on_disconnect():
         section = user["section"]
         print(f"Disconnect: removing {netid} from section {section}")
         r.srem(f"chat:participants:{section}", netid)
-        participants = list(r.smembers(f"chat:participants:{section}"))
+        #participants = list(r.smembers(f"chat:participants:{section}"))
+        participants = [get_display_name(n) for n in r.smembers(f"chat:participants:{section}")]
+
         socketio.emit("participants", {"section": section, "participants": participants}, to=section)
     else:
         print(f"Disconnect: sid {sid} not found in socket_to_user")
@@ -298,6 +321,7 @@ def handle_kick_user(data):
             # Remove from participants set
             r.srem(f"chat:participants:{section}", netid)
             participants = list(r.smembers(f"chat:participants:{section}"))
+            participants = [get_display_name(n) for n in participants]
             socketio.emit("participants", {"section": section, "participants": participants}, to=section)
             # Notify and disconnect the user
             socketio.emit("kicked", {"reason": "You have been removed from the chat by an administrator."}, to=sid)
@@ -309,9 +333,11 @@ def handle_kick_user(data):
         print(f"Kick: user {netid} not found in socket_to_user, but will remove from Redis anyway.")
         r.srem(f"chat:participants:{section}", netid)
         participants = list(r.smembers(f"chat:participants:{section}"))
+        participants = [get_display_name(n) for n in participants]
         socketio.emit("participants", {"section": section, "participants": participants}, to=section)
     # Emit updated participants list again to ensure frontend updates
     participants = list(r.smembers(f"chat:participants:{section}"))
+    participants = [get_display_name(n) for n in participants]
     socketio.emit("participants", {"section": section, "participants": participants}, to=section)
 
 @socketio.on("get_participants")
@@ -320,6 +346,7 @@ def handle_get_participants(data):
     if not section:
         return
     participants = list(r.smembers(f"chat:participants:{section}"))
+    participants = [get_display_name(n) for n in participants]
     emit("participants", {"section": section, "participants": participants})
 
 @socketio.on("get_poll_results")
@@ -579,6 +606,10 @@ def search_netid():
 
     return render_template("participation_search.html", query=query, results=results, participation_dates=participation_dates)
 
+@app.route("/sandbox")
+def sandbox():
+    return render_template("sandbox.html")
+
 @app.route("/tutorials")
 def tutorials():
     return render_template("tutorials.html")
@@ -819,7 +850,7 @@ def get_leaderboard(cid):
         challenge = json.loads(raw)
         solutions_available_date = challenge.get("solutions_available_date")
     leaderboard_out = [
-        {"netid": netid, "timestamp": datetime.fromtimestamp(score, est).strftime("%Y-%m-%d %H:%M:%S")}
+            {"netid": netid, "display_name": get_display_name(netid), "timestamp": datetime.fromtimestamp(score, est).strftime("%Y-%m-%d %H:%M:%S")}
         for netid, score in leaderboard
     ]
     return jsonify({"leaderboard": leaderboard_out, "solutions_available_date": solutions_available_date})

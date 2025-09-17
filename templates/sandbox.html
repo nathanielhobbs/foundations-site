@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Sandbox{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- CodeMirror CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<!-- Light + Dark themes (we switch in JS) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
+
+<style>
+  /* Theme-aware colors for the output pane and message types */
+  :root {
+    --panel-bg: #f6f8fa;
+    --panel-text: #24292f;
+    --panel-border: #d0d7de;
+    --stdout: #0b7a0b;
+    --stderr: #b00020;
+    --system: #6b7280;
+  }
+  [data-theme="dark"] {
+    --panel-bg: #0b1020;
+    --panel-text: #e8e8f2;
+    --panel-border: #30363d;
+    --stdout: #a6e22e;
+    --stderr: #ff6b6b;
+    --system: #9ca3af;
+  }
+
+  .row {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-block: .75rem;
+  }
+  /* CodeMirror container */
+  .CodeMirror {
+    flex: 1;
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    font-size: 14px;
+    height: 400px !important;   /* start tall */
+    min-height: 400px !important;
+    resize: both;               /* allow drag-resize */
+    overflow: auto;             /* required for resize to work */
+    background: var(--panel-bg);
+    color: var(--panel-text);
+  }
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    min-width: 140px;
+  }
+  .output-box {
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 12px;
+    min-height: 200px;
+    background: var(--panel-bg);
+    color: var(--panel-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 14px;
+    overflow: auto;
+    resize: both;               /* allow drag-resize */
+    white-space: pre-wrap; /* preserve \n as line breaks */
+  }
+  .stdout { color: var(--stdout); }
+  .stderr { color: var(--stderr); }
+  .system { color: var(--system); }
+  button {
+    padding: .6rem 1rem;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .primary { background: #2151ff; color:#fff; }
+  .ghost { background: #eee; }
+  .muted { color:#666; font-size:.9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Python Sandbox</h1>
+<p class="muted">Runs in your browser via Pyodide. No server access. Limited imports.</p>
+
+<div class="row">
+  <!-- This <textarea> will be replaced by CodeMirror -->
+  <textarea id="editor"># Try it!
+for i in range(5):
+    print(i,"squared is", i*i)
+</textarea>
+
+  <div class="controls">
+    <button id="run" class="primary" title="Ctrl/Cmd+Enter">▶ Run</button>
+    <button id="stop" class="ghost" title="Esc">■ Stop</button>
+    <label class="muted">
+      Timeout:
+      <select id="timeout">
+        <option value="2000">2s</option>
+        <option value="4000" selected>4s</option>
+        <option value="8000">8s</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<h3>Output</h3>
+<div id="out" class="output-box"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<!-- CodeMirror JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+
+<script>
+  const out = document.getElementById('out');
+  const runBtn = document.getElementById('run');
+  const stopBtn = document.getElementById('stop');
+  const timeoutSel = document.getElementById('timeout');
+
+  // Choose CodeMirror theme based on <html data-theme="..."> from base.html
+  function cmThemeFromPage() {
+    return document.documentElement.getAttribute('data-theme') === 'dark'
+           ? 'material' : 'eclipse';
+  }
+
+  const editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+    mode: 'python',
+    theme: cmThemeFromPage(),
+    lineNumbers: true,
+    indentUnit: 4,
+  });
+  editor.setSize('100%', '400px');
+
+  // React live to theme toggle in base.html
+  new MutationObserver((muts) => {
+    for (const m of muts) {
+      if (m.attributeName === 'data-theme') {
+        editor.setOption('theme', cmThemeFromPage());
+      }
+    }
+  }).observe(document.documentElement, { attributes: true });
+
+  let worker = null, timer = null;
+
+  function append(msg, cls='') {
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = msg;
+    out.appendChild(line);
+    out.scrollTop = out.scrollHeight; // auto-scroll to bottom
+  }
+
+  function resetWorker() {
+    if (worker) worker.terminate();
+    // non-module worker (served from /static/js/py-worker.js)
+    worker = new Worker("{{ url_for('static', filename='js/py-worker.js') }}");
+    worker.onmessage = (ev) => {
+      const { kind, data } = ev.data;
+      //if (kind === 'ready') append('[Pyodide ready]', 'system');
+      if (kind === 'stdout') append(data.trimEnd(), 'stdout');
+      if (kind === 'stderr') append(data.trimEnd(), 'stderr');
+      if (kind === 'done') {
+        clearTimeout(timer); timer = null;
+        //append('[finished]', 'system');
+        runBtn.disabled = false;
+      }
+      if (kind === 'error') {
+        clearTimeout(timer); timer = null;
+        append('[error] ' + data, 'stderr');
+        runBtn.disabled = false;
+      }
+    };
+  }
+
+  function run() {
+    out.innerHTML = '';
+    runBtn.disabled = true;
+    const ms = Number(timeoutSel.value);
+    resetWorker();
+
+    // Kill-switch / timeout
+    timer = setTimeout(() => {
+      append(`[timeout] ${ms} ms reached — stopping program.`, 'system');
+      stop();
+    }, ms);
+
+    const code = editor.getValue();
+    const ready = new Promise((resolve) => {
+      const h = (ev) => {
+        if (ev.data?.kind === 'ready') {
+          worker.removeEventListener('message', h);
+          resolve();
+        }
+      };
+      worker.addEventListener('message', h);
+    });
+    ready.then(() => worker.postMessage({ kind: 'run', code }));
+  }
+
+  function stop() {
+    if (worker) { worker.terminate(); worker = null; }
+    if (timer) { clearTimeout(timer); timer = null; }
+    runBtn.disabled = false;
+    append('[stopped]', 'system');
+  }
+
+  // Keyboard shortcuts: Ctrl/Cmd+Enter to Run, Esc to Stop
+  document.addEventListener('keydown', (e) => {
+    const cmdOrCtrl = e.ctrlKey || e.metaKey;
+    if (cmdOrCtrl && e.key === 'Enter') { e.preventDefault(); run(); }
+    if (e.key === 'Escape') { e.preventDefault(); stop(); }
+  });
+
+  runBtn.addEventListener('click', run);
+  stopBtn.addEventListener('click', stop);
+
+  // Prepare worker so "[Pyodide ready]" appears once loaded
+  resetWorker();
+</script>
+{% endblock %}
+
