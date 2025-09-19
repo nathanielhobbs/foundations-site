@@ -1,0 +1,30 @@
+{% for s in subs %}
+{% set st = (s.status if (s.status is defined) else ('approved' if s.approved else 'pending')) %}
+{% set fb = (s.feedback if (s.feedback is defined) else '') %}
+
+<tr>
+  <td>{{ s.display_name }}</td>
+  <td>{{ s.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+  <td><input type="number" value="{{ s.points }}" data-sid="{{ s.id }}" class="points"></td>
+  <td>
+    <label><input type="radio" name="st_{{ s.id }}" value="pending"  {% if st=='pending'  %}checked{% endif %}> Pending</label><br>
+    <label><input type="radio" name="st_{{ s.id }}" value="approved" {% if st=='approved' %}checked{% endif %}> Approved</label><br>
+    <label><input type="radio" name="st_{{ s.id }}" value="rejected" {% if st=='rejected' %}checked{% endif %}> Rejected</label>
+  </td>
+  <td>
+    <textarea class="feedback" rows="3" placeholder="Optional feedback…">{{ fb }}</textarea>
+  </td>
+  <td>
+    <details>
+      <summary>View</summary>
+      <pre style="max-height:200px; overflow:auto; border:1px solid #ddd; padding:.5rem;">{{ s.code | e }}</pre>
+      {% if s.run_output %}<div><strong>Output:</strong><pre style="white-space:pre-wrap;">{{ s.run_output | e }}</pre></div>{% endif %}
+    </details>
+  </td>
+  <td>
+    <label><input type="checkbox" class="public" data-sid="{{ s.id }}" {% if s.public_replay %}checked{% endif %}> Public replay</label><br>
+    <button class="saveRow" data-sid="{{ s.id }}">Save</button>
+  </td>
+</tr>
+{% endfor %}
+

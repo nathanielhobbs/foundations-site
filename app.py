@@ -2,7 +2,7 @@ import os
 import requests
 import traceback
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, Response, abort, redirect, url_for, session
+from flask import Flask, render_template, request, Response, abort, redirect, url_for, session, make_response
 import pandas as pd
 from flask_socketio import SocketIO, emit, join_room, disconnect
 import redis
@@ -15,7 +15,7 @@ from flask import jsonify
 from uuid import uuid4
 import io
 import contextlib
-from flask import make_response
+from extensions import db
 
 load_dotenv()
 
@@ -25,6 +25,40 @@ app.config['ADMIN_PASSCODE'] = 'fnP4ssword;'
 app.config['ADMIN_NETID'] = 'nh385'
 app.config['ADMIN_PASSWORD'] = 'foundationsP4ss;'
 app.config['ROSTER_FILE'] = "data/github_roster.csv"
+
+#app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://foundations:foundation$P4ss;@localhost/foundations_site"
+# Initialize SQLAlchemy (uses app.config['SQLALCHEMY_DATABASE_URI'])
+#db.init_app(app)
+
+
+# --- DB config ---
+#app.config.setdefault(
+#    "SQLALCHEMY_DATABASE_URI",
+#    os.environ.get("DATABASE_URL", "sqlite:///site.db")
+#)
+app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql+psycopg://foundations:foundation$P4ss;@localhost:5433/foundations_site"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,  # avoid stale connections
+    "pool_recycle": 1800,
+    "pool_timeout": 10,     # fail fast instead of hanging forever
+}
+
+db.init_app(app)
+
+from lecture import lecture_bp
+app.register_blueprint(lecture_bp)
+
+# Make sure models are imported before create_all()
+from models_lecture import LectureChallenge, LectureSubmission
+# ... import any other models you want in the same metadata
+
+# NOTE: Flask 3.x removed before_first_request. Just do this once at import time.
+with app.app_context():
+    try:
+        db.create_all()
+    except Exception as e:
+        app.logger.warning(f"db.create_all() skipped/failed: {e}")
 
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)

@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% block title %}Admin – {{ ch.title }}{% endblock %}
+{% block content %}
+<h1>Admin: {{ ch.title }}</h1>
+
+<div style="margin: .5rem 0;">
+  <label><input type="checkbox" id="isOpen" {% if ch.is_open %}checked{% endif %}> Accepting submissions</label>
+  <label style="margin-left:1rem;"><input type="checkbox" id="showLB" {% if ch.show_leaderboard %}checked{% endif %}> Show leaderboard</label>
+  <button id="saveSettings">Save</button>
+  <button id="deleteChallenge" style="margin-left:1rem; border:1px solid #c33; background:#fff; color:#c33;">
+  Delete
+</button>
+
+</div>
+
+<table style="width:100%; border-collapse: collapse;">
+<thead>
+  <tr>
+    <th>Student</th>
+    <th>Submitted</th>
+    <th>Points</th>
+    <th>Decision</th>
+    <th>Feedback</th>
+    <th>Code / Output</th>
+    <th>Actions</th>
+  </tr>
+</thead>
+<tbody>
+  {% include 'admin_lecture_rows.html' %}
+</tbody>
+
+</table>
+
+<script>
+function patch(url, body){
+  return fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+}
+
+document.getElementById('saveSettings').onclick = async ()=>{
+  const body = {
+    is_open: document.getElementById('isOpen').checked,
+    show_leaderboard: document.getElementById('showLB').checked,
+  };
+  const j = await patch(`/api/admin/lecture/{{ ch.slug }}/settings`, body);
+  alert(j.ok ? 'Saved' : 'Failed');
+};
+
+document.getElementById('deleteChallenge').onclick = async ()=>{
+  if(!confirm('Delete this challenge and all its submissions? This cannot be undone.')) return;
+  const r = await fetch('/api/admin/lecture/{{ ch.slug }}', { method:'DELETE' });
+  const j = await r.json().catch(()=>({}));
+  if (j.ok) { window.location.href = '/admin/lecture/new'; }
+  else { alert('Delete failed'); }
+};
+
+
+let POLL_PAUSED = false;
+function markDirty(){ POLL_PAUSED = true; }
+function clearDirtySoon(){ setTimeout(()=>{ POLL_PAUSED = false; }, 600); }
+
+function wireRowButtons(){
+  // mark dirty on any change
+  document.querySelectorAll('input, textarea').forEach(el=>{
+    el.addEventListener('input', markDirty);
+    el.addEventListener('change', markDirty);
+  });
+
+  Array.from(document.querySelectorAll('.saveRow')).forEach(btn=>{
+    btn.onclick = async ()=>{
+      const sid = btn.dataset.sid;
+      const row = btn.closest('tr');
+      const body = {
+        points: parseInt(row.querySelector('.points').value || '0'),
+        status: row.querySelector(`input[name="st_${sid}"]:checked`)?.value,
+        feedback: row.querySelector('.feedback')?.value || '',
+        public_replay: row.querySelector('.public').checked,
+      };
+      const j = await patch(`/api/admin/lecture/submission/${sid}`, body);
+      btn.textContent = j.ok ? 'Saved ✓' : 'Error';
+      if(j.ok){
+        row.style.background='rgba(0,255,0,.06)';
+        setTimeout(()=>row.style.background='transparent',600);
+        POLL_PAUSED = false;
+        reloadAdminTable(); // get the server-truth immediately
+      }
+    };
+  });
+}
+wireRowButtons();
+
+async function reloadAdminTable(){
+  if (POLL_PAUSED) return;
+  const r = await fetch(window.location.pathname + '?partial=1');
+  const html = await r.text();
+  const tbody = document.querySelector('tbody');
+  if (tbody && html.trim()) { tbody.innerHTML = html; wireRowButtons(); }
+}
+setInterval(reloadAdminTable, 10000);
+</script>
+
+{% endblock %}

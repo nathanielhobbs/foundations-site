@@ -1,0 +1,299 @@
+{% extends 'base.html' %}
+{% block title %}Lecture Challenge – {{ ch.title }}{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- CodeMirror CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<!-- Light + Dark themes (we switch in JS) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
+
+<style>
+  /* Theme-aware colors for the output pane and message types */
+  :root {
+    --panel-bg: #f6f8fa;
+    --panel-text: #24292f;
+    --panel-border: #d0d7de;
+    --stdout: #0b7a0b;
+    --stderr: #b00020;
+    --system: #6b7280;
+  }
+  [data-theme="dark"] {
+    --panel-bg: #0b1020;
+    --panel-text: #e8e8f2;
+    --panel-border: #30363d;
+    --stdout: #a6e22e;
+    --stderr: #ff6b6b;
+    --system: #9ca3af;
+  }
+
+  .row {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-block: .75rem;
+  }
+  /* CodeMirror container */
+  .CodeMirror {
+    flex: 1;
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    font-size: 14px;
+    height: 400px !important;   /* start tall */
+    min-height: 400px !important;
+    resize: both;               /* allow drag-resize */
+    overflow: auto;             /* required for resize to work */
+    background: var(--panel-bg);
+    color: var(--panel-text);
+  }
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    min-width: 140px;
+  }
+  .output-box {
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 12px;
+    min-height: 200px;
+    background: var(--panel-bg);
+    color: var(--panel-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 14px;
+    overflow: auto;
+    resize: both;               /* allow drag-resize */
+    white-space: pre-wrap; /* preserve \n as line breaks */
+  }
+  .stdout { color: var(--stdout); }
+  .stderr { color: var(--stderr); }
+  .system { color: var(--system); }
+  button {
+    padding: .6rem 1rem;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .primary { background: #2151ff; color:#fff; }
+  .ghost { background: #eee; }
+  .muted { color:#666; font-size:.9rem; }
+  .panel { background: var(--bg); color: var(--text); border:1px solid rgba(0,0,0,.12); border-radius: 12px; }
+  #output { margin:0; padding:.75rem; white-space: pre-wrap; min-height:120px; border:1px solid rgba(0,0,0,.15); border-radius: 8px; }
+  .toolbar button { /* keeps your buttons visually consistent */ padding:.45rem .9rem; }
+  .output-box, #output {
+    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
+  }
+
+</style>
+{% endblock %}
+
+
+
+{% block content %}
+<div class="container">
+  <h1>{{ ch.title }}</h1>
+  <article class="prompt markdown-body">{{ ch.prompt_md|safe }}</article>
+
+  <div class="editor-wrap">
+    <div class="toolbar">
+      <button id="runBtn">Run</button>
+      <button id="submitBtn" {% if not ch.is_open %}disabled{% endif %}>Submit</button>
+      <span class="status" id="statusText"></span>
+    </div>
+    <div id="studentStatus" class="panel" style="margin-top:.5rem;display:none;">
+      <div class="panel-title">Submission Status</div>
+      <div id="studentStatusBody" style="padding:.6rem;"></div>
+    </div>
+
+    <textarea id="code" style="display:none;"># Start here…\nprint('hello lecture')</textarea>
+<div id="codeEditor" style="border-top:1px solid rgba(0,0,0,.08);"></div>
+
+<!--    <textarea id="code" spellcheck="false"># Start here…
+	print('hello lecture')</textarea> -->
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Output</div>
+    <pre id="output"></pre>
+  </div>
+
+  <div class="io-grid">
+    <div class="panel">
+      <div class="panel-title">Leaderboard</div>
+      <ol id="leaderboard" class="lb"></ol>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Published Replays</div>
+      <div id="replays"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<!-- CodeMirror (same versions as your weekly challenge is fine) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+
+<script>
+const slug = {{ ch.slug|tojson }};
+let keystrokes = [];
+let startTime = null;
+
+const outEl = document.getElementById('output');
+const statusEl = document.getElementById('statusText');
+
+// --- CodeMirror init (matches weekly/sandbox) ---
+function cmThemeFromPage() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'material' : 'eclipse';
+}
+const cm = CodeMirror(document.getElementById('codeEditor'), {
+  value: document.getElementById('code').value,
+  mode: 'python',
+  theme: cmThemeFromPage(),
+  lineNumbers: true,
+  indentUnit: 4,
+  viewportMargin: Infinity,
+});
+new MutationObserver((muts) => {
+  for (const m of muts) if (m.attributeName === 'data-theme') cm.setOption('theme', cmThemeFromPage());
+}).observe(document.documentElement, { attributes: true });
+
+// Recorder hooks -> keep your keystroke replay
+function recordEvent(type, data){
+  const t = Date.now() - (startTime ?? (startTime = Date.now()));
+  keystrokes.push({ t, type, data });
+}
+cm.on('change', () => recordEvent('input', { value: cm.getValue() }));
+cm.on('keydown', (_, e) => recordEvent('keydown', { key: e.key }));
+
+// --- Pyodide Worker Hook (same message contract you used before) ---
+let PY_WORKER = null;
+let REQ_ID = 0;
+
+function spawnWorker() {
+  if (PY_WORKER) { try { PY_WORKER.terminate(); } catch(e) {} }
+  PY_WORKER = new Worker("/static/js/py_runner_worker.js");
+  return PY_WORKER;
+}
+spawnWorker();
+
+async function runPython(code) {
+  const id = ++REQ_ID;
+  const w = PY_WORKER || spawnWorker();
+  const reply = new Promise((resolve) => {
+    const handler = (e) => { if (e.data && e.data.id === id) { w.removeEventListener("message", handler); resolve(e.data); } };
+    w.addEventListener("message", handler);
+    w.postMessage({ id, code });
+  });
+  const TIMEOUT_MS = 12000;
+  const timeout = new Promise((resolve) => {
+    setTimeout(() => { try { w.terminate(); } catch(e) {} spawnWorker(); resolve({ ok:false, timeout:true, error:"Time limit exceeded (12s)." }); }, TIMEOUT_MS);
+  });
+  const res = await Promise.race([reply, timeout]);
+  let stdout = "", runtime = 0;
+  if (res.ok) {
+    stdout = (res.stdout || "").replace(/\r\n/g, "\n");
+    runtime = res.runtime_ms || 0;
+    outEl.textContent = [stdout, res.stderr].filter(Boolean).join("\n");
+  } else {
+    outEl.textContent = res.timeout ? res.error : ("Error: " + (res.error || "Unknown error"));
+  }
+  return { stdout, runtime_ms: runtime };
+}
+
+// Leaderboard + replays + my status
+async function refreshLeaderboard(){
+  const r = await fetch(`/api/lecture/${slug}/leaderboard`);
+  const j = await r.json();
+  const lb = document.getElementById('leaderboard'); lb.innerHTML = '';
+  if(!j.ok) return;
+  j.entries.forEach((e,i)=>{
+    const li = document.createElement('li'); li.textContent = `${i+1}. ${e.display_name} — ${e.points} pts`; lb.appendChild(li);
+  });
+}
+async function refreshReplays(){
+  const r = await fetch(`/api/lecture/${slug}/replays`);
+  const j = await r.json();
+  const box = document.getElementById('replays'); box.innerHTML = '';
+  if(!j.ok) return;
+  j.items.forEach(item=>{
+    const row = document.createElement('div'); row.className='replay-item'; row.innerHTML = `<span>${item.display_name}</span>`;
+    const btn = document.createElement('button'); btn.textContent = 'Replay';
+    btn.onclick = async ()=>{
+      const rr = await fetch(`/api/lecture/submission/${item.submission_id}/replay`);
+      const jj = await rr.json(); if(!jj.ok) return;
+      const ks = jj.keystrokes ? JSON.parse(jj.keystrokes) : null;
+      cm.setValue((ks && ks.length) ? (ks[ks.length-1].data?.value ?? jj.code) : jj.code);
+      outEl.textContent = jj.run_output || '';
+      statusEl.textContent = `Loaded replay from ${jj.meta.display_name}`;
+    };
+    row.appendChild(btn); box.appendChild(row);
+  });
+}
+async function fetchMyStatus() {
+  const r = await fetch(`/api/lecture/${slug}/my_status`);
+  const j = await r.json();
+  const box = document.getElementById('studentStatus');
+  const body = document.getElementById('studentStatusBody');
+  if (!j.ok || !j.status) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  body.innerHTML = `
+    <b>Status:</b> ${j.status.toUpperCase()}${j.points != null ? ` — <b>${j.points} pts</b>` : ''}<br>
+    ${j.feedback ? `<b>Feedback:</b> ${j.feedback.replaceAll('\\n','<br>')}` : ''}
+    <div style="opacity:.8;margin-top:.25rem;">Last updated: ${new Date(j.updated_at || j.submitted_at).toLocaleString()}</div>
+  `;
+}
+function startPolling(){ setInterval(()=>{ refreshLeaderboard(); refreshReplays(); fetchMyStatus(); }, 10000); }
+
+// Buttons
+document.getElementById('runBtn').addEventListener('click', async ()=>{
+  const { stdout, runtime_ms } = await runPython(cm.getValue());
+  statusEl.textContent = `Ran in ${runtime_ms} ms`;
+});
+
+function fetchWithTimeout(url, opts={}, ms=12000){
+  const c = new AbortController();
+  const id = setTimeout(()=>c.abort(), ms);
+  return fetch(url, { ...opts, signal: c.signal }).finally(()=>clearTimeout(id));
+}
+
+document.getElementById('submitBtn').addEventListener('click', async ()=>{
+  statusEl.textContent = 'Submitting…';
+  try {
+    const { stdout, runtime_ms } = await runPython(cm.getValue());
+    const payload = {
+      code: cm.getValue(),
+      keystrokes: JSON.stringify(keystrokes),
+      run_output: stdout,
+      runtime_ms
+    };
+    const r = await fetchWithTimeout(`/api/lecture/${slug}/submit`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    }, 12000);
+    const text = await r.text();
+    let j = {}; try { j = JSON.parse(text); } catch {}
+    if (!r.ok || j.ok === false) {
+      statusEl.textContent = `Submit failed: ${j.error || text || r.status}`;
+    } else {
+      statusEl.textContent = 'Submitted! Waiting for instructor review.';
+      refreshLeaderboard(); fetchMyStatus();
+    }
+  } catch (e) {
+    statusEl.textContent = `Network/timeout during submit`;
+  }
+});
+
+
+// Initial load
+refreshLeaderboard(); refreshReplays(); fetchMyStatus(); startPolling();
+</script>
+{% endblock %}
+

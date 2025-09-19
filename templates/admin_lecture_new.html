@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Create Lecture Challenge{% endblock %}
+{% block content %}
+<h1>Create Lecture Challenge</h1>
+<p>Creates a new Lecture Challenge and mirrors it to Redis for fast reads.</p>
+
+<div class="panel" style="max-width: 800px;">
+  <div class="panel-title">New challenge</div>
+  <div style="padding: .75rem; display:grid; gap:.6rem;">
+    <label>Slug<br><input id="slug" placeholder="lec-w3-searching" style="width:100%"></label>
+    <label>Title<br><input id="title" placeholder="Lecture 3: Linear Search Warm-Up" style="width:100%"></label>
+    <label>Prompt (Markdown or HTML)<br>
+      <textarea id="prompt" rows="6" placeholder="<p>Write a function ...</p>" style="width:100%;"></textarea>
+    </label>
+    <label><input type="checkbox" id="is_open" checked> Accept submissions</label>
+    <label><input type="checkbox" id="show_lb" checked> Show leaderboard</label>
+    <div>
+      <button id="createBtn">Create</button>
+      <span id="status" class="status"></span>
+    </div>
+  </div>
+</div>
+
+{% if recent %}
+<div class="panel" style="max-width: 800px; margin-top:1rem;">
+  <div class="panel-title">Recent challenges</div>
+  <ul style="padding:.5rem 1rem;">
+    {% for c in recent %}
+      <li><a href="{{ url_for('lecture.admin_lecture', slug=c.slug) }}">{{ c.slug }}</a> — {{ c.title }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<style>
+.panel { background: var(--bg); color: var(--text); border:1px solid rgba(0,0,0,.12); border-radius: 12px; }
+.panel-title { padding:.5rem .75rem; border-bottom:1px solid rgba(0,0,0,.08); font-weight:600; }
+.status { margin-left:.5rem; opacity:.8; }
+button { padding:.45rem .8rem; border-radius:10px; border:1px solid rgba(0,0,0,.15); background: var(--bg); color: var(--text); cursor:pointer; }
+input, textarea { background: var(--bg); color: var(--text); border:1px solid rgba(0,0,0,.2); border-radius:8px; padding:.45rem .6rem; }
+</style>
+
+<script>
+async function createLecture(){
+  const payload = {
+    slug: document.getElementById('slug').value.trim(),
+    title: document.getElementById('title').value.trim(),
+    prompt_md: document.getElementById('prompt').value,
+    is_open: document.getElementById('is_open').checked,
+    show_leaderboard: document.getElementById('show_lb').checked,
+  };
+  const status = document.getElementById('status');
+  status.textContent = 'Creating…';
+
+  try {
+    const r = await fetch('/api/admin/lecture', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    let bodyText = await r.text(); // read once
+    let j = {};
+    try { j = JSON.parse(bodyText); } catch(e) { /* not JSON */ }
+
+    if (!r.ok || j.ok === false) {
+      status.textContent = `Error ${r.status}: ${j.error || bodyText || 'Unknown error'}`;
+      console.error('Create lecture failed:', r.status, bodyText);
+      return;
+    }
+
+    if (j.redirect) window.location.href = j.redirect;
+    else status.textContent = 'Created, but no redirect returned.';
+  } catch (err) {
+    status.textContent = `Network error: ${err}`;
+    console.error(err);
+  }
+}
+document.getElementById('createBtn').addEventListener('click', createLecture);
+</script>
+
+{% endblock %}
