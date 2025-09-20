@@ -16,15 +16,24 @@ from uuid import uuid4
 import io
 import contextlib
 from extensions import db
+import base64
+
 
 load_dotenv()
 
+SECTION_REPOS = {
+    "1": "foundations-f25-sec1",
+    "2": "foundations-f25-sec2",
+    "5": "foundations-f25-sec5",
+    "6": "foundations-f25-sec6",
+}
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'foundationsP4ss;'
-app.config['ADMIN_PASSCODE'] = 'fnP4ssword;'  
-app.config['ADMIN_NETID'] = 'nh385'
-app.config['ADMIN_PASSWORD'] = 'foundationsP4ss;'
-app.config['ROSTER_FILE'] = "data/github_roster.csv"
+app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")
+app.config['ADMIN_PASSCODE'] = os.environ.get('ADMIN_PASSCODE') 
+app.config['ADMIN_NETID'] = os.environ.get('ADMIN_NETID') 
+app.config['ADMIN_PASSWORD'] = os.environ.get('ADMIN_PASSWORD') 
+app.config['ROSTER_FILE'] = os.environ.get('ROSTER_FILE') 
 
 #app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://foundations:foundation$P4ss;@localhost/foundations_site"
 # Initialize SQLAlchemy (uses app.config['SQLALCHEMY_DATABASE_URI'])
@@ -36,7 +45,7 @@ app.config['ROSTER_FILE'] = "data/github_roster.csv"
 #    "SQLALCHEMY_DATABASE_URI",
 #    os.environ.get("DATABASE_URL", "sqlite:///site.db")
 #)
-app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql+psycopg://foundations:foundation$P4ss;@localhost:5433/foundations_site"
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI') 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,  # avoid stale connections
@@ -70,6 +79,7 @@ est = pytz.timezone('US/Eastern')
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_ORG = os.environ.get("GITHUB_ORG")
+GITHUB_NOTES_ORG = os.environ.get("GITHUB_NOTES_ORG")
 
 # List of your GitHub Classroom assignments
 assignments = [
@@ -109,6 +119,60 @@ def get_display_name(netid):
         print(f"Roster lookup failed for {netid}: {e}")
     return netid  # fallback if not found
 
+def list_notebooks_from_github(repo, folder="notebooks"):
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
+    }
+
+    url = f"https://api.github.com/repos/{GITHUB_NOTES_ORG}/{repo}/contents/{folder}"
+    resp = requests.get(url, headers=headers)
+    if resp.status_code != 200:
+        return []
+
+    items = []
+    for file in resp.json():
+        if not file["name"].endswith(".ipynb"):
+            continue
+
+        # Get last commit date for this file
+        commits_url = f"https://api.github.com/repos/{GITHUB_NOTES_ORG}/{repo}/commits"
+        params = {"path": f"{folder}/{file['name']}", "per_page": 1}
+        c_resp = requests.get(commits_url, headers=headers, params=params)
+        commit_date = None
+        if c_resp.status_code == 200 and c_resp.json():
+            commit_date = c_resp.json()[0]["commit"]["committer"]["date"]
+
+        # Build direct raw URL for download
+        raw_url = f"https://raw.githubusercontent.com/{GITHUB_NOTES_ORG}/{repo}/main/{folder}/{file['name']}"
+
+        items.append({
+            "title": file["name"].replace(".ipynb", ""),
+            "github_path": f"{GITHUB_NOTES_ORG}/{repo}/blob/main/{folder}/{file['name']}",
+            "download_url": raw_url,
+            "date": commit_date
+        })
+
+    # Sort newest first
+    items.sort(key=lambda x: x["date"] or "", reverse=True)
+    return items
+
+@app.route("/download_notebook/<section>/<filename>")
+def download_notebook(section, filename):
+    repo = SECTION_REPOS.get(section)
+    if not repo:
+        abort(404)
+
+    raw_url = f"https://raw.githubusercontent.com/{GITHUB_NOTES_ORG}/{repo}/main/notebooks/{filename}"
+    resp = requests.get(raw_url)
+    if resp.status_code != 200:
+        abort(404)
+
+    return Response(
+        resp.content,
+        mimetype="application/x-ipynb+json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 def github_user_exists(username):
     r = requests.get(f"https://api.github.com/users/{username}")
@@ -160,6 +224,10 @@ def format_timestamp_for_display(timestamp_str):
         # If parsing fails, return original
         return timestamp_str
 
+@app.template_filter("first10")
+def first10(s):
+    return (s or "")[:10]
+
 @app.route("/login_netid", methods=["POST"])
 def login_netid():
     netid = request.form.get("netid", "").strip().lower()
@@ -172,26 +240,51 @@ def login_netid():
     # Send them back to the username linking page
     return redirect(url_for("assignments"))
 
+#@app.route("/notebooks")
+#def notebooks():
+#    section = request.args.get("section")
+#    instructor = request.args.get("code") == app.config["ADMIN_PASSCODE"]
+#
+#    if instructor:
+#        keys = r.keys("notebooks:section:*")
+#        all_links = {}
+#        for key in keys:
+#            sec_id = key.split(":")[-1]
+#            raw = r.get(key)
+#            links = json.loads(raw) if raw else []
+#            all_links[sec_id] = links
+#        return render_template("notebooks.html", all_sections=all_links, instructor=True)
+#    else:
+#        key = f"notebooks:section:{section}"
+#        raw = r.get(key)
+#        links = json.loads(raw) if raw else []
+#        return render_template("notebooks.html", section=section, links=links)
+
 @app.route("/notebooks")
 def notebooks():
-    section = request.args.get("section")
+    section = request.args.get("section")  or flask_session.get("section")
     instructor = request.args.get("code") == app.config["ADMIN_PASSCODE"]
 
+    if not instructor and not section:
+        # Try to get from session
+        netid = flask_session.get("netid")
+        if netid:
+            roster = load_roster()
+            row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+            if not row.empty:
+                section = str(row.iloc[0]["Section"])
+
+
     if instructor:
-        keys = r.keys("notebooks:section:*")
         all_links = {}
-        for key in keys:
-            sec_id = key.split(":")[-1]
-            raw = r.get(key)
-            links = json.loads(raw) if raw else []
-            all_links[sec_id] = links
+        for sec, repo in SECTION_REPOS.items():
+            all_links[sec] = list_notebooks_from_github(repo)
         return render_template("notebooks.html", all_sections=all_links, instructor=True)
     else:
-        key = f"notebooks:section:{section}"
-        raw = r.get(key)
-        links = json.loads(raw) if raw else []
+        if not section or section not in SECTION_REPOS:
+            return f"<h3>Invalid or missing section {section}. Instructor: {instructor}.", 400
+        links = list_notebooks_from_github(SECTION_REPOS[section])
         return render_template("notebooks.html", section=section, links=links)
-
 
 
 # Route: chat by section

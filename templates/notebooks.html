@@ -10,18 +10,25 @@
 {% if instructor %}
   <h2>All Sections</h2>
   {% for sec, links in all_sections.items() %}
-    <h3>Section {{ section }}</h3>
+    <h3>Section {{ sec }}</h3>
     <ul>
       {% for item in links %}
-        <li><a href="https://colab.research.google.com/github/YOUR_ORG/{{ item.github_path }}" target="_blank">{{ item.title }}</a></li>
+        <li><a href="https://colab.research.google.com/github/{{ item.github_path }}" target="_blank">{{ item.title }}</a></li>
       {% endfor %}
     </ul>
   {% endfor %}
 {% else %}
-  <h2>Notebooks for Section {{ section }}</h2>
+  <h2>Notebooks for Section {{ sec }}</h2>
   <ul>
     {% for item in links %}
-      <li><a href="https://colab.research.google.com/github/YOUR_ORG/{{ item.github_path }}" target="_blank">{{ item.title }}</a></li>
+    <li>
+  {{ item.date|default("unknown")|first10 }} : 
+{{ item.title }} 
+  [<a href="/download_notebook/{{ section }}/{{ item.title }}.ipynb">Download</a>
+]
+  [<a href="https://colab.research.google.com/github/{{ item.github_path }}" target="_blank">Open in Google Colab</a>]
+</li>
+
     {% endfor %}
   </ul>
 {% endif %}
