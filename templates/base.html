@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <title>{% block title %}Foundations Site{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
     :root {
@@ -19,120 +23,234 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: sans-serif;
+      font-family: system-ui, sans-serif;
       margin: 0;
-      padding: 0; /* Remove padding here */
+      padding: 0;
     }
     a { color: var(--link); }
 
+    /* Sticky navbar */
     nav {
       background: var(--bg);
-      padding: 1em;
       border-bottom: 1px solid #ccc;
+      padding: 0.6em 1em;
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
     }
 
-    .nav-left a, nav a {
-      margin-right: 1em;
+    /* Nav links */
+    .nav-links {
+      display: flex;
+      gap: 0.5em;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .nav-links.collapsed {
+      max-height: 0;
+    }
+
+    nav a {
+      display: flex;
+      align-items: center;
+      gap: 0.35em;
       text-decoration: none;
       border: 1px solid #bbb;
-      border-radius: 5px;
-      padding: 0.25em 0.7em;
-      transition: background 0.15s, border-color 0.15s;
+      border-radius: 6px;
+      padding: 0.35em 0.75em;
       background: transparent;
-      display: inline-block;
+      transition: background 0.2s, transform 0.1s;
+      font-size: 0.95em;
     }
-    nav a:hover, nav a:focus {
+    nav a:hover, nav a:focus-visible {
       background: #f3f3f3;
       border-color: #888;
+      transform: translateY(-1px);
     }
-    [data-theme="dark"] nav a:hover, [data-theme="dark"] nav a:focus {
+    [data-theme="dark"] nav a:hover,
+    [data-theme="dark"] nav a:focus-visible {
       background: #23272e;
       border-color: #4ea1f3;
     }
+    nav a.active {
+      background: #0073e6;
+      color: #fff;
+      border-color: #0073e6;
+      font-weight: bold;
+    }
 
-    .nav-right {
+    /* Header row (title + section + theme) */
+    #siteHeader {
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      font-weight: bold;
+      font-size: 1.2em;
+      margin: 0.5em 1em;
     }
-
-    select, button {
+    #siteHeader select, #siteHeader button {
       margin-left: 1em;
     }
-  </style>
 
-  {% block extra_head %}{% endblock %}
-  {% block head %}{% endblock %}
+    /* Hamburger */
+    .hamburger {
+      display: none;
+      border: none;
+      background: transparent;
+      font-size: 1.6rem;
+      cursor: pointer;
+    }
+
+    @media (max-width: 768px) {
+      .hamburger {
+        display: block;
+      }
+      .nav-links {
+        flex-direction: column;
+        width: 100%;
+        margin-top: 0.5em;
+        max-height: 0; /* collapsed by default on mobile */
+      }
+      .nav-links.show {
+        max-height: 500px;
+      }
+      nav a {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+
+    /* Breadcrumbs */
+    .breadcrumbs {
+      font-size: 0.9em;
+      margin: 0.5em 1em;
+      color: gray;
+    }
+    .breadcrumbs a {
+      text-decoration: none;
+      color: var(--link);
+    }
+    .breadcrumbs span {
+      margin: 0 0.3em;
+    }
+  </style>
 </head>
 <body>
-  <!-- Title, Section select, and Theme toggle row -->
-  <div id="siteWrapper" style="padding: 1em;">
-    <div style="display: flex; align-items: center; justify-content: space-between; font-weight: bold; font-size: 1.25em; margin-bottom: 0.5em;">
-      <div style="display: flex; align-items: center;">
-        <span>Foundations of Business Programming</span>
-        <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">
-          Section:
-          <select id="sectionSelect" style="margin-left: 0.5em;">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-          </select>
-        </span>
-      </div>
-      <div style="display: flex; align-items: center;">
-        <button onclick="toggleTheme()">🌓</button>
-      </div>
+  <!-- Title + Section + Theme toggle -->
+  <div id="siteHeader">
+    <div style="display: flex; align-items: center;">
+      <span>Foundations of Business Programming</span>
+      <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">
+        Section:
+        <select id="sectionSelect" style="margin-left: 0.5em;">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+        </select>
+      </span>
     </div>
-    <!-- Navigation bar row -->
-    <nav style="background: var(--bg); border-bottom: 1px solid #ccc; padding: 0.5em 1em;">
-      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center;">
-        <!-- Links in the center -->
-        <div style="display: flex; justify-content: center; align-items: center;">
-          <a href="/" style="margin-right: 1em; text-decoration: none;">Home</a>
-          <a href="/assignments" style="margin-right: 1em; text-decoration: none;">Assignments</a>
-          <a href="/weekly_challenge" style="margin-right: 1em; text-decoration: none;">Weekly Challenge</a>
-          <a id="chatLink" href="/chat/1" style="margin-right: 1em; text-decoration: none;">Live Chat</a>
-	  <!--<a href="/participation_search" style="margin-right: 1em; text-decoration: none;">Participation</a>-->
-          <a href="/notebooks" style="margin-right: 1em; text-decoration: none;">Notebooks</a>
-          <a href="/tutorials" style="margin-right: 1em; text-decoration: none;">Tutorials</a>
-          <a href="/sandbox" style="margin-right: 1em; text-decoration: none;">Python Sandbox</a>
-          <a href="/about" style="margin-right: 1em; text-decoration: none;">About</a>
-        </div>
-      </div>
-    </nav>
-    
-
-    {% block content %}{% endblock %}
-
+    <div class="nav-right">
+      <button id="themeToggle" aria-label="Toggle theme">🌞</button>
+    </div>
   </div>
-  <script>
-    const savedSection = localStorage.getItem("section") || "1";
-    document.getElementById("sectionSelect").value = savedSection;
-    document.getElementById("chatLink").href = "/chat/" + savedSection;
 
-    document.getElementById("sectionSelect").addEventListener("change", (e) => {
+  <!-- Navigation -->
+  <nav>
+    <button class="hamburger" aria-label="Toggle menu" aria-expanded="false">☰</button>
+    <div class="nav-links">
+      <a href="/"><i data-lucide="home"></i>Home</a>
+      <a href="/assignments"><i data-lucide="book-open"></i>Assignments</a>
+      <a href="/weekly_challenge"><i data-lucide="target"></i>Weekly Challenge</a>
+      <a id="chatLink" href="/chat/1"><i data-lucide="message-circle"></i>Live Chat</a>
+      <a href="/notebooks"><i data-lucide="file-text"></i>Notebooks</a>
+      <a href="/tutorials"><i data-lucide="graduation-cap"></i>Tutorials</a>
+      <a href="/sandbox"><i data-lucide="code"></i>Python Sandbox</a>
+      <a href="/about"><i data-lucide="info"></i>About</a>
+    </div>
+  </nav>
+
+  <!-- Breadcrumbs -->
+  <div class="breadcrumbs" id="breadcrumbs"></div>
+
+  <div id="siteWrapper" style="padding: 1em;">
+    {% block content %}{% endblock %}
+  </div>
+
+  <script>
+    // Section persistence
+    const sectionSelect = document.getElementById("sectionSelect");
+    const chatLink = document.getElementById("chatLink");
+    const savedSection = localStorage.getItem("section") || "1";
+    sectionSelect.value = savedSection;
+    chatLink.href = "/chat/" + savedSection;
+    sectionSelect.addEventListener("change", (e) => {
       const value = e.target.value;
       localStorage.setItem("section", value);
-      document.getElementById("chatLink").href = "/chat/" + value;
+      chatLink.href = "/chat/" + value;
     });
 
-    function toggleTheme() {
-      const html = document.documentElement;
+    // Theme toggle
+    const themeToggle = document.getElementById("themeToggle");
+    const html = document.documentElement;
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme) {
+      html.setAttribute("data-theme", savedTheme);
+      themeToggle.textContent = savedTheme === "dark" ? "🌙" : "🌞";
+    }
+    themeToggle.addEventListener("click", () => {
       const current = html.getAttribute("data-theme");
       const next = current === "dark" ? "light" : "dark";
       html.setAttribute("data-theme", next);
       localStorage.setItem("theme", next);
-    }
+      themeToggle.textContent = next === "dark" ? "🌙" : "🌞";
+    });
 
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme) {
-      document.documentElement.setAttribute("data-theme", savedTheme);
+    // Hamburger toggle
+    const hamburger = document.querySelector(".hamburger");
+    const navLinks = document.querySelector(".nav-links");
+    hamburger.addEventListener("click", () => {
+      const expanded = hamburger.getAttribute("aria-expanded") === "true";
+      hamburger.setAttribute("aria-expanded", !expanded);
+      navLinks.classList.toggle("show");
+    });
+
+    // Active link highlight
+    const currentPath = window.location.pathname;
+    document.querySelectorAll(".nav-links a").forEach(link => {
+      if (link.getAttribute("href") === currentPath) {
+        link.classList.add("active");
+      }
+    });
+
+    // Breadcrumb generation
+    function createBreadcrumbs(path) {
+      const container = document.getElementById("breadcrumbs");
+      if (!container) return;
+      const parts = path.split("/").filter(Boolean);
+      let html = `<a href="/">Home</a>`;
+      let buildPath = "";
+      parts.forEach((part, i) => {
+        buildPath += "/" + part;
+        html += ` <span>›</span> `;
+        if (i === parts.length - 1) {
+          html += `<span>${decodeURIComponent(part)}</span>`;
+        } else {
+          html += `<a href="${buildPath}">${decodeURIComponent(part)}</a>`;
+        }
+      });
+      container.innerHTML = html;
     }
+    createBreadcrumbs(window.location.pathname);
+
+    // Initialize icons
+    lucide.createIcons();
   </script>
-
-  {% block extra_scripts %}{% endblock %}
 </body>
 </html>
+
