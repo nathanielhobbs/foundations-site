@@ -10,7 +10,7 @@
 {% if instructor %}
   <h2>All Sections</h2>
   {% for sec, links in all_sections.items() %}
-    <h3>Section {{ sec }}</h3>
+    <h3>Section {{ section }}</h3>
     <ul>
       {% for item in links %}
         <li><a href="https://colab.research.google.com/github/{{ item.github_path }}" target="_blank">{{ item.title }}</a></li>
@@ -18,7 +18,7 @@
     </ul>
   {% endfor %}
 {% else %}
-  <h2>Notebooks for Section {{ sec }}</h2>
+  <h2>Notebooks for Section {{ section }}</h2>
   <ul>
     {% for item in links %}
     <li>

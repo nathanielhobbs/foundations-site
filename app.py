@@ -263,8 +263,10 @@ def login_netid():
 @app.route("/notebooks")
 def notebooks():
     section = request.args.get("section")  or flask_session.get("section")
-    instructor = request.args.get("code") == app.config["ADMIN_PASSCODE"]
-
+    admin_netid = request.args.get("admin_netid")
+    admin_password = request.args.get("admin_password")
+    instructor = admin_netid and admin_password and check_admin_auth(admin_netid, admin_password)
+    #instructor = request.args.get("code") == app.config["ADMIN_PASSCODE"] or check_admin_auth(netid, password)
     if not instructor and not section:
         # Try to get from session
         netid = flask_session.get("netid")
@@ -284,7 +286,7 @@ def notebooks():
         if not section or section not in SECTION_REPOS:
             return f"<h3>Invalid or missing section {section}. Instructor: {instructor}.", 400
         links = list_notebooks_from_github(SECTION_REPOS[section])
-        return render_template("notebooks.html", section=section, links=links)
+        return render_template("notebooks.html", section=section, links=links,instructor=instructor)
 
 
 # Route: chat by section
