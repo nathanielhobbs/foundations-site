@@ -1,68 +1,46 @@
-<!-- /notebooks page template -->
 {% extends "base.html" %}
-{% block title %}Jupyter Notebooks{% endblock %}
+{% block title %}Notebooks{% endblock %}
 
 {% block content %}
-<h2>Jupyter Notebooks</h2>
-<p>Click a notebook to open in Google Colab. You can view, edit, or copy it to your own Google Drive. If you're new to Colab, visit <a href="https://colab.research.google.com/" target="_blank">colab.research.google.com</a> and make sure you're signed into your Google account.</p>
-
-
-{% if instructor %}
-  <h2>All Sections</h2>
-  {% for sec, links in all_sections.items() %}
-    <h3>Section {{ section }}</h3>
-    <ul>
-      {% for item in links %}
-        <li><a href="https://colab.research.google.com/github/{{ item.github_path }}" target="_blank">{{ item.title }}</a></li>
-      {% endfor %}
-    </ul>
-  {% endfor %}
-{% else %}
-  <h2>Notebooks for Section {{ section }}</h2>
-  <ul>
-    {% for item in links %}
-    <li>
-  {{ item.date|default("unknown")|first10 }} : 
-{{ item.title }} 
-  [<a href="/download_notebook/{{ section }}/{{ item.title }}.ipynb">Download</a>
-]
-  [<a href="https://colab.research.google.com/github/{{ item.github_path }}" target="_blank">Open in Google Colab</a>]
-</li>
-
-    {% endfor %}
-  </ul>
-{% endif %}
-
-
+<h2>Notebooks</h2>
+<div id="nbContainer" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px;"></div>
+<div id="nbEmpty" style="display:none;">No notebooks found.</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  var dropdown = document.getElementById('sectionDropdown') || document.getElementById('sectionSelect');
-  var storedSection = localStorage.getItem('section');
-  var urlParams = new URLSearchParams(window.location.search);
-  var urlSection = urlParams.get('section');
+(async function(){
+  try {
+    // Admin can pass ?section=5 etc.; students ignore
+    const res = await fetch(window.location.search ? '/api/notebooks' + window.location.search : '/api/notebooks');
+    const data = await res.json();
+    const wrap = document.getElementById('nbContainer');
+    const empty = document.getElementById('nbEmpty');
 
-  // If no ?section= in URL but localStorage.section exists, redirect
-  if (!urlSection && storedSection) {
-    window.location.href = '/notebooks?section=' + storedSection;
-    return;
-  }
-
-  // Set dropdown to stored section if present
-  if (dropdown && storedSection) {
-    dropdown.value = storedSection;
-  }
-
-  // On dropdown change, update localStorage and redirect
-  if (dropdown) {
-    dropdown.addEventListener('change', function(e) {
-      var value = e.target.value;
-      localStorage.setItem('section', value);
-      window.location.href = '/notebooks?section=' + value;
+    if (!data.success || !data.items || !data.items.length) {
+      wrap.style.display = 'none'; empty.style.display = 'block'; return;
+    }
+    wrap.innerHTML = '';
+    data.items.forEach(it => {
+      const card = document.createElement('div');
+      card.style.border = '1px solid #ccc';
+      card.style.borderRadius = '10px';
+      card.style.padding = '12px';
+      card.style.background = 'var(--bg)';
+      card.style.color = 'var(--text)';
+      card.innerHTML = `
+        <div style="font-weight:600; margin-bottom:.25rem;">${it.title}</div>
+        <div class="muted" style="font-size:.9rem; margin-bottom:.5rem;">Updated: ${it.date ? new Date(it.date).toLocaleString() : '—'}</div>
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+          <a class="btn" style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none;" href="https://github.com/${it.github_path}" target="_blank" rel="noopener">View on GitHub</a>
+          <a class="btn" style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none;" href="${it.download_url}" download>Download .ipynb</a>
+        </div>`;
+      wrap.appendChild(card);
     });
+  } catch (e) {
+    document.getElementById('nbContainer').innerHTML = `<div class="muted">Error loading notebooks.</div>`;
   }
-});
+})();
 </script>
 {% endblock %}
+

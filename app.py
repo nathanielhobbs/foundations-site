@@ -29,11 +29,17 @@ SECTION_REPOS = {
 }
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")
-app.config['ADMIN_PASSCODE'] = os.environ.get('ADMIN_PASSCODE') 
+# Bump cookie name so old cookies get ignored by the browser:
+app.config["SESSION_COOKIE_NAME"] = "foundations_sess_v2"
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = True   # keep True if you serve HTTPS
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=14)
+app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev-secret-key")
 app.config['ADMIN_NETID'] = os.environ.get('ADMIN_NETID') 
 app.config['ADMIN_PASSWORD'] = os.environ.get('ADMIN_PASSWORD') 
 app.config['ROSTER_FILE'] = os.environ.get('ROSTER_FILE') 
+
+CURRENT_LOGIN_VERSION = "2025-09-24-username-reset"
 
 #app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://foundations:foundation$P4ss;@localhost/foundations_site"
 # Initialize SQLAlchemy (uses app.config['SQLALCHEMY_DATABASE_URI'])
@@ -72,7 +78,9 @@ with app.app_context():
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
-ROSTER_FILE = 'data/github_roster.csv'
+# >>> Minimal fix: use configured roster path if provided
+ROSTER_FILE = app.config.get('ROSTER_FILE') or 'data/github_roster.csv'
+# <<<
 
 # EST timezone
 est = pytz.timezone('US/Eastern')
@@ -98,8 +106,139 @@ assignments = [
 # Track socket id to netid/section
 socket_to_user = {}
 
+#def load_roster():
+#    return pd.read_csv(ROSTER_FILE)
+
 def load_roster():
-    return pd.read_csv(ROSTER_FILE)
+    """
+    Read the roster CSV and normalize to columns:
+      - netid (str)
+      - first (str or '')
+      - last  (str or '')
+      - section (int/str or None)
+    Accepts a variety of header names: NetID, net_id, username, Full Name, First Name, Last Name, Section, etc.
+    """
+    import pandas as _pd
+
+    df = _pd.read_csv(ROSTER_FILE)
+
+    # Build a case-insensitive map of existing columns
+    cmap = {c.lower().strip(): c for c in df.columns}
+
+    def col(*names):
+        for n in names:
+            if n in cmap:
+                return cmap[n]
+        return None
+
+    # Likely headers for netid/username
+    net_col = col("netid", "net_id", "username", "user", "login", "canvas_id", "id")
+    full_col = col("full name", "name")
+    first_col = col("first name", "first")
+    last_col = col("last name", "last", "surname", "family name")
+    sect_col = col("section", "sec")
+
+    # Create normalized columns
+    out = _pd.DataFrame()
+    if net_col is None:
+        # If absolutely no netid-like column, synthesize from something stable
+        # (keeps function safe; display_name will just echo input when no match)
+        out["netid"] = _pd.Series([], dtype=str)
+    else:
+        out["netid"] = df[net_col].astype(str).str.strip()
+
+    # Names: prefer explicit first/last; else parse "Last, First ..." from Full Name
+    first = _pd.Series([""] * len(df), dtype=str)
+    last  = _pd.Series([""] * len(df), dtype=str)
+
+    if first_col is not None:
+        first = df[first_col].fillna("").astype(str).str.strip()
+    if last_col is not None:
+        last = df[last_col].fillna("").astype(str).str.strip()
+
+    if (first_col is None or last_col is None) and full_col is not None:
+        # Try to parse "Last, First Middle"
+        full = df[full_col].fillna("").astype(str).str.strip()
+        # If we already have first/last, only fill missing parts
+        need_first = (first_col is None)
+        need_last  = (last_col is None)
+
+        def parse_full(x):
+            # Accept "Last, First M." or "First Last"
+            x = x.strip()
+            if "," in x:
+                lastp, firstp = x.split(",", 1)
+                return firstp.strip(), lastp.strip()
+            parts = x.split()
+            if len(parts) >= 2:
+                return " ".join(parts[:-1]).strip(), parts[-1].strip()  # first, last
+            return "", x
+
+        parsed = full.apply(parse_full).tolist()
+        pf = [p[0] for p in parsed]
+        pl = [p[1] for p in parsed]
+        if need_first:
+            first = _pd.Series(pf, dtype=str)
+        if need_last:
+            last = _pd.Series(pl, dtype=str)
+
+    out["first"] = first.fillna("").astype(str).str.strip()
+    out["last"]  = last.fillna("").astype(str).str.strip()
+
+    if sect_col is not None:
+        out["section"] = df[sect_col]
+    else:
+        out["section"] = None
+
+    # Lowercase index for fast lookups
+    out["netid_lc"] = out["netid"].str.lower()
+    return out
+
+def get_display_name(netid):
+    """
+    Return 'First L.' if possible; else echo the netid.
+    """
+    try:
+        roster = load_roster()
+        if roster.empty:
+            return netid
+        row = roster.loc[roster["netid_lc"] == (netid or "").lower()]
+        if not row.empty:
+            first = (row.iloc[0]["first"] or "").strip()
+            last  = (row.iloc[0]["last"] or "").strip()
+            if first or last:
+                last_initial = (last[:1] or "").upper()
+                return f"{first} {last_initial}.".strip()
+    except Exception as e:
+        print(f"Roster lookup failed for {netid}: {e}")
+
+    sect = row.iloc[0].get("section")
+    if sect not in (None, "", float("nan")):
+        return f"{first} {last_initial}. (Section {sect})"
+
+    return netid
+
+
+
+#def get_display_name(netid):
+#    """
+#    Return 'First L.' if possible; else echo the netid.
+#    """
+#    try:
+#        roster = load_roster()
+#        if roster.empty:
+#            return netid
+#        row = roster.loc[roster["netid_lc"] == (netid or "").lower()]
+#        if not row.empty:
+#            first = (row.iloc[0]["first"] or "").strip()
+#            last  = (row.iloc[0]["last"] or "").strip()
+#            if first or last:
+#                last_initial = (last[:1] or "").upper()
+#                return f"{first} {last_initial}.".strip()
+#    except Exception as e:
+#        print(f"Roster lookup failed for {netid}: {e}")
+#    return netid
+
 
 def save_roster(df):
     df.to_csv(ROSTER_FILE, index=False)
@@ -118,6 +257,9 @@ def get_display_name(netid):
     except Exception as e:
         print(f"Roster lookup failed for {netid}: {e}")
     return netid  # fallback if not found
+
+
+
 
 def list_notebooks_from_github(repo, folder="notebooks"):
     headers = {
@@ -178,11 +320,6 @@ def github_user_exists(username):
     r = requests.get(f"https://api.github.com/users/{username}")
     return r.status_code == 200
 
-def check_admin_access():
-    code = request.args.get("code")
-    if code != app.config['ADMIN_PASSCODE']:
-        abort(403)
-
 def check_admin_auth(netid, password):
     """Check if user is admin with correct credentials"""
     return netid == app.config['ADMIN_NETID'] and password == app.config['ADMIN_PASSWORD']
@@ -224,97 +361,186 @@ def format_timestamp_for_display(timestamp_str):
         # If parsing fails, return original
         return timestamp_str
 
+@app.template_filter("display_name")
+def jinja_display_name(netid):
+    return get_display_name(netid)
+
+
 @app.template_filter("first10")
 def first10(s):
     return (s or "")[:10]
 
-@app.route("/login_netid", methods=["POST"])
-def login_netid():
-    netid = request.form.get("netid", "").strip().lower()
-    if not netid:
-        return "Invalid NetID", 400
+# --- NEW: clear stale sessions if login epoch changed ---
+@app.before_request
+def enforce_login_version():
+    if request.path.startswith(("/static/", "/favicon", "/healthz")):
+        return
+    if request.endpoint in {"login"}:
+        return
+    if session.get("netid") and session.get("login_version") != CURRENT_LOGIN_VERSION:
+        session.clear()
+        # route-specific auth checks will handle redirect/render
 
-    # Save in session
-    flask_session["netid"] = netid
+@app.context_processor
+def inject_admin_netid():
+    return dict(ADMIN_NETID=app.config.get("ADMIN_NETID", "admin"))
 
-    # Send them back to the username linking page
-    return redirect(url_for("assignments"))
 
-#@app.route("/notebooks")
-#def notebooks():
-#    section = request.args.get("section")
-#    instructor = request.args.get("code") == app.config["ADMIN_PASSCODE"]
-#
-#    if instructor:
-#        keys = r.keys("notebooks:section:*")
-#        all_links = {}
-#        for key in keys:
-#            sec_id = key.split(":")[-1]
-#            raw = r.get(key)
-#            links = json.loads(raw) if raw else []
-#            all_links[sec_id] = links
-#        return render_template("notebooks.html", all_sections=all_links, instructor=True)
-#    else:
-#        key = f"notebooks:section:{section}"
-#        raw = r.get(key)
-#        links = json.loads(raw) if raw else []
-#        return render_template("notebooks.html", section=section, links=links)
+@app.route("/login", methods=["POST"])
+def login():
+    netid = request.form["netid"].strip().lower()
+    password = request.form.get("password", "").strip()
+
+    # Reset session
+    session.clear()
+    session["netid"] = netid
+
+    # Admin login
+    if netid == app.config.get("ADMIN_NETID", "").lower():
+        if password == app.config.get("ADMIN_PASSWORD", ""):
+            session["is_admin"] = True
+            session["section"] = None
+            # --- stamp current login version ---
+            session["login_version"] = CURRENT_LOGIN_VERSION
+            return redirect(url_for("index"))
+        else:
+            return render_template("index.html", login_error="Invalid admin password")
+
+    # Student login
+    roster = load_roster()
+    row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+    if not row.empty:
+        section = int(row.iloc[0]["Section"])
+        session["is_admin"] = False
+        session["section"] = section
+        # --- stamp current login version ---
+        session["login_version"] = CURRENT_LOGIN_VERSION
+        return redirect(url_for("index"))
+
+    return render_template("index.html", login_error="NetID not found in roster")
+
 
 @app.route("/notebooks")
 def notebooks():
-    section = request.args.get("section")  or flask_session.get("section")
-    admin_netid = request.args.get("admin_netid")
-    admin_password = request.args.get("admin_password")
-    instructor = admin_netid and admin_password and check_admin_auth(admin_netid, admin_password)
-    #instructor = request.args.get("code") == app.config["ADMIN_PASSCODE"] or check_admin_auth(netid, password)
-    if not instructor and not section:
-        # Try to get from session
-        netid = flask_session.get("netid")
-        if netid:
-            roster = load_roster()
-            row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
-            if not row.empty:
-                section = str(row.iloc[0]["Section"])
+    if session.get("is_admin"):
+        return render_template("notebooks.html", section=None, is_admin=True)
 
+    netid = session.get("netid")
+    if not netid:
+        # was: redirect(url_for("login")) which is POST-only
+        return redirect(url_for("index"))  # open modal on home
 
-    if instructor:
-        all_links = {}
-        for sec, repo in SECTION_REPOS.items():
-            all_links[sec] = list_notebooks_from_github(repo)
-        return render_template("notebooks.html", all_sections=all_links, instructor=True)
-    else:
-        if not section or section not in SECTION_REPOS:
-            return f"<h3>Invalid or missing section {section}. Instructor: {instructor}.", 400
-        links = list_notebooks_from_github(SECTION_REPOS[section])
-        return render_template("notebooks.html", section=section, links=links,instructor=instructor)
+    roster = load_roster()  # missing before
+    row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+    if row.empty:
+        return "NetID not found in roster", 403
 
+    section = int(row.iloc[0]["Section"])
+    return render_template("notebooks.html", section=section, is_admin=False)
 
-# Route: chat by section
+@app.get("/chat")
+def chat_redirect():
+    # Prefer explicit query (?section=) if provided
+    q = request.args.get("section")
+    if q and q.isdigit():
+        return redirect(url_for("chat", section=int(q)))
+
+    section = session.get("section")
+    # Admins: default to section 1 if not set yet
+    if session.get("is_admin") and not section:
+        return redirect(url_for("chat", section=1))
+
+    if not section:
+        return redirect(url_for("index"))
+
+    return redirect(url_for("chat", section=section))
+
+@app.route("/api/chat/<int:section>/send", methods=["POST"])
+def api_chat_send(section):
+    if not session.get("netid"):
+        return jsonify(success=False, error="Not logged in"), 403
+
+    # Enforce student's section unless admin
+    if not session.get("is_admin") and session.get("section") != section:
+        return jsonify(success=False, error="Unauthorized section"), 403
+
+    data = request.get_json()
+    msg_text = (data.get("msg") or "").strip()
+    if not msg_text:
+        return jsonify(success=False, error="Empty message"), 400
+
+    netid = session["netid"]
+    display_name = get_display_name(netid)
+    timestamp = datetime.utcnow().isoformat()
+
+    msg_obj = {
+        "netid": netid,
+        "msg": msg_text,
+        "timestamp": timestamp,
+        "reply": None,
+        "edited": False,
+        "admin_flags": {},
+        "support_count": 0,
+        "support_votes": [],
+        "display_name": display_name,
+    }
+
+    # Save to Redis
+    r.rpush(f"chat:{section}", json.dumps(msg_obj))
+
+    return jsonify(success=True, **msg_obj)
+
+@app.route("/api/chat/<int:section>/messages")
+def api_chat_messages(section):
+    if not session.get("netid"):
+        return jsonify(success=False, error="Not logged in"), 403
+
+    after = int(request.args.get("after", 0))
+    raw = r.lrange(f"chat:{section}", after, -1)
+    messages = []
+
+    for item in raw:
+        try:
+            msg_obj = json.loads(item)
+            if isinstance(msg_obj, dict):
+                msg_obj["timestamp"] = format_timestamp_for_display(msg_obj["timestamp"])
+                msg_obj["display_name"] = get_display_name(msg_obj["netid"])
+                messages.append(msg_obj)
+        except Exception:
+            continue
+
+    return jsonify(success=True, messages=messages)
+
 @app.route("/chat/<int:section>")
 def chat(section):
+    # Require login
+    if not session.get("netid"):
+        return redirect(url_for("index"))
+
+    # Students can only view their own section; admins can view any
+    if not session.get("is_admin") and session.get("section") != section:
+        return redirect(url_for("chat", section=session["section"]))
+
     raw = r.lrange(f"chat:{section}", 0, -1)
     messages = []
 
     for item in raw:
         try:
             msg_obj = json.loads(item)
-            # Ensure all expected fields are present
             if isinstance(msg_obj, dict):
                 msg_obj.setdefault("netid", "unknown")
                 msg_obj.setdefault("msg", "")
                 msg_obj.setdefault("timestamp", "[unknown]")
                 msg_obj.setdefault("reply", None)
                 msg_obj.setdefault("edited", False)
-                msg_obj.setdefault("message_id", f"{section}:{msg_obj.get('timestamp', '[unknown]')}:{hash(msg_obj.get('msg', '')) % 1000000}")
+                msg_obj.setdefault("message_id", f"{section}:{msg_obj.get('timestamp','[unknown]')}:{hash(msg_obj.get('msg','')) % 1000000}")
                 msg_obj.setdefault("admin_flags", {})
                 msg_obj.setdefault("support_count", 0)
                 msg_obj.setdefault("support_votes", [])
-                # Format timestamp for display
                 msg_obj["timestamp"] = format_timestamp_for_display(msg_obj["timestamp"])
                 msg_obj["display_name"] = get_display_name(msg_obj["netid"])
                 messages.append(msg_obj)
             else:
-                # fallback for malformed entries
                 messages.append({
                     "netid": "unknown",
                     "msg": str(item),
@@ -328,7 +554,6 @@ def chat(section):
                     "display_name": "unknown"
                 })
         except json.JSONDecodeError:
-            # fallback for old string messages
             messages.append({
                 "netid": "unknown",
                 "msg": item,
@@ -337,13 +562,34 @@ def chat(section):
                 "edited": False,
                 "message_id": f"{section}:[old]:{hash(item) % 1000000}",
                 "admin_flags": {},
-                "support_count": 0,
-                "support_votes": []
+                "support_count": []
             })
 
-    netid = flask_session.get("netid") or request.args.get("netid") or ""
-    display_name = get_display_name(netid).split('(')[0] if netid else ""
-    return render_template("chat.html", section=section, messages=messages, display_name=display_name)
+    netid = session["netid"]
+    display_name = get_display_name(netid).split('(')[0]
+
+    return render_template(
+        "chat.html",
+        section=section,
+        messages=messages,
+        display_name=display_name,
+        netid=netid,
+        is_admin=session.get("is_admin", False)
+    )
+
+
+@app.route("/set_section", methods=["POST"])
+def set_section():
+    if not session.get("is_admin"):
+        return jsonify(success=False, error="Unauthorized"), 403
+
+    new_section = request.json.get("section")
+    if new_section not in ["1", "2", "5", "6"]:
+        return jsonify(success=False, error="Invalid section"), 400
+
+    session["section"] = int(new_section)
+    return jsonify(success=True, section=session["section"])
+
 
 @socketio.on("poll")
 def handle_poll(data):
@@ -397,22 +643,87 @@ def handle_vote(data):
     })
 
 
-# When a user joins, assign them to a room
 @socketio.on("join")
 def on_join(data):
-    section = data["section"]
-    netid = data.get("netid") or flask_session.get("netid") or "unknown"
+    # Determine section to join
+    desired = str(data.get("section") or "")
+    netid = flask_session.get("netid")
+
+    if not netid:
+        return  # reject anonymous
+
+    # Students: force their own section. Admins: allow desired override.
+    roster = load_roster()
+    row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+    user_section = str(row.iloc[0]["Section"]) if not row.empty else None
+
+    if flask_session.get("is_admin"):
+        section = desired or user_section or ""
+    else:
+        section = user_section
+
+    if not section:
+        return
+
     join_room(section)
-    if netid:
-        r.sadd(f"chat:participants:{section}", netid)
-        # Track socket id to netid/section
-        socket_to_user[request.sid] = {"netid": netid, "section": section}
-        # Broadcast updated list to room
-        #participants = list(r.smembers(f"chat:participants:{section}"))
-        participants = [get_display_name(n) for n in r.smembers(f"chat:participants:{section}")]
-        socketio.emit("participants", {"section": section, "participants": participants}, to=section)
-        # Also emit to the joining user directly
-        emit("participants", {"section": section, "participants": participants})
+
+    # Track presence
+    r.sadd(f"chat:participants:{section}", netid)
+    socket_to_user[request.sid] = {"netid": netid, "section": section}
+
+    participants = [get_display_name(n) for n in r.smembers(f"chat:participants:{section}")]
+    socketio.emit("participants", {"section": section, "participants": participants}, to=section)
+    emit("participants", {"section": section, "participants": participants})
+
+
+@socketio.on("support")
+def support_alias(data):
+    # Expect: {section, message_id}
+    data = data or {}
+    data["netid"] = flask_session.get("netid")
+    handle_support_message(data)  # reuse existing
+
+@socketio.on("admin_action")
+def admin_action_alias(data):
+    # Expect: {section, action: 'delete'|'check', message_id}
+    if not flask_session.get("is_admin"):
+        return
+    action = data.get("action")
+    if action == "delete":
+        # Reuse existing handler; bypass password when session admin
+        section = data.get("section")
+        message_id = data.get("message_id")
+        # Inline delete similar to handle_admin_delete but using session
+        messages = r.lrange(f"chat:{section}", 0, -1)
+        for i, msg_str in enumerate(messages):
+            try:
+                msg_obj = json.loads(msg_str)
+                if msg_obj.get("message_id") == message_id:
+                    r.lrem(f"chat:{section}", 1, msg_str)
+                    socketio.emit("message_deleted", {"message_id": message_id}, to=str(section))
+                    return
+            except:
+                continue
+    elif action == "check":
+        section = data.get("section")
+        message_id = data.get("message_id")
+        messages = r.lrange(f"chat:{section}", 0, -1)
+        for i, msg_str in enumerate(messages):
+            try:
+                msg_obj = json.loads(msg_str)
+                if msg_obj.get("message_id") == message_id:
+                    msg_obj.setdefault("admin_flags", {})["correct"] = True
+                    msg_obj["admin_flags"].pop("incorrect", None)
+                    r.lset(f"chat:{section}", i, json.dumps(msg_obj))
+                    socketio.emit("message_flagged", {
+                        "message_id": message_id,
+                        "flag_type": "correct",
+                        "admin_flags": msg_obj["admin_flags"]
+                    }, to=str(section))
+                    return
+            except:
+                continue
+
 
 @socketio.on("disconnect")
 def on_disconnect():
@@ -496,8 +807,19 @@ def handle_get_poll_results(data):
 @socketio.on("message")
 def handle_message(data):
     section = data.get("section")
-    raw_msg = data.get("msg")
-    netid = data.get("netid", "unknown")  # Get netid from data parameter
+    if not session.get("netid"):
+        return  # reject if not logged in
+
+    # Enforce student section unless admin
+    if not session.get("is_admin") and session.get("section") != section:
+        return
+
+    raw_msg = (data.get("msg") or "").strip()
+    if not raw_msg:
+        return
+
+    netid = session["netid"]
+    display_name = get_display_name(netid)
     reply = None
     if "|||reply|||" in raw_msg:
         raw_msg, reply = raw_msg.split("|||reply|||", 1)
@@ -508,22 +830,19 @@ def handle_message(data):
     # Track participation
     r.sadd(f"participation:{today}:{section}", netid)
 
-    # Create structured message
     msg_obj = {
         "netid": netid,
-        "msg": raw_msg.strip(),
+        "display_name": display_name,
+        "msg": raw_msg,
         "timestamp": timestamp,
         "reply": reply,
         "edited": False,
-        "message_id": f"{section}:{timestamp}:{hash(raw_msg.strip()) % 1000000}",
+        "message_id": f"{section}:{timestamp}:{hash(raw_msg) % 1000000}",
         "admin_flags": {},
-        "support_count": 0
+        "support_count": 0,
     }
 
-    # Store JSON in Redis
     r.rpush(f"chat:{section}", json.dumps(msg_obj))
-
-    # Send structured message to clients
     socketio.emit("message", msg_obj, to=section)
 
 @socketio.on("admin_delete_message")
@@ -900,142 +1219,215 @@ app.jinja_env.filters['split_code_blocks'] = split_code_blocks
 #   weekly_challenge:submissions:<id> -> list of JSON { netid, code, keystrokes, timestamp, passed, results }
 #   weekly_challenge:leaderboard:<id> -> sorted set (timestamp, netid)
 
-@app.route("/weekly_challenge/challenges", methods=["GET"])
-def list_challenges():
-    admin_netid = request.args.get("admin_netid")
-    admin_password = request.args.get("admin_password")
-    is_admin = admin_netid and admin_password and check_admin_auth(admin_netid, admin_password)
-    ids = r.lrange("weekly_challenge:list", 0, -1)
-    challenges = []
-    for cid in ids:
-        raw = r.get(f"weekly_challenge:challenge:{cid}")
-        if raw:
-            c = json.loads(raw)
-            # Only show active challenges to students
-            if is_admin or c.get("active", True):
-                challenges.append({"id": c["id"], "title": c.get("title", c["problem"][:40]), "active": c.get("active", True)})
-    return jsonify(challenges)
+#@app.route("/weekly_challenge/challenges", methods=["GET"])
+#def list_challenges():
+#    admin_netid = request.args.get("admin_netid")
+#    admin_password = request.args.get("admin_password")
+#    is_admin = admin_netid and admin_password and check_admin_auth(admin_netid, admin_password)
+#    ids = r.lrange("weekly_challenge:list", 0, -1)
+#    challenges = []
+#    for cid in ids:
+#        raw = r.get(f"weekly_challenge:challenge:{cid}")
+#        if raw:
+#            c = json.loads(raw)
+#            # Only show active challenges to students
+#            if is_admin or c.get("active", True):
+#                challenges.append({"id": c["id"], "title": c.get("title", c["problem"][:40]), "active": c.get("active", True)})
+#    return jsonify(challenges)
+
+@app.route("/weekly_challenge/challenges")
+def get_challenges():
+    if not session.get("netid"):
+        return jsonify(success=False, error="Not logged in"), 403
+
+    challenges = load_challenges()
+
+    if session.get("is_admin"):
+        return jsonify(success=True, challenges=challenges)
+
+    published_active = [c for c in challenges if c.get("published", True) and c.get("active", True)]
+    if published_active:
+        return jsonify(success=True, challenges=published_active)
+
+    active_only = [c for c in challenges if c.get("active", True)]
+    return jsonify(success=True, challenges=active_only)
 
 @app.route("/weekly_challenge/challenge/<cid>", methods=["GET"])
 def get_challenge(cid):
-    admin_netid = request.args.get("admin_netid")
-    admin_password = request.args.get("admin_password")
+    if not session.get("netid"):
+        return jsonify({"error": "Not logged in"}), 403
     raw = r.get(f"weekly_challenge:challenge:{cid}")
     if not raw:
         return jsonify({"error": "Challenge not found."}), 404
     challenge = json.loads(raw)
-    is_admin = admin_netid and admin_password and check_admin_auth(admin_netid, admin_password)
-    # Only allow students to see active challenges
-    if not is_admin and not challenge.get("active", True):
-        return jsonify({"error": "Challenge not active."}), 403
-    # If admin credentials are valid, return full challenge
-    if is_admin:
+
+    if session.get("is_admin"):
         return jsonify(challenge)
-    # Otherwise, return student-safe version
-    safe_challenge = {
+
+    # Students may only see published/active challenge
+    if not challenge.get("active", True) and not challenge.get("published", challenge.get("active", True)):
+        return jsonify({"error": "Challenge not active."}), 403
+
+    safe = {
         "id": challenge["id"],
         "title": challenge.get("title", challenge["problem"][:40]),
         "problem": challenge["problem"],
         "test_cases": [{"input": tc["input"]} for tc in challenge.get("test_cases", [])]
     }
     if "examples" in challenge:
-        safe_challenge["examples"] = challenge["examples"]
-    return jsonify(safe_challenge)
+        safe["examples"] = challenge["examples"]
+    return jsonify(safe)
 
-@app.route("/weekly_challenge/submit/<cid>", methods=["POST"])
-def submit_challenge(cid):
-    data = request.get_json()
-    netid = data.get("netid")
-    code = data.get("code")
-    keystrokes = data.get("keystrokes")
-    timestamp = datetime.now(est).isoformat()
-    if not (netid and code and keystrokes):
-        return jsonify({"error": "Missing fields."}), 400
-    raw = r.get(f"weekly_challenge:challenge:{cid}")
+#@app.route("/weekly_challenge/submit/<cid>", methods=["POST"])
+#def submit_challenge(cid):
+#    data = request.get_json()
+#    netid = data.get("netid")
+#    code = data.get("code")
+#    keystrokes = data.get("keystrokes")
+#    timestamp = datetime.now(est).isoformat()
+#    if not (netid and code and keystrokes):
+#        return jsonify({"error": "Missing fields."}), 400
+#    raw = r.get(f"weekly_challenge:challenge:{cid}")
+#    if not raw:
+#        return jsonify({"error": "Challenge not found."}), 404
+#    challenge = json.loads(raw)
+#    test_cases = challenge.get("test_cases", [])
+#    passed, results = run_code_against_tests(code, test_cases)
+#    submission = {
+#        "netid": netid,
+#        "code": code,
+#        "keystrokes": keystrokes,
+#        "timestamp": timestamp,
+#        "passed": passed,
+#        "results": results
+#    }
+#    r.rpush(f"weekly_challenge:submissions:{cid}", json.dumps(submission))
+#    if passed:
+#        r.zadd(f"weekly_challenge:leaderboard:{cid}", {netid: datetime.now().timestamp()})
+#    return jsonify({"passed": passed, "results": results})
+
+@app.route("/weekly_challenge/submit/<challenge_id>", methods=["POST"])
+def submit_challenge(challenge_id):
+    if not session.get("netid"):
+        return jsonify(success=False, error="Not logged in"), 403
+
+    data = request.json or {}
+    netid = session["netid"]
+    code = data.get("code", "")
+    keystrokes = data.get("keystrokes", "")
+
+    # run + store like before, but also return results now
+    raw = r.get(f"weekly_challenge:challenge:{challenge_id}")
     if not raw:
-        return jsonify({"error": "Challenge not found."}), 404
-    challenge = json.loads(raw)
-    test_cases = challenge.get("test_cases", [])
-    passed, results = run_code_against_tests(code, test_cases)
+        return jsonify(success=False, error="Challenge not found"), 404
+    ch = json.loads(raw)
+    passed, results = run_code_against_tests(code, ch.get("test_cases", []))
+
     submission = {
         "netid": netid,
         "code": code,
-        "keystrokes": keystrokes,
-        "timestamp": timestamp,
+        "keystrokes": keystrokes or [],
+        "timestamp": datetime.now(est).isoformat(),
         "passed": passed,
         "results": results
     }
-    r.rpush(f"weekly_challenge:submissions:{cid}", json.dumps(submission))
+    r.rpush(f"weekly_challenge:submissions:{challenge_id}", json.dumps(submission))
     if passed:
-        r.zadd(f"weekly_challenge:leaderboard:{cid}", {netid: datetime.now().timestamp()})
-    return jsonify({"passed": passed, "results": results})
+        r.zadd(f"weekly_challenge:leaderboard:{challenge_id}", {netid: datetime.now().timestamp()})
+
+    return jsonify(success=True, passed=passed, results=results)
 
 @app.route("/weekly_challenge/leaderboard/<cid>", methods=["GET"])
 def get_leaderboard(cid):
+    def _dec(x): return x.decode("utf-8", "ignore") if isinstance(x, (bytes, bytearray)) else x
+
     leaderboard = r.zrange(f"weekly_challenge:leaderboard:{cid}", 0, -1, withscores=True)
     raw = r.get(f"weekly_challenge:challenge:{cid}")
     solutions_available_date = None
     if raw:
-        challenge = json.loads(raw)
+        challenge = json.loads(_dec(raw))
         solutions_available_date = challenge.get("solutions_available_date")
-    leaderboard_out = [
-            {"netid": netid, "display_name": get_display_name(netid), "timestamp": datetime.fromtimestamp(score, est).strftime("%Y-%m-%d %H:%M:%S")}
-        for netid, score in leaderboard
-    ]
-    return jsonify({"leaderboard": leaderboard_out, "solutions_available_date": solutions_available_date})
+
+    out = []
+    for netid, score in leaderboard:
+        netid = _dec(netid)
+        out.append({
+            "netid": netid,
+            "display_name": get_display_name(netid),
+            "timestamp": datetime.fromtimestamp(score, est).strftime("%Y-%m-%d %H:%M:%S"),
+        })
+    return jsonify({"leaderboard": out, "solutions_available_date": solutions_available_date})
 
 @app.route("/weekly_challenge/submissions/<cid>", methods=["GET"])
 def get_submissions(cid):
-    admin_netid = request.args.get("admin_netid")
-    admin_password = request.args.get("admin_password")
-    if not check_admin_auth(admin_netid, admin_password):
-        return jsonify({"error": "Invalid admin credentials"}), 403
+    if not session.get("is_admin"):
+        return jsonify({"error": "Unauthorized"}), 403
     submissions = r.lrange(f"weekly_challenge:submissions:{cid}", 0, -1)
-    out = [json.loads(s) for s in submissions]
+    out = []
+    for s in submissions:
+        try:
+            obj = json.loads(s)
+            obj["display_name"] = get_display_name(obj.get("netid", ""))
+            out.append(obj)
+        except Exception:
+            continue
     return jsonify(out)
+
 
 @app.route("/weekly_challenge/remove_leaderboard/<cid>", methods=["POST"])
 def remove_from_leaderboard_multi(cid):
-    admin_netid = request.json.get("admin_netid")
-    admin_password = request.json.get("admin_password")
+    if not session.get("is_admin"):
+        return jsonify({"error": "Unauthorized"}), 403
     netid = request.json.get("netid")
-    if not check_admin_auth(admin_netid, admin_password):
-        return jsonify({"error": "Invalid admin credentials"}), 403
+    if not netid:
+        return jsonify({"error": "Missing netid"}), 400
     r.zrem(f"weekly_challenge:leaderboard:{cid}", netid)
     return jsonify({"success": True})
 
+
 # Admin: add/edit/delete challenges
+#@app.route("/weekly_challenge/add", methods=["POST"])
+#def add_challenge():
+#    admin_netid = request.args.get("netid")
+#    admin_password = request.args.get("password")
+#    if not check_admin_auth(admin_netid, admin_password):
+#        abort(403)
+#    data = request.get_json()
+#    problem = data.get("problem")
+#    test_cases = data.get("test_cases")
+#    title = data.get("title") or problem[:40]
+#    # Set solutions_available_date to 1 week from now if not provided
+#    solutions_available_date = data.get("solutions_available_date")
+#    if not solutions_available_date:
+#        solutions_available_date = (datetime.now(est) + timedelta(days=7)).strftime("%Y-%m-%d")
+#    active = data.get("active", False)  # New challenges default to inactive
+#    if not (problem and test_cases):
+#        return jsonify({"error": "Missing fields."}), 400
+#    challenge_id = str(uuid4())
+#    challenge = {
+#        "id": challenge_id,
+#        "problem": problem,
+#        "test_cases": test_cases,
+#        "title": title,
+#        "solutions_available_date": solutions_available_date,
+#        "active": active
+#    }
+#    if "examples" in data:
+#        challenge["examples"] = data["examples"]
+#    r.set(f"weekly_challenge:challenge:{challenge_id}", json.dumps(challenge))
+#    r.lpush("weekly_challenge:list", challenge_id)
+#    return jsonify({"success": True, "id": challenge_id})
+
 @app.route("/weekly_challenge/add", methods=["POST"])
 def add_challenge():
-    admin_netid = request.args.get("netid")
-    admin_password = request.args.get("password")
-    if not check_admin_auth(admin_netid, admin_password):
-        abort(403)
-    data = request.get_json()
-    problem = data.get("problem")
-    test_cases = data.get("test_cases")
-    title = data.get("title") or problem[:40]
-    # Set solutions_available_date to 1 week from now if not provided
-    solutions_available_date = data.get("solutions_available_date")
-    if not solutions_available_date:
-        solutions_available_date = (datetime.now(est) + timedelta(days=7)).strftime("%Y-%m-%d")
-    active = data.get("active", False)  # New challenges default to inactive
-    if not (problem and test_cases):
-        return jsonify({"error": "Missing fields."}), 400
-    challenge_id = str(uuid4())
-    challenge = {
-        "id": challenge_id,
-        "problem": problem,
-        "test_cases": test_cases,
-        "title": title,
-        "solutions_available_date": solutions_available_date,
-        "active": active
-    }
-    if "examples" in data:
-        challenge["examples"] = data["examples"]
-    r.set(f"weekly_challenge:challenge:{challenge_id}", json.dumps(challenge))
-    r.lpush("weekly_challenge:list", challenge_id)
-    return jsonify({"success": True, "id": challenge_id})
+    if not session.get("is_admin"):
+        return jsonify(success=False, error="Unauthorized"), 403
+
+    data = request.json
+    # validate + add
+    save_challenge(data)
+    return jsonify(success=True)
+
 
 @app.route("/weekly_challenge/delete/<cid>", methods=["POST"])
 def delete_challenge(cid):
@@ -1049,33 +1441,41 @@ def delete_challenge(cid):
     r.lrem("weekly_challenge:list", 0, cid)
     return jsonify({"success": True})
 
-@app.route("/weekly_challenge/edit/<cid>", methods=["POST"])
-def edit_challenge(cid):
-    admin_netid = request.args.get("netid")
-    admin_password = request.args.get("password")
-    if not check_admin_auth(admin_netid, admin_password):
-        abort(403)
-    raw = r.get(f"weekly_challenge:challenge:{cid}")
-    if not raw:
-        return jsonify({"error": "Challenge not found."}), 404
-    challenge = json.loads(raw)
-    data = request.get_json()
+#@app.route("/weekly_challenge/edit/<cid>", methods=["POST"])
+#def edit_challenge(cid):
+    #admin_netid = request.args.get("netid")
+    #admin_password = request.args.get("password")
+    #if not check_admin_auth(admin_netid, admin_password):
+        #abort(403)
+    #raw = r.get(f"weekly_challenge:challenge:{cid}")
+    #if not raw:
+        #return jsonify({"error": "Challenge not found."}), 404
+    #challenge = json.loads(raw)
+    #data = request.get_json()
     # Update fields if present
-    for field in ["title", "problem", "examples", "solutions_available_date"]:
-        if field in data:
-            challenge[field] = data[field]
+    #for field in ["title", "problem", "examples", "solutions_available_date"]:
+        #if field in data:
+            #challenge[field] = data[field]
     # Only update test_cases if present and not empty/null
-    if "test_cases" in data and data["test_cases"]:
-        challenge["test_cases"] = data["test_cases"]
-    r.set(f"weekly_challenge:challenge:{cid}", json.dumps(challenge))
-    return jsonify({"success": True, "challenge": challenge})
+    #if "test_cases" in data and data["test_cases"]:
+        #challenge["test_cases"] = data["test_cases"]
+    #r.set(f"weekly_challenge:challenge:{cid}", json.dumps(challenge))
+    #return jsonify({"success": True, "challenge": challenge})
+
+@app.route("/weekly_challenge/edit/<challenge_id>", methods=["POST"])
+def edit_challenge(challenge_id):
+    if not session.get("is_admin"):
+        return jsonify(success=False, error="Unauthorized"), 403
+
+    data = request.json
+    update_challenge(challenge_id, data)
+    return jsonify(success=True)
+
 
 @app.route("/weekly_challenge/toggle_active/<cid>", methods=["POST"])
 def toggle_challenge_active(cid):
-    admin_netid = request.json.get("admin_netid")
-    admin_password = request.json.get("admin_password")
-    if not check_admin_auth(admin_netid, admin_password):
-        return jsonify({"error": "Invalid admin credentials"}), 403
+    if not session.get("is_admin"):
+        return jsonify({"error": "Unauthorized"}), 403
     raw = r.get(f"weekly_challenge:challenge:{cid}")
     if not raw:
         return jsonify({"error": "Challenge not found."}), 404
@@ -1084,22 +1484,223 @@ def toggle_challenge_active(cid):
     r.set(f"weekly_challenge:challenge:{cid}", json.dumps(challenge))
     return jsonify({"success": True, "active": challenge["active"]})
 
+
+#@app.route("/weekly_challenge/reorder", methods=["POST"])
+#def reorder_challenges():
+#    admin_netid = request.json.get("admin_netid")
+#    admin_password = request.json.get("admin_password")
+#    ids = request.json.get("ids")
+#    if not check_admin_auth(admin_netid, admin_password):
+#        return jsonify({"error": "Invalid admin credentials"}), 403
+#    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+#        return jsonify({"error": "Invalid ids list"}), 400
+#    # Remove all and re-add in new order
+#    r.delete("weekly_challenge:list")
+#    for cid in reversed(ids):
+#        r.lpush("weekly_challenge:list", cid)
+#    return jsonify({"success": True})
+
 @app.route("/weekly_challenge/reorder", methods=["POST"])
 def reorder_challenges():
-    admin_netid = request.json.get("admin_netid")
-    admin_password = request.json.get("admin_password")
-    ids = request.json.get("ids")
-    if not check_admin_auth(admin_netid, admin_password):
-        return jsonify({"error": "Invalid admin credentials"}), 403
-    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
-        return jsonify({"error": "Invalid ids list"}), 400
-    # Remove all and re-add in new order
-    r.delete("weekly_challenge:list")
-    for cid in reversed(ids):
-        r.lpush("weekly_challenge:list", cid)
-    return jsonify({"success": True})
+    if not session.get("is_admin"):
+        return jsonify(success=False, error="Unauthorized"), 403
+
+    order = request.json.get("order")
+    if not order:
+        return jsonify(success=False, error="Missing order"), 400
+
+    reorder_and_save(order)
+    return jsonify(success=True)
+
 
 # --- Code execution sandbox (updated for print output) ---
+@app.post("/api/sandbox/run")
+def api_sandbox_run():
+    """Very small code runner for the sandbox."""
+    from io import StringIO
+    import contextlib, traceback as tb
+
+    data = request.get_json(silent=True) or {}
+    code = data.get("code", "")
+
+    out_buf, err_buf = StringIO(), StringIO()
+    try:
+        g = {}  # no builtins injected; you can allow a few safe ones if needed
+        l = {}
+        with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+            exec(code, g, l)
+        return jsonify(stdout=out_buf.getvalue(), stderr=err_buf.getvalue())
+    except Exception:
+        return jsonify(stdout=out_buf.getvalue(),
+                       stderr=err_buf.getvalue() + tb.format_exc()), 200
+
+# ----- Weekly Challenge helpers (Redis-backed) -----
+
+def load_challenges():
+    """
+    Load challenges in order from 'weekly_challenge:list', falling back to scanning keys.
+    Handles Redis bytes <-> str so we don't silently drop items.
+    """
+    def _dec(x):
+        return x.decode("utf-8", "ignore") if isinstance(x, (bytes, bytearray)) else x
+
+    def _normalize(ch):
+        ch = dict(ch or {})
+        ch.setdefault("id", ch.get("_id") or ch.get("cid") or ch.get("uuid") or str(uuid4()))
+        ch.setdefault("title", (ch.get("problem") or "")[:40] or f"Challenge {ch['id'][:6]}")
+        ch.setdefault("test_cases", ch.get("tests") or ch.get("cases") or [])
+        if "published" not in ch: ch["published"] = True
+        if "active" not in ch: ch["active"] = True
+        sol_date = ch.get("solutions_available_date") or ch.get("solutions_date") or ch.get("solutions")
+        if not sol_date:
+            sol_date = (datetime.now(est) + timedelta(days=7)).strftime("%Y-%m-%d")
+        ch["solutions_available_date"] = sol_date
+        return ch
+
+    # Ordered list first
+    ids_raw = r.lrange("weekly_challenge:list", 0, -1)
+    ids = [_dec(i) for i in ids_raw]
+    out = []
+    if ids:
+        for cid in ids:
+            raw = r.get(f"weekly_challenge:challenge:{cid}")
+            if not raw:
+                continue
+            try:
+                out.append(_normalize(json.loads(_dec(raw))))
+            except Exception:
+                continue
+        if out:
+            return out
+
+    # Fallback: scan keys
+    for key in r.keys("weekly_challenge:challenge:*"):
+        key = _dec(key)
+        raw = r.get(key)
+        if not raw:
+            continue
+        try:
+            out.append(_normalize(json.loads(_dec(raw))))
+        except Exception:
+            continue
+
+    # Rebuild the list in a stable order if we found any via scan
+    if out:
+        out.sort(key=lambda c: (str(c.get("title") or ""), str(c.get("id"))))
+        pipe = r.pipeline()
+        pipe.delete("weekly_challenge:list")
+        for c in out:
+            pipe.rpush("weekly_challenge:list", c["id"])
+            r.set(f"weekly_challenge:challenge:{c['id']}", json.dumps(c))
+        pipe.execute()
+
+    return out
+
+def save_challenge(data):
+    """Create a new challenge; ensure ID is pushed to weekly_challenge:list."""
+    def _dec(x): return x.decode("utf-8", "ignore") if isinstance(x, (bytes, bytearray)) else x
+
+    problem = (data or {}).get("problem", "").strip()
+    test_cases = (data or {}).get("test_cases", [])
+    if not problem or not isinstance(test_cases, list) or not test_cases:
+        raise ValueError("Missing problem or test_cases")
+
+    cid = data.get("id") or str(uuid4())
+    title = data.get("title") or problem[:40]
+    published = bool(data.get("published", True))
+    active = bool(data.get("active", True))
+    sol_date = data.get("solutions_available_date") or (datetime.now(est) + timedelta(days=7)).strftime("%Y-%m-%d")
+
+    challenge = {
+        "id": cid,
+        "title": title,
+        "problem": problem,
+        "test_cases": test_cases,
+        "published": published,
+        "active": active,
+        "solutions_available_date": sol_date
+    }
+    if "examples" in data:
+        challenge["examples"] = data["examples"]
+
+    r.set(f"weekly_challenge:challenge:{cid}", json.dumps(challenge))
+    existing = [_dec(x) for x in r.lrange("weekly_challenge:list", 0, -1)]
+    if cid not in existing:
+        r.rpush("weekly_challenge:list", cid)
+
+def update_challenge(challenge_id, data):
+    """Update fields of an existing challenge."""
+    raw = r.get(f"weekly_challenge:challenge:{challenge_id}")
+    if not raw:
+        raise ValueError("Challenge not found")
+    ch = json.loads(raw)
+
+    for k in ["title", "problem", "examples", "published", "active", "solutions_available_date"]:
+        if k in data:
+            ch[k] = data[k]
+    if "test_cases" in data and isinstance(data["test_cases"], list) and data["test_cases"]:
+        ch["test_cases"] = data["test_cases"]
+
+    r.set(f"weekly_challenge:challenge:{challenge_id}", json.dumps(ch))
+
+def reorder_and_save(order_ids):
+    """Rewrite weekly_challenge:list to the provided list of ids."""
+    if not isinstance(order_ids, list) or not all(isinstance(i, str) for i in order_ids):
+        raise ValueError("order must be list[str]")
+    # ensure all exist
+    valid = []
+    for cid in order_ids:
+        if r.get(f"weekly_challenge:challenge:{cid}"):
+            valid.append(cid)
+    pipe = r.pipeline()
+    pipe.delete("weekly_challenge:list")
+    for cid in valid:
+        pipe.rpush("weekly_challenge:list", cid)
+    pipe.execute()
+
+def record_submission(challenge_id, netid, code, keystrokes):
+    """Run tests, store submission, and update leaderboard on pass."""
+    raw = r.get(f"weekly_challenge:challenge:{challenge_id}")
+    if not raw:
+        raise ValueError("Challenge not found")
+    ch = json.loads(raw)
+    test_cases = ch.get("test_cases", [])
+
+    passed, results = run_code_against_tests(code, test_cases)
+    submission = {
+        "netid": netid,
+        "code": code,
+        "keystrokes": keystrokes or [],
+        "timestamp": datetime.now(est).isoformat(),
+        "passed": passed,
+        "results": results
+    }
+    r.rpush(f"weekly_challenge:submissions:{challenge_id}", json.dumps(submission))
+    if passed:
+        r.zadd(f"weekly_challenge:leaderboard:{challenge_id}", {netid: datetime.now().timestamp()})
+
+@app.route("/api/notebooks")
+def api_notebooks():
+    if session.get("is_admin"):
+        section_str = request.args.get("section") or str(session.get("section") or "1")
+    else:
+        netid = session.get("netid")
+        if not netid:
+            return jsonify(success=False, error="Not logged in"), 403
+        roster = load_roster()
+        row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+        if row.empty:
+            return jsonify(success=False, error="Roster match not found"), 403
+        section_str = str(int(row.iloc[0]["Section"]))
+
+    repo = SECTION_REPOS.get(section_str)
+    if not repo:
+        return jsonify(success=False, error="Invalid section"), 400
+
+    items = list_notebooks_from_github(repo, folder="notebooks")
+    return jsonify(success=True, items=items, section=int(section_str))
+
+
 def run_code_against_tests(code, test_cases):
     """Run code against test cases. Distinguish between print and return-based challenges."""
     results = []
@@ -1153,11 +1754,24 @@ def run_code_against_tests(code, test_cases):
 
 @app.route("/weekly_challenge")
 def weekly_challenge_page():
-    # For now, get netid from query param or session (customize as needed)
-    netid = request.args.get("netid") or flask_session.get("netid") or ""
+    if not session.get("netid"):
+        return redirect(url_for("index"))  # force login first
+
+    section = session.get("section")
+    if session.get("is_admin"):
+        # Admins can override via query or dropdown later
+        section = request.args.get("section", section)
+
     raw = r.get("weekly_challenge:current")
     challenge = json.loads(raw) if raw else None
-    return render_template("weekly_challenge.html", netid=netid, challenge=challenge)
+    return render_template(
+        "weekly_challenge.html",
+        netid=session["netid"],
+        section=section,
+        is_admin=session.get("is_admin", False),
+        challenge=challenge
+    )
+
 
 @app.route("/weekly_challenge/solution_replay/<cid>/<netid>", methods=["GET"])
 def solution_replay(cid, netid):
@@ -1180,4 +1794,8 @@ def solution_replay(cid, netid):
             return jsonify({"keystrokes": sub.get("keystrokes", [])})
     return jsonify({"error": "No passed solution found for this user."}), 404
 
-socketio.run(app, host="0.0.0.0", port=5000)
+# >>> Minimal fix: don't auto-run at import time
+if __name__ == "__main__":
+    socketio.run(app, host="0.0.0.0", port=5000)
+# <<<
+

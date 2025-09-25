@@ -4,214 +4,153 @@
   <meta charset="UTF-8" />
   <title>{% block title %}Foundations Site{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
-
   <style>
-    :root {
-      --bg: white;
-      --text: black;
-      --link: #0645AD;
-    }
-    [data-theme="dark"] {
-      --bg: #121212;
-      --text: #e0e0e0;
-      --link: #4ea1f3;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: system-ui, sans-serif;
-      margin: 0;
-      padding: 0;
-    }
+    :root { --bg: white; --text: black; --link: #0645AD; }
+    [data-theme="dark"] { --bg: #121212; --text: #e0e0e0; --link: #4ea1f3; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; margin: 0; padding: 0; }
     a { color: var(--link); }
+    nav { background: var(--bg); border-bottom: 1px solid #ccc; padding: 0.6em 1em; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+    .nav-links { display: flex; gap: 0.5em; overflow: hidden; transition: max-height 0.3s ease; }
+    nav a { display: flex; align-items: center; gap: 0.35em; text-decoration: none; border: 1px solid #bbb; border-radius: 6px; padding: 0.35em 0.75em; background: transparent; transition: background 0.2s, transform 0.1s; font-size: 0.95em; }
+    nav a:hover, nav a:focus-visible { background: #f3f3f3; border-color: #888; transform: translateY(-1px); }
+    [data-theme="dark"] nav a:hover, [data-theme="dark"] nav a:focus-visible { background: #23272e; border-color: #4ea1f3; }
+    nav a.active { background: #0073e6; color: #fff; border-color: #0073e6; font-weight: bold; }
+    #siteHeader { display: flex; align-items: center; justify-content: space-between; font-weight: bold; font-size: 1.2em; margin: 0.5em 1em; }
+    #siteHeader select, #siteHeader button { margin-left: 1em; }
+    .hamburger { display: none; border: none; background: transparent; font-size: 1.6rem; cursor: pointer; }
+    @media (max-width: 768px) { .hamburger { display: block; } .nav-links { flex-direction: column; width: 100%; margin-top: 0.5em; max-height: 0; } .nav-links.show { max-height: 500px; } nav a { width: 100%; justify-content: center; } }
+    .breadcrumbs { font-size: 0.9em; margin: 0.5em 1em; color: gray; }
+    .breadcrumbs a { text-decoration: none; color: var(--link); }
+    .breadcrumbs span { margin: 0 0.3em; }
 
-    /* Sticky navbar */
-    nav {
-      background: var(--bg);
-      border-bottom: 1px solid #ccc;
-      padding: 0.6em 1em;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      position: sticky;
-      top: 0;
-      z-index: 1000;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-    }
-
-    /* Nav links */
-    .nav-links {
-      display: flex;
-      gap: 0.5em;
-      overflow: hidden;
-      transition: max-height 0.3s ease;
-    }
-    .nav-links.collapsed {
-      max-height: 0;
-    }
-
-    nav a {
-      display: flex;
-      align-items: center;
-      gap: 0.35em;
-      text-decoration: none;
-      border: 1px solid #bbb;
-      border-radius: 6px;
-      padding: 0.35em 0.75em;
-      background: transparent;
-      transition: background 0.2s, transform 0.1s;
-      font-size: 0.95em;
-    }
-    nav a:hover, nav a:focus-visible {
-      background: #f3f3f3;
-      border-color: #888;
-      transform: translateY(-1px);
-    }
-    [data-theme="dark"] nav a:hover,
-    [data-theme="dark"] nav a:focus-visible {
-      background: #23272e;
-      border-color: #4ea1f3;
-    }
-    nav a.active {
-      background: #0073e6;
-      color: #fff;
-      border-color: #0073e6;
-      font-weight: bold;
-    }
-
-    /* Header row (title + section + theme) */
-    #siteHeader {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-weight: bold;
-      font-size: 1.2em;
-      margin: 0.5em 1em;
-    }
-    #siteHeader select, #siteHeader button {
-      margin-left: 1em;
-    }
-
-    /* Hamburger */
-    .hamburger {
-      display: none;
-      border: none;
-      background: transparent;
-      font-size: 1.6rem;
-      cursor: pointer;
-    }
-
-    @media (max-width: 768px) {
-      .hamburger {
-        display: block;
-      }
-      .nav-links {
-        flex-direction: column;
-        width: 100%;
-        margin-top: 0.5em;
-        max-height: 0; /* collapsed by default on mobile */
-      }
-      .nav-links.show {
-        max-height: 500px;
-      }
-      nav a {
-        width: 100%;
-        justify-content: center;
-      }
-    }
-
-    /* Breadcrumbs */
-    .breadcrumbs {
-      font-size: 0.9em;
-      margin: 0.5em 1em;
-      color: gray;
-    }
-    .breadcrumbs a {
-      text-decoration: none;
-      color: var(--link);
-    }
-    .breadcrumbs span {
-      margin: 0 0.3em;
-    }
+    /* Centered modal */
+    .modal { position: fixed; z-index: 2000; inset: 0; background-color: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; }
+    .modal.open { display: flex; }
+    .modal-content { background: var(--bg); color: var(--text); padding: 1.5em; border-radius: 8px; width: 90%; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); position: relative; }
+    .close { position: absolute; top: 0.5em; right: 0.75em; font-size: 1.5em; font-weight: bold; cursor: pointer; }
+    .close:hover { color: red; }
+    .login-btn { border: 1px solid #0073e6; background: #0073e6; color: white; border-radius: 5px; padding: 0.4em 0.9em; margin-left: 1em; cursor: pointer; }
+    .login-btn:hover { background: #005bb5; }
   </style>
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
-  <!-- Title + Section + Theme toggle -->
   <div id="siteHeader">
     <div style="display: flex; align-items: center;">
       <span>Foundations of Business Programming</span>
-      <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">
-        Section:
-        <select id="sectionSelect" style="margin-left: 0.5em;">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-        </select>
-      </span>
+      {% if session.get("is_admin") %}
+        <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">
+          Section:
+          <select id="sectionSelect" style="margin-left: 0.5em;">
+            <option value="1" {% if session.get("section") == 1 %}selected{% endif %}>1</option>
+            <option value="2" {% if session.get("section") == 2 %}selected{% endif %}>2</option>
+            <option value="5" {% if session.get("section") == 5 %}selected{% endif %}>5</option>
+            <option value="6" {% if session.get("section") == 6 %}selected{% endif %}>6</option>
+          </select>
+        </span>
+      {% elif session.get("netid") %}
+        <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">Section {{ session['section'] }}</span>
+      {% endif %}
     </div>
     <div class="nav-right">
+      {% if not session.get("netid") %}
+        <button id="openLogin" class="login-btn">Login</button>
+      {% endif %}
       <button id="themeToggle" aria-label="Toggle theme">🌞</button>
     </div>
   </div>
 
-  <!-- Navigation -->
   <nav>
     <button class="hamburger" aria-label="Toggle menu" aria-expanded="false">☰</button>
     <div class="nav-links">
       <a href="/"><i data-lucide="home"></i>Home</a>
       <a href="/assignments"><i data-lucide="book-open"></i>Assignments</a>
-      <a href="/weekly_challenge"><i data-lucide="target"></i>Weekly Challenge</a>
-      <a id="chatLink" href="/chat/1"><i data-lucide="message-circle"></i>Live Chat</a>
-      <a href="/notebooks"><i data-lucide="file-text"></i>Notebooks</a>
+      {% if session.get("netid") %}
+      <!--
+        <a href="/weekly_challenge"><i data-lucide="target"></i>Weekly Challenge</a>
+        <a href="/chat{% if session.get('is_admin') %}{% else %}/{{ session['section'] }}{% endif %}"><i data-lucide="message-circle"></i>Live Chat</a>
+      -->
+        <a href="/notebooks"><i data-lucide="file-text"></i>Notebooks</a>
+      {% endif %}
       <a href="/tutorials"><i data-lucide="graduation-cap"></i>Tutorials</a>
       <a href="/sandbox"><i data-lucide="code"></i>Python Sandbox</a>
       <a href="/about"><i data-lucide="info"></i>About</a>
     </div>
   </nav>
 
-  <!-- Breadcrumbs -->
   <div class="breadcrumbs" id="breadcrumbs"></div>
+
+  <!-- Login Modal -->
+  <div id="loginModal" class="modal{% if not session.get('netid') %} open{% endif %}">
+    <div class="modal-content">
+      <span id="closeModal" class="close" aria-label="Close">&times;</span>
+      <h2>Login</h2>
+      {% if login_error %}
+        <div style="color: red; margin-bottom: 0.5em;">{{ login_error }}</div>
+      {% endif %}
+      <form id="loginForm" method="POST" action="{{ url_for('login') }}">
+        <label for="netid">Username:</label>
+        <input type="text" name="netid" id="loginNetID" required autofocus>
+        <div id="adminPasswordField" style="display:none; margin-top:0.5em;">
+          <label for="password">Admin Password:</label>
+          <input type="password" name="password" id="loginPassword">
+        </div>
+        <div style="margin-top:1em;">
+          <button type="submit">Login</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <div id="siteWrapper" style="padding: 1em;">
     {% block content %}{% endblock %}
   </div>
 
   <script>
-    // Section persistence
-    const sectionSelect = document.getElementById("sectionSelect");
-    const chatLink = document.getElementById("chatLink");
-    const savedSection = localStorage.getItem("section") || "1";
-    sectionSelect.value = savedSection;
-    chatLink.href = "/chat/" + savedSection;
-    sectionSelect.addEventListener("change", (e) => {
-      const value = e.target.value;
-      localStorage.setItem("section", value);
-      chatLink.href = "/chat/" + value;
-    });
+  (function () {
+    const sel = document.getElementById('sectionSelect');
+    if (!sel) return;
+    sel.addEventListener('change', async () => {
+      const v = sel.value;
+      try {
+        await fetch('/set_section', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ section: v })
+        });
+      } catch (e) {}
 
+      // If we're on notebooks, reload with ?section=
+      if (location.pathname.startsWith('/notebooks')) {
+        const url = new URL(location.href);
+        url.searchParams.set('section', v);
+        location.href = url.toString();
+      }
+      // If we're on chat (admin), jump to /chat/<section>
+      if (location.pathname === '/chat' || /^\/chat\/\d+/.test(location.pathname)) {
+        location.href = `/chat/${v}`;
+      }
+    });
+  })();
+  </script>
+
+
+  <script>
     // Theme toggle
     const themeToggle = document.getElementById("themeToggle");
-    const html = document.documentElement;
+    const htmlEl = document.documentElement;
     const savedTheme = localStorage.getItem("theme");
-    if (savedTheme) {
-      html.setAttribute("data-theme", savedTheme);
-      themeToggle.textContent = savedTheme === "dark" ? "🌙" : "🌞";
-    }
+    if (savedTheme) { htmlEl.setAttribute("data-theme", savedTheme); themeToggle.textContent = savedTheme === "dark" ? "🌙" : "🌞"; }
     themeToggle.addEventListener("click", () => {
-      const current = html.getAttribute("data-theme");
+      const current = htmlEl.getAttribute("data-theme");
       const next = current === "dark" ? "light" : "dark";
-      html.setAttribute("data-theme", next);
+      htmlEl.setAttribute("data-theme", next);
       localStorage.setItem("theme", next);
       themeToggle.textContent = next === "dark" ? "🌙" : "🌞";
     });
 
-    // Hamburger toggle
+    // Hamburger
     const hamburger = document.querySelector(".hamburger");
     const navLinks = document.querySelector(".nav-links");
     hamburger.addEventListener("click", () => {
@@ -220,37 +159,38 @@
       navLinks.classList.toggle("show");
     });
 
-    // Active link highlight
-    const currentPath = window.location.pathname;
-    document.querySelectorAll(".nav-links a").forEach(link => {
-      if (link.getAttribute("href") === currentPath) {
-        link.classList.add("active");
-      }
-    });
-
-    // Breadcrumb generation
-    function createBreadcrumbs(path) {
-      const container = document.getElementById("breadcrumbs");
-      if (!container) return;
+    // Breadcrumbs
+    (function createBreadcrumbs(path){
+      const container = document.getElementById("breadcrumbs"); if (!container) return;
       const parts = path.split("/").filter(Boolean);
-      let html = `<a href="/">Home</a>`;
-      let buildPath = "";
-      parts.forEach((part, i) => {
-        buildPath += "/" + part;
-        html += ` <span>›</span> `;
-        if (i === parts.length - 1) {
-          html += `<span>${decodeURIComponent(part)}</span>`;
-        } else {
-          html += `<a href="${buildPath}">${decodeURIComponent(part)}</a>`;
-        }
-      });
+      let html = `<a href="/">Home</a>`; let buildPath = "";
+      parts.forEach((part,i)=>{ buildPath += "/" + part; html += ` <span>›</span> `; html += (i===parts.length-1) ? `<span>${decodeURIComponent(part)}</span>` : `<a href="${buildPath}">${decodeURIComponent(part)}</a>`; });
       container.innerHTML = html;
-    }
-    createBreadcrumbs(window.location.pathname);
+    })(window.location.pathname);
 
-    // Initialize icons
+    // Login modal logic
+    const loginModal = document.getElementById("loginModal");
+    const openLogin = document.getElementById("openLogin");
+    const closeModal = document.getElementById("closeModal");
+    if (openLogin) openLogin.addEventListener("click", () => { loginModal.classList.add('open'); setTimeout(()=>document.getElementById("loginNetID")?.focus(), 50); });
+    if (closeModal) closeModal.addEventListener("click", () => loginModal.classList.remove('open'));
+    window.addEventListener("click", (e) => { if (e.target === loginModal) loginModal.classList.remove('open'); });
+
+    // Show admin password field only for admin username
+    const loginNetID = document.getElementById("loginNetID");
+    const adminPasswordField = document.getElementById("adminPasswordField");
+    const ADMIN_NETID = "{{ ADMIN_NETID|default('admin') }}";
+    if (loginNetID) {
+      loginNetID.addEventListener("input", () => {
+        if (loginNetID.value.trim().toLowerCase() === ADMIN_NETID.toLowerCase()) adminPasswordField.style.display = "block";
+        else adminPasswordField.style.display = "none";
+      });
+    }
+
+    // Icons
     lucide.createIcons();
   </script>
+  {% block extra_scripts %}{% endblock %}
 </body>
 </html>
 
