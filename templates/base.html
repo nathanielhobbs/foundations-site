@@ -49,9 +49,23 @@
             <option value="6" {% if session.get("section") == 6 %}selected{% endif %}>6</option>
           </select>
         </span>
-      {% elif session.get("netid") %}
-        <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">Section {{ session['section'] }}</span>
-      {% endif %}
+	{% elif session.get("netid") %}
+	{% set sect = session.get('section') %}
+	  <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">
+	    Section {{ sect if sect is not none else "—" }}
+	  </span>
+	  <!-- Live-updating CTA container -->
+	  <span id="active-lecture-cta" style="margin-left: 1em;">
+	    {% if active_lecture %}
+	      <a href="/lecture/{{ active_lecture.slug }}"
+		 style="font-weight: normal; font-size: 1em; text-decoration: none; border: 1px solid #bbb; padding: .15em .5em; border-radius: 999px;">
+		Join the {{ active_lecture.title }} challenge
+	      </a>
+	    {% endif %}
+	  </span>
+	{% endif %}
+
+
     </div>
     <div class="nav-right">
       {% if not session.get("netid") %}
@@ -76,6 +90,14 @@
       <a href="/tutorials"><i data-lucide="graduation-cap"></i>Tutorials</a>
       <a href="/sandbox"><i data-lucide="code"></i>Python Sandbox</a>
       <a href="/about"><i data-lucide="info"></i>About</a>
+      {% if session.get("is_admin") %}
+	  <a href="/admin/lecture/new"><i data-lucide="plus-circle"></i>New Lecture Challenge</a>
+	  {% if session.get("is_admin") %}
+	  <a href="/admin/lecture/"><i data-lucide="list"></i>Lecture Challenges</a>
+{% endif %}
+
+	{% endif %}
+
     </div>
   </nav>
 
@@ -190,7 +212,47 @@
     // Icons
     lucide.createIcons();
   </script>
-  {% block extra_scripts %}{% endblock %}
+    <!-- Socket.IO client (UMD) -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
+
+    <script>
+	(function () {
+	  // If user isn't logged in, there's no CTA container — bail early.
+	  var cta = document.getElementById("active-lecture-cta");
+	  if (!cta || typeof io === "undefined") return;
+
+	  // Basic HTML escaper so titles are safe.
+	  function esc(s) {
+	    return String(s)
+	      .replace(/&/g, "&amp;")
+	      .replace(/</g, "&lt;")
+	      .replace(/>/g, "&gt;")
+	      .replace(/"/g, "&quot;")
+	      .replace(/'/g, "&#39;");
+	  }
+
+	  var socket = io({ withCredentials: true });
+
+	  socket.on("active_lecture_changed", function (payload) {
+	    // If cleared or invalid payload: hide CTA
+	    if (!payload || !payload.slug || !payload.title) {
+	      cta.innerHTML = "";
+	      cta.style.display = "none";
+	      return;
+	    }
+	    // Otherwise, show fresh CTA
+	    cta.style.display = "inline";
+	    cta.innerHTML =
+	      '<a href="/lecture/' + esc(payload.slug) + '"' +
+	      ' style="font-weight: normal; font-size: 1em; text-decoration: none; border: 1px solid #bbb; padding: .15em .5em; border-radius: 999px;">' +
+	      'Join the ' + esc(payload.title) + ' challenge' +
+	      "</a>";
+	  });
+	})();
+    </script>
+
+  {% block extra_scripts %}
+  {% endblock %}
 </body>
 </html>
 

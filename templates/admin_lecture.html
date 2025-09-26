@@ -1,15 +1,33 @@
 {% extends 'base.html' %}
 {% block title %}Admin – {{ ch.title }}{% endblock %}
 {% block content %}
-<h1>Admin: {{ ch.title }}</h1>
+<h1>Admin: {{ ch.title }}
+  {% if active_lecture and active_lecture.slug == ch.slug %}
+    <span style="margin-left:.5rem; font-size:.7em; padding:.1rem .4rem; border:1px solid #4caf50; border-radius:999px; color:#4caf50; vertical-align:middle;">
+      Active
+    </span>
+  {% endif %}
+</h1>
 
 <div style="margin: .5rem 0;">
-  <label><input type="checkbox" id="isOpen" {% if ch.is_open %}checked{% endif %}> Accepting submissions</label>
-  <label style="margin-left:1rem;"><input type="checkbox" id="showLB" {% if ch.show_leaderboard %}checked{% endif %}> Show leaderboard</label>
-  <button id="saveSettings">Save</button>
-  <button id="deleteChallenge" style="margin-left:1rem; border:1px solid #c33; background:#fff; color:#c33;">
-  Delete
-</button>
+	  <label><input type="checkbox" id="isOpen" {% if ch.is_open %}checked{% endif %}> Accepting submissions</label>
+	  <label style="margin-left:1rem;"><input type="checkbox" id="showLB" {% if ch.show_leaderboard %}checked{% endif %}> Show leaderboard</label>
+	  <button id="saveSettings">Save</button>
+	  <button id="deleteChallenge" style="margin-left:1rem; border:1px solid #c33; background:#fff; color:#c33;">
+	  Delete
+	</button>
+	<form action="/admin/lecture/{{ ch.slug }}/activate" method="post" style="display:inline-block; margin-left:1rem;">
+	  <button type="submit">Set Active</button>
+	</form>
+	<form action="/admin/lecture/clear-active" method="post" style="display:inline-block; margin-left:.5rem;">
+	  <button type="submit">Clear Active</button>
+	</form>
+	{% if active_lecture and active_lecture.slug == ch.slug %}
+	  <span style="margin-left:.75rem; padding:.2rem .5rem; border:1px solid #4caf50; border-radius:999px; color:#4caf50;">
+	    Currently Active
+	  </span>
+	{% endif %}
+
 
 </div>
 

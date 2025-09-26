@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Admin · Lecture Challenges{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: .75rem;">Lecture Challenges</h1>
+
+<div style="margin-bottom: 1rem;">
+  <a href="/admin/lecture/new" class="button">+ New Lecture Challenge</a>
+  <form action="/admin/lecture/clear-active" method="post" style="display:inline-block; margin-left:.5rem;">
+    <button type="submit">Clear Active</button>
+  </form>
+</div>
+
+<div style="overflow:auto;">
+  <table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="text-align:left; border-bottom:1px solid #ccc; padding:.5rem;">Title</th>
+        <th style="text-align:left; border-bottom:1px solid #ccc; padding:.5rem;">Slug</th>
+        <th style="text-align:left; border-bottom:1px solid #ccc; padding:.5rem;">Open?</th>
+        <th style="text-align:left; border-bottom:1px solid #ccc; padding:.5rem;">Open Window</th>
+        <th style="text-align:left; border-bottom:1px solid #ccc; padding:.5rem;">Status</th>
+        <th style="text-align:left; border-bottom:1px solid #ccc; padding:.5rem;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ch in challenges %}
+      {% set is_active = (active_slug == ch.slug) %}
+      {% set open_now = open_now_fn(ch) %}
+      <tr>
+        <td style="padding:.5rem;">
+          <a href="/admin/lecture/{{ ch.slug }}" style="font-weight:600; text-decoration:none;">
+            {{ ch.title }}
+          </a>
+          {% if is_active %}
+            <span style="margin-left:.5rem; font-size:.75em; padding:.1rem .4rem; border:1px solid #4caf50; border-radius:999px; color:#4caf50;">Active</span>
+          {% endif %}
+        </td>
+        <td style="padding:.5rem; font-family:monospace;">{{ ch.slug }}</td>
+        <td style="padding:.5rem;">{{ "Yes" if ch.is_open else "No" }}</td>
+        <td style="padding:.5rem;">
+          {% if ch.open_at %}{{ ch.open_at }}{% else %}—{% endif %} → {% if ch.close_at %}{{ ch.close_at }}{% else %}—{% endif %}
+        </td>
+        <td style="padding:.5rem;">
+          {% if open_now %}
+            <span style="color:#4caf50;">Open now</span>
+          {% else %}
+            <span style="color:#f57c00;">Closed</span>
+          {% endif %}
+        </td>
+        <td style="padding:.5rem;">
+          <a href="/lecture/{{ ch.slug }}" target="_blank">View</a>
+          &nbsp;·&nbsp;
+          <a href="/admin/lecture/{{ ch.slug }}">Edit</a>
+          &nbsp;·&nbsp;
+
+          {% if is_active %}
+            <!-- already active; let Clear Active button (top) handle global clear -->
+            <span style="opacity:.7;">Activated</span>
+          {% else %}
+            <form action="/admin/lecture/{{ ch.slug }}/activate" method="post" style="display:inline;">
+              <button type="submit">Activate</button>
+            </form>
+          {% endif %}
+
+          &nbsp;·&nbsp;
+          <form action="/admin/lecture/{{ ch.slug }}/toggle-open" method="post" style="display:inline;">
+            <button type="submit">{{ "Close" if ch.is_open else "Open" }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+

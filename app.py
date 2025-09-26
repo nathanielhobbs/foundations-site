@@ -31,6 +31,7 @@ SECTION_REPOS = {
 app = Flask(__name__)
 # Bump cookie name so old cookies get ignored by the browser:
 app.config["SESSION_COOKIE_NAME"] = "foundations_sess_v2"
+app.config['SESSION_COOKIE_DOMAIN'] = os.environ.get('SESSION_COOKIE_DOMAIN') 
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = True   # keep True if you serve HTTPS
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=14)
@@ -106,9 +107,6 @@ assignments = [
 # Track socket id to netid/section
 socket_to_user = {}
 
-#def load_roster():
-#    return pd.read_csv(ROSTER_FILE)
-
 def load_roster():
     """
     Read the roster CSV and normalize to columns:
@@ -124,6 +122,12 @@ def load_roster():
 
     # Build a case-insensitive map of existing columns
     cmap = {c.lower().strip(): c for c in df.columns}
+
+    github_col = None
+    for cand in ["github username", "github", "github_user", "github_username"]:
+        if cand in cmap:
+            github_col = cmap[cand]
+            break
 
     def col(*names):
         for n in names:
@@ -189,77 +193,172 @@ def load_roster():
         out["section"] = df[sect_col]
     else:
         out["section"] = None
+    if github_col is not None:
+        out["github"] = df[github_col].astype(str).str.strip()
+    else:
+        out["github"] = ""
+
 
     # Lowercase index for fast lookups
     out["netid_lc"] = out["netid"].str.lower()
     return out
 
+def load_roster_raw():
+    return pd.read_csv(ROSTER_FILE)
+
+def save_roster_raw(df):
+    df.to_csv(ROSTER_FILE, index=False)
+
+def roster_row_for_netid(netid: str):
+    """Return (roster_df, row_df) using normalized headers."""
+    roster = load_roster()
+    row = roster.loc[roster["netid_lc"] == (netid or "").lower()]
+    return roster, row
+
+def section_from_row(row):
+    """Extract int section from a single-row DataFrame; return None if missing."""
+    if row.empty:
+        return None
+    sect = row.iloc[0].get("section")
+    try:
+        return int(sect)
+    except Exception:
+        return None
+
 def get_display_name(netid):
     """
-    Return 'First L.' if possible; else echo the netid.
+    Return 'First L.' (and Section if available), else fallback to netid.
     """
     try:
-        roster = load_roster()
-        if roster.empty:
+        roster, row = roster_row_for_netid(netid)
+        if row.empty:
             return netid
-        row = roster.loc[roster["netid_lc"] == (netid or "").lower()]
-        if not row.empty:
-            first = (row.iloc[0]["first"] or "").strip()
-            last  = (row.iloc[0]["last"] or "").strip()
-            if first or last:
-                last_initial = (last[:1] or "").upper()
-                return f"{first} {last_initial}.".strip()
+
+        first = (row.iloc[0].get("first") or "").strip()
+        last  = (row.iloc[0].get("last") or "").strip()
+        sect  = row.iloc[0].get("section")
+
+        # Build base name
+        if first or last:
+            last_initial = (last[:1] or "").upper()
+            name = f"{first} {last_initial}.".strip()
+        else:
+            name = netid
+
+        # Append section if present
+        if pd.notna(sect) and str(sect).strip() != "":
+            try:
+                return f"{name} (Section {int(sect)})"
+            except Exception:
+                return f"{name} (Section {sect})"
+
+        return name
     except Exception as e:
         print(f"Roster lookup failed for {netid}: {e}")
-
-    sect = row.iloc[0].get("section")
-    if sect not in (None, "", float("nan")):
-        return f"{first} {last_initial}. (Section {sect})"
-
-    return netid
-
-
-
-#def get_display_name(netid):
-#    """
-#    Return 'First L.' if possible; else echo the netid.
-#    """
-#    try:
-#        roster = load_roster()
-#        if roster.empty:
-#            return netid
-#        row = roster.loc[roster["netid_lc"] == (netid or "").lower()]
-#        if not row.empty:
-#            first = (row.iloc[0]["first"] or "").strip()
-#            last  = (row.iloc[0]["last"] or "").strip()
-#            if first or last:
-#                last_initial = (last[:1] or "").upper()
-#                return f"{first} {last_initial}.".strip()
-#    except Exception as e:
-#        print(f"Roster lookup failed for {netid}: {e}")
-#    return netid
+        return netid
 
 
 def save_roster(df):
     df.to_csv(ROSTER_FILE, index=False)
 
-def get_display_name(netid):
+def _is_open_now(ch):
+    now = datetime.now(est)
+    if not ch.is_open:
+        return False
+    if ch.open_at and now < (ch.open_at.astimezone(est) if ch.open_at.tzinfo else ch.open_at):
+        return False
+    if ch.close_at and now > (ch.close_at.astimezone(est) if ch.close_at.tzinfo else ch.close_at):
+        return False
+    return True
+
+# This just set a redis key, it doesn't touch the DB
+@app.post("/admin/lecture/<slug>/activate")
+def activate_lecture(slug):
+    # Require admin
+    if not session.get("is_admin"):
+        abort(403)
+    ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
+    r.set("lecture_challenge:active_slug", ch.slug)
+
     try:
-        roster = load_roster()
-        row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
-        if not row.empty:
-            first = row.iloc[0]["Full Name"].split(', ')[1].split()[0]
-            last_initial = row.iloc[0]["Full Name"][0]
-            #first = row.iloc[0]["First Name"]
-            #last_initial = row.iloc[0]["Last Name"][0] if pd.notna(row.iloc[0]["Last Name"]) else ""
-            section = row.iloc[0]["Section"]
-            return f"{first} {last_initial} (Section {section})"
+        socketio.emit(
+            "active_lecture_changed",
+            {"slug": ch.slug, "title": ch.title},
+            broadcast=True,
+        )
     except Exception as e:
-        print(f"Roster lookup failed for {netid}: {e}")
-    return netid  # fallback if not found
+        app.logger.warning(f"socketio emit failed: {e}")
 
+    # Optional: UX nicety if you use flashes; if not, harmless.
+    try:
+        flash(f'"{ch.title}" is now the active lecture challenge.', "success")
+    except Exception:
+        pass
 
+    # Redirect back to that challenge’s admin page if it exists
+    return redirect(f"/admin/lecture/{ch.slug}")
 
+# This just set a redis key, it doesn't touch the DB
+@app.post("/admin/lecture/clear-active")
+def clear_active_lecture():
+    if not session.get("is_admin"):
+        abort(403)
+    r.delete("lecture_challenge:active_slug")
+    try:
+        socketio.emit("active_lecture_changed", None, broadcast=True)
+    except Exception as e:
+        app.logger.warning(f"socketio emit failed: {e}")
+    try:
+        flash("Cleared active lecture challenge.", "info")
+    except Exception:
+        pass
+    return redirect("/admin/lecture/new")
+
+# --- Admin: list all lecture challenges ---
+@app.get("/admin/lecture/")
+def admin_lecture_index():
+    if not session.get("is_admin"):
+        abort(403)
+
+    # Fetch all, newest first
+    challenges = (LectureChallenge.query
+                  .order_by(LectureChallenge.created_at.desc())
+                  .all())
+
+    active_slug = None
+    try:
+        val = r.get("lecture_challenge:active_slug")
+        if val:
+            active_slug = val.decode("utf-8") if isinstance(val, (bytes, bytearray)) else str(val)
+    except Exception:
+        active_slug = None
+
+    # If you already defined _is_open_now elsewhere, reuse it.
+    def _open_now(ch):
+        return _is_open_now(ch) if "_is_open_now" in globals() else (
+            ch.is_open and
+            (ch.open_at is None or datetime.now(est) >= (ch.open_at.astimezone(est) if ch.open_at.tzinfo else ch.open_at)) and
+            (ch.close_at is None or datetime.now(est) <= (ch.close_at.astimezone(est) if ch.close_at.tzinfo else ch.close_at))
+        )
+
+    return render_template("admin_lecture_index.html",
+                           challenges=challenges,
+                           active_slug=active_slug,
+                           open_now_fn=_open_now)
+
+# --- Admin: toggle a challenge's is_open flag ---
+@app.post("/admin/lecture/<slug>/toggle-open")
+def toggle_open_lecture(slug):
+    if not session.get("is_admin"):
+        abort(403)
+    ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
+    ch.is_open = not bool(ch.is_open)
+    db.session.commit()
+    try:
+        flash(f'{"Opened" if ch.is_open else "Closed"} "{ch.title}".', "success")
+    except Exception:
+        pass
+    return redirect("/admin/lecture/")
 
 def list_notebooks_from_github(repo, folder="notebooks"):
     headers = {
@@ -370,7 +469,31 @@ def jinja_display_name(netid):
 def first10(s):
     return (s or "")[:10]
 
-# --- NEW: clear stale sessions if login epoch changed ---
+@app.before_request
+def enforce_canonical_host():
+    # Only enforce in production; relax for localhost and static/health
+    if app.debug or request.host.startswith("localhost") or request.path.startswith(("/healthz", "/static/")):
+        return
+    canonical = "foundations.hobbsresearch.com"
+    host = request.headers.get("X-Forwarded-Host") or request.host
+    if host != canonical:
+        url = request.url.replace(host, canonical, 1)
+        return redirect(url, code=301)
+
+
+@app.before_request
+def force_https_for_cookies():
+    # allow health checks and local dev to pass
+    if app.debug or request.host.startswith("localhost") or request.path.startswith(("/healthz", "/static/")):
+        return
+    # Honor proxy header (Nginx/ALB should set this)
+    proto = request.headers.get("X-Forwarded-Proto", "http")
+    if proto != "https":
+        url = request.url.replace("http://", "https://", 1)
+        return redirect(url, code=301)
+
+
+# clear stale sessions if login epoch changed ---
 @app.before_request
 def enforce_login_version():
     if request.path.startswith(("/static/", "/favicon", "/healthz")):
@@ -384,6 +507,60 @@ def enforce_login_version():
 @app.context_processor
 def inject_admin_netid():
     return dict(ADMIN_NETID=app.config.get("ADMIN_NETID", "admin"))
+
+@app.context_processor
+def inject_active_lecture():
+    """
+    Make an 'active_lecture' available to all templates.
+    Priority:
+      1) Redis override: lecture_challenge:active_slug
+      2) Fallback: most recently-created open challenge right now
+    """
+    try:
+        active_slug = r.get("lecture_challenge:active_slug")
+        if active_slug:
+            ch = LectureChallenge.query.filter_by(slug=active_slug).first()
+            if ch:
+                return {"active_lecture": {"slug": ch.slug, "title": ch.title}}
+        # Fallback: “best open” by created_at DESC
+        ch = (LectureChallenge.query
+              .order_by(LectureChallenge.created_at.desc())
+              .all())
+        for c in ch:
+            if _is_open_now(c):
+                return {"active_lecture": {"slug": c.slug, "title": c.title}}
+    except Exception:
+        pass
+    return {"active_lecture": None}
+
+@app.get("/_debug/roster_lookup")
+def _debug_roster_lookup():
+    if not session.get("is_admin"):
+        abort(403)
+    q = (request.args.get("netid") or "").strip().lower()
+    if not q:
+        return jsonify(error="Provide ?netid=..."), 400
+
+    roster = load_roster()
+    _, row = roster_row_for_netid(q)
+    if row.empty:
+        return jsonify(found=False, columns=list(roster.columns))
+
+    rec = row.iloc[0].to_dict()
+    return jsonify(found=True, record=rec, parsed_section=section_from_row(row))
+
+
+@app.get("/_debug/session")
+def debug_session():
+    if not session.get("is_admin"):
+        abort(403)
+    return jsonify(dict(
+        netid=session.get("netid"),
+        section=session.get("section"),
+        login_version=session.get("login_version"),
+        cookie_secure=app.config.get("SESSION_COOKIE_SECURE"),
+        samesite=app.config.get("SESSION_COOKIE_SAMESITE"),
+    ))
 
 
 @app.route("/login", methods=["POST"])
@@ -408,9 +585,11 @@ def login():
 
     # Student login
     roster = load_roster()
-    row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+    #row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+    _, row = roster_row_for_netid(netid) 
+    app.logger.info("LOGIN netid=%s row=%s", netid, ({} if row.empty else row.iloc[0].to_dict()))
     if not row.empty:
-        section = int(row.iloc[0]["Section"])
+        section = section_from_row(row) 
         session["is_admin"] = False
         session["section"] = section
         # --- stamp current login version ---
@@ -431,11 +610,13 @@ def notebooks():
         return redirect(url_for("index"))  # open modal on home
 
     roster = load_roster()  # missing before
-    row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+    #row = roster.loc[roster["netid_lc"] == netid.lower()]
+    #row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+    _, row = roster_row_for_netid(netid)
     if row.empty:
         return "NetID not found in roster", 403
-
-    section = int(row.iloc[0]["Section"])
+    section = section_from_row(row)
+    #section = int(row.iloc[0]["Section"])
     return render_template("notebooks.html", section=section, is_admin=False)
 
 @app.get("/chat")
@@ -654,8 +835,12 @@ def on_join(data):
 
     # Students: force their own section. Admins: allow desired override.
     roster = load_roster()
-    row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
-    user_section = str(row.iloc[0]["Section"]) if not row.empty else None
+    #row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+    #row = roster.loc[roster["netid_lc"] == netid.lower()]
+    #user_section = str(row.iloc[0]["Section"]) if not row.empty else None
+    _, row = roster_row_for_netid(netid)
+    user_section = str(section_from_row(row)) if not row.empty else None
+
 
     if flask_session.get("is_admin"):
         section = desired or user_section or ""
@@ -1128,10 +1313,10 @@ def assignments():
         roster = load_roster()
 
         # Check if student already linked
-        match = roster.loc[roster["NetID"] == netid]
-        if not match.empty and pd.notna(match.iloc[0]["GitHub Username"]):
-            github_username = match.iloc[0]["GitHub Username"]
-            section = match.iloc[0]["Section"]
+        _, match = roster_row_for_netid(netid)
+        if not match.empty and str(match.iloc[0].get("github") or "").strip():
+            github_username = str(match.iloc[0]["github"]).strip()
+            section = section_from_row(match)
 
             # ✅ Already linked → show assignments
             links = {
@@ -1154,13 +1339,24 @@ def assignments():
                 username = request.form["github_username"].strip()
                 if github_user_exists(username):
                     # Update roster
-                    idx = roster[roster["NetID"] == netid].index
+                    raw = load_roster_raw()
+                    cmap = {c.lower().strip(): c for c in raw.columns}
+                    net_col = cmap.get("netid") or cmap.get("net_id") or cmap.get("username")
+                    gh_col  = cmap.get("github username") or cmap.get("github") or "GitHub Username"
+
+                    if not net_col:
+                        return "Roster missing NetID column.", 500
+
+                    idx = raw[raw[net_col].astype(str).str.lower() == netid].index
                     if not idx.empty:
-                        roster.at[idx[0], "GitHub Username"] = username
-                        save_roster(roster)
+                        if gh_col not in raw.columns:
+                            raw[gh_col] = ""
+                        raw.at[idx[0], gh_col] = username
+                        save_roster_raw(raw)
                         return redirect(url_for("assignments"))
                     else:
-                        return "NetID not found in roster.", 400
+                        return "username not found in roster.", 400
+
                 else:
                     return "Invalid GitHub username.", 400
 
@@ -1688,10 +1884,16 @@ def api_notebooks():
         if not netid:
             return jsonify(success=False, error="Not logged in"), 403
         roster = load_roster()
-        row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+        _, row = roster_row_for_netid(netid)
         if row.empty:
             return jsonify(success=False, error="Roster match not found"), 403
-        section_str = str(int(row.iloc[0]["Section"]))
+        section_str = str(section_from_row(row))
+
+        #row = roster.loc[roster["NetID"].str.lower() == netid.lower()]
+        #row = roster.loc[roster["netid_lc"] == netid.lower()]
+        #if row.empty:
+        #    return jsonify(success=False, error="Roster match not found"), 403
+        #section_str = str(int(row.iloc[0]["Section"]))
 
     repo = SECTION_REPOS.get(section_str)
     if not repo:
