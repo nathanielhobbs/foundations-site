@@ -193,11 +193,18 @@ def load_roster():
         out["section"] = df[sect_col]
     else:
         out["section"] = None
-    if github_col is not None:
-        out["github"] = df[github_col].astype(str).str.strip()
-    else:
-        out["github"] = ""
+    #if github_col is not None:
+    #    out["github"] = df[github_col].astype(str).str.strip()
+    #else:
+    #    out["github"] = ""
 
+    if github_col is not None:
+        # Preserve real missing values; only strip strings
+        gh = df[github_col]
+        out["github"] = gh.apply(lambda x: x.strip() if isinstance(x, str) else x)
+    else:
+        # Keep as missing (same length as df)
+        out["github"] = pd.Series([pd.NA] * len(df))
 
     # Lowercase index for fast lookups
     out["netid_lc"] = out["netid"].str.lower()
@@ -1305,6 +1312,21 @@ def index():
 #
 #    except Exception as e:
 #        return f"<h2>Failed to load assignments</h2><pre>{e}</pre><p>Check GITHUB_TOKEN and GITHUB_ORG.</p>", 500
+def norm_section(s):
+    if s is None:
+        return None
+    s = str(s).strip()
+    # optional: drop leading zeros if you ever store "01"
+    return s.lstrip("0") or "0"
+
+def repo_exists(org: str, repo: str) -> bool:
+    # Lightweight existence check (no token needed)
+    url = f"https://github.com/{org}/{repo}"
+    try:
+        r = requests.get(url, timeout=5)
+        return r.status_code == 200
+    except Exception:
+        return False
 
 @app.route("/assignments", methods=["GET", "POST"])
 def assignments():
@@ -1312,38 +1334,19 @@ def assignments():
         netid = request.args.get("netid") or flask_session.get("netid") or "unknown"
         roster = load_roster()
 
-        # Check if student already linked
-        _, match = roster_row_for_netid(netid)
-        if not match.empty and str(match.iloc[0].get("github") or "").strip():
-            github_username = str(match.iloc[0]["github"]).strip()
-            section = section_from_row(match)
-
-            # ✅ Already linked → show assignments
-            links = {
-                "01": "https://classroom.github.com/a/link_for_01",
-                "02": "https://classroom.github.com/a/link_for_02",
-                "03": "https://classroom.github.com/a/link_for_03",
-                "04": "https://classroom.github.com/a/link_for_04",
-            }
-            return render_template("assignments.html",
-                                   username=github_username,
-                                   section=section,
-                                   invite_link=links.get(str(section)))
-
-        # If POST: student is submitting GitHub username
+        # --- POST handlers (unchanged logic) ---------------------------------
         if request.method == "POST":
             if "netid" in request.form:  # coming from modal login
                 session["netid"] = request.form["netid"].strip().lower()
                 return redirect(url_for("assignments"))
-            elif "github_username" in request.form:  # coming from GitHub username form
+
+            elif "github_username" in request.form:  # from GitHub username form
                 username = request.form["github_username"].strip()
                 if github_user_exists(username):
-                    # Update roster
                     raw = load_roster_raw()
                     cmap = {c.lower().strip(): c for c in raw.columns}
                     net_col = cmap.get("netid") or cmap.get("net_id") or cmap.get("username")
                     gh_col  = cmap.get("github username") or cmap.get("github") or "GitHub Username"
-
                     if not net_col:
                         return "Roster missing NetID column.", 500
 
@@ -1356,14 +1359,98 @@ def assignments():
                         return redirect(url_for("assignments"))
                     else:
                         return "username not found in roster.", 400
-
                 else:
                     return "Invalid GitHub username.", 400
 
-        # If GET and no GitHub username yet → show form
-        return render_template("enter_username.html", netid=netid)
-    except Exception as e:
+        # --- GET: figure out if this student already linked -------------------
+        _, match = roster_row_for_netid(netid)
+        github_username = None
+        section = None
+        if not match.empty:
+            gh = match.iloc[0].get("github")
+            if (not pd.isna(gh)) and str(gh).strip() and str(gh).strip().lower() != "nan":
+                github_username = str(gh).strip()
+                section = section_from_row(match)
+
+        # If no GitHub username yet → show form (same behavior as before)
+        if not github_username:
+            return render_template("enter_username.html", netid=netid)
+
+        # --- Build assignments list (multiple rows, per-section links) --------
+        # NOTE: put your real links here. You can add as many assignments as you want.
+        # Each item may specify invite links by section using 'invite_by_section'.
+        assignments = [
+            {
+                "slug": "a01",
+                "name": "Assignment1 – Functions/Strings/Lists",
+                "short": "Basics only: define/call functions; simple string ops; tuple/list basics.",
+                "due_utc": "Oct 8, 2025 03:59",
+                "sections": ["all"],        # visible to all sections or e.g. ["1","2"] not [1,2]
+                "released": True,
+                "template_repo": "https://github.com/hobbs-foundations-f25/a01-template",
+                "readme": "https://github.com/hobbs-foundations-f25/a01-template#readme",
+                "invite_by_section": {
+                    # fill the ones you actually use:
+                    "1": "https://classroom.github.com/a/HvPv3J5v",
+                    "2": "https://classroom.github.com/a/HvPv3J5v",
+                    "5": "https://classroom.github.com/a/HvPv3J5v",
+                    "6": "https://classroom.github.com/a/HvPv3J5v",
+                    "all":"https://classroom.github.com/a/HvPv3J5v",
+                },
+                # for acceptance detection
+                "org": "hobbs-foundations-f25",
+                "repo_prefix": "a01-template",
+            },
+            #{
+            #    "slug": "a02",
+            #    "name": "Assignment2 – Coming soon...",
+            #    "due_utc": None,
+            #    "sections": ["all"],
+            #    "released": False,
+            #    "invite_by_section": {},    # not released yet
+            #},
+        ]
+
+        # For each assignment, select the correct invite link for this student’s section.
+        # (Admins can still flip “Show all sections” in the UI; links remain per-student’s section.)
+        section = norm_section(section)
+        for a in assignments:
+            a["invite_link"] = None
+            ibs = a.get("invite_by_section") or {}
+            ibs_norm = {norm_section(k): v for k, v in ibs.items()}
+            a["invite_link"] = ibs_norm.get(section) or ibs_norm.get("all")
+            #if section and section in ibs:
+            #    a["invite_link"] = ibs[section]
+            #elif "all" in ibs:
+            #    a["invite_link"] = ibs["all"]
+
+        # --- Build user_repos (only if the GitHub repo actually exists) ------------
+        user_repos = {
+            "a01": f"https://github.com/hobbs-foundations-f25/a01-template-{github_username}"
+        }
+        #user_repos = {}
+        #for a in assignments:
+        #    org = a.get("org")
+        #    prefix = a.get("repo_prefix")
+        #    if org and prefix and github_username:
+        #        repo_name = f"{prefix}-{github_username}"  # Classroom default
+        #        if repo_exists(org, repo_name):
+        #            user_repos[a["slug"]] = f"https://github.com/{org}/{repo_name}"
+
+        # --- Admin flag for the template toggle --------------------------------
+        is_admin = bool(flask_session.get("is_admin"))
+
+        return render_template(
+            "assignments.html",              # use the per-assignment admin+copy template you installed
+            username=github_username,
+            section=section,
+            is_admin=is_admin,
+            assignments=assignments,
+            user_repos=user_repos,
+        )
+    except Exception:
         return f"<pre>{traceback.format_exc()}</pre>", 500
+
 
 def split_code_blocks(value):
     """

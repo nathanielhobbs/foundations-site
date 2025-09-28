@@ -1,12 +1,222 @@
 {% extends "base.html" %}
+{% if is_admin %}
+<pre class="text-xs opacity-70">
+section={{ section }}
+slugs={{ assignments | map(attribute='slug') | list }}
+user_repos={{ user_repos }}
+</pre>
+{% endif %}
+
 {% block title %}Assignments{% endblock %}
 {% block content %}
-<h1>You are set up with GitHub!</h1>
-<p>Your GitHub username is: <b><i>{{ username }}</b></i>. Your GitHub page is <a href="https://github.com/{{ username }}">here</a></p>
+<div class="container mx-auto max-w-5xl">
+  <h1 class="text-3xl font-bold mb-4">Assignments</h1>
 
-<br>
-<p>Currently, we don't have any assignments released.</p>
-<p>When we do, there will be a link you click to accept the assignment, which will place a copy in your GitHub</p>
-<!--<p>Section {{ section }}</p>
-<p><a href="{{ invite_link }}">Accept your assignment here</a></p>-->
-{% endblock %}   
+  {% if is_admin %}
+  <div class="mb-5 flex items-center gap-3 text-sm bg-amber-900/20 border border-amber-700 rounded-xl p-3">
+    <span class="font-semibold">Admin view</span>
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      {% set show_all = request.args.get('show') == 'all' %}
+      <input type="checkbox" id="toggleShowAll" {% if show_all %}checked{% endif %}>
+      <span>Show all sections</span>
+    </label>
+    <script>
+      (function () {
+        const cb = document.getElementById('toggleShowAll');
+        if (!cb) return;
+        cb.addEventListener('change', function () {
+          const url = new URL(window.location.href);
+          if (cb.checked) url.searchParams.set('show', 'all');
+          else url.searchParams.delete('show');
+          window.location.href = url.toString();
+        });
+      })();
+    </script>
+  </div>
+  {% endif %}
+
+  <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-4 mb-6">
+    <p class="mb-1">
+      GitHub: <strong><em>{{ username }}</em></strong>
+      • <a class="underline" href="https://github.com/{{ username }}" target="_blank" rel="noopener">profile</a>
+    </p>
+    {% if section %}<p class="text-sm opacity-80">Section {{ section }}</p>{% endif %}
+  </div>
+
+  <div class="overflow-x-auto mb-10">
+    <table class="w-full text-left border border-slate-700 rounded-xl overflow-hidden">
+      <colgroup>
+        <col class="w-[46%]">
+        <col class="w-[14%]">
+        <col class="w-[10%]">
+        <col class="w-[12%]">
+        <col class="w-[18%]">
+      </colgroup>
+      <thead class="bg-slate-800/70">
+        <tr>
+          <th class="px-4 py-3">Assignment</th>
+          <th class="px-4 py-3">Due (UTC)</th>
+          <th class="px-4 py-3">Sections</th>
+          <th class="px-4 py-3">Status</th>
+          <th class="px-4 py-3">Links</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set ns = namespace(any_visible=false) %}
+        {% set show_all = (is_admin and request.args.get('show') == 'all') %}
+        {% for a in assignments %}
+          {% set visible_to_section = (not a.sections) or (section and section in a.sections) or ('all' in a.sections) %}
+          {% if show_all or visible_to_section %}
+            {% set ns.any_visible = true %}
+            {% set repo_url = (user_repos and a.slug and user_repos.get(a.slug)) %}
+            <tr class="border-t border-slate-700">
+              <td class="px-4 py-4 align-top">
+                <div class="font-medium leading-snug">{{ a.name }}</div>
+                {% if a.short %}<div class="text-[0.92rem] opacity-80 mt-1 leading-relaxed">{{ a.short }}</div>{% endif %}
+              </td>
+              <td class="px-4 py-4 align-top whitespace-nowrap">{{ a.due_utc or "—" }}</td>
+              <td class="px-4 py-4 align-top">
+                {% if a.sections %}
+                  {% if 'all' in a.sections %}All{% else %}{{ a.sections | join(', ') }}{% endif %}
+                {% else %}
+                  All
+                {% endif %}
+              </td>
+              <td class="px-4 py-4 align-top">
+                {% if repo_url %}
+                  <span class="inline-block rounded-md px-2 py-1 text-xs bg-blue-700/60 border border-blue-600">Accepted</span>
+                {% elif a.released %}
+                  <span class="inline-block rounded-md px-2 py-1 text-xs bg-emerald-700/60 border border-emerald-600">Released</span>
+                {% else %}
+                  <span class="inline-block rounded-md px-2 py-1 text-xs bg-slate-700/60 border border-slate-600">Coming soon</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-4 align-top space-x-2 whitespace-nowrap">
+                {% if repo_url %}
+                  <a href="{{ repo_url }}" target="_blank" rel="noopener"
+                    class="inline-block px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 transition text-white text-sm">
+                    View on GitHub
+                  </a>
+                  <span class="inline-flex items-center border border-slate-600 rounded-lg overflow-hidden align-middle ml-1">
+                    <button type="button"
+                            class="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600"
+                            data-clone="ssh"
+                            data-repo-url="{{ repo_url }}"
+                            onclick="copyClone(this)">
+                      git clone command
+                    </button>
+		    <!--
+                    <button type="button"
+                            class="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 border-l border-slate-600"
+                            data-clone="https"
+                            data-repo-url="{{ repo_url }}"
+                            onclick="copyClone(this)">
+                      HTTPS
+                    </button>
+                    <button type="button"
+                            class="px-2 py-1 text-xs bg-emerald-700 hover:bg-emerald-600 border-l border-slate-600"
+                            data-clone="ssh"
+                            data-repo-url="{{ repo_url }}"
+                            title="Copy git clone">
+                      📋
+                    </button>
+		    -->
+                  </span>
+                {% elif a.released and a.invite_link %}
+                  <a href="{{ a.invite_link }}" target="_blank" rel="noopener"
+                    class="inline-block px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition text-white text-sm">
+                    Accept
+                  </a>
+                {% endif %}
+                <!--
+                {% if a.template_repo %}
+                  <a href="{{ a.template_repo }}" target="_blank" rel="noopener" class="underline text-sm">Assignment</a>
+                {% endif %}
+                {% if a.readme or a.docs %}
+                  <a href="{{ a.readme or a.docs }}" target="_blank" rel="noopener" class="underline text-sm">Instructions</a>
+                {% endif %}
+		-->
+              </td>
+            </tr>
+          {% endif %}
+        {% endfor %}
+        {% if not ns.any_visible %}
+          <tr><td colspan="5" class="px-4 py-6 text-center opacity-80">No assignments to show yet.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="text-xl font-semibold mb-3">How this works</h2>
+  <ol class="list-decimal ml-6 space-y-6">
+    <li>
+      <p class="mb-2">Find your <strong>Classroom Identifier</strong> on the page and click it to match your GitHub account.</p>
+      <figure class="rounded-xl overflow-hidden border border-slate-700">
+        <img src="{{ url_for('static', filename='img/hw_step_1.png') }}" alt="Step 1: Choose your classroom identifier" class="w-full">
+      </figure>
+      <p class="text-sm opacity-80 mt-2">Tip: Your identifier is the username provided on <em>foundations.hobbsresearch.com</em>. If you forget it, check your Canvas inbox.</p>
+    </li>
+
+    <li>
+      <p class="mb-2">After you accept, GitHub Classroom creates <strong>your personal repository</strong> for the assignment.</p>
+      <figure class="rounded-xl overflow-hidden border border-slate-700">
+        <img src="{{ url_for('static', filename='img/hw_step_2.png') }}" alt="Step 2: Personal repository created" class="w-full">
+      </figure>
+      <p class="text-sm opacity-80 mt-2">This is where you will push your work. The code lives on GitHub (remote), not just on your computer.</p>
+    </li>
+
+    <li>
+      <p class="mb-2">Open the repository and download it to your computer (<code>git clone</code>), then work locally and push changes.</p>
+      <figure class="rounded-xl overflow-hidden border border-slate-700">
+        <img src="{{ url_for('static', filename='img/hw_step_3.png') }}" alt="Step 3: Clone the repository from GitHub" class="w-full">
+      </figure>
+    </li>
+  </ol>
+
+  <div class="mt-8 bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+    <h3 class="text-lg font-semibold mb-2">Quick notes</h3>
+    <ul class="list-disc ml-6 space-y-1">
+      <li>Use SSH when cloning if you have an SSH key set up on GitHub; otherwise HTTPS is fine.</li>
+      <li>If your GitHub account is wrong, update it on the Foundations site or contact the instructor.</li>
+    </ul>
+  </div>
+</div>
+
+<div id="toast" class="hidden fixed bottom-4 right-4 bg-emerald-700 text-white px-3 py-2 rounded-lg shadow-lg text-sm"></div>
+
+<script>
+  function buildCloneURLs(repoUrl) {
+    try {
+      const u = new URL(repoUrl);
+      const parts = u.pathname.replace(/^\//, '').split('/');
+      const org = parts[0];
+      let repo = parts[1] || '';
+      repo = repo.replace(/\.git$/, '');
+      const path = org + '/' + repo + '.git';
+      return {
+        https: 'https://github.com/' + path,
+        ssh:   'git@github.com:' + path
+      };
+    } catch (e) { return { https: '', ssh: '' }; }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.remove('hidden');
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(() => t.classList.add('hidden'), 1800);
+  }
+
+  window.copyClone = function(btn) {
+    const repoUrl = btn.getAttribute('data-repo-url');
+    const mode = btn.getAttribute('data-clone') || 'ssh';
+    const urls = buildCloneURLs(repoUrl);
+    const text = 'git clone ' + (mode === 'https' ? urls.https : urls.ssh);
+    navigator.clipboard.writeText(text).then(() => showToast('Copied: ' + text))
+      .catch(() => showToast('Could not copy'));
+  };
+</script>
+{% endblock %}
+

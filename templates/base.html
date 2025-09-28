@@ -52,7 +52,7 @@
 	{% elif session.get("netid") %}
 	{% set sect = session.get('section') %}
 	  <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">
-	    Section {{ sect if sect is not none else "—" }}
+		  Hello, {{ netid }}, you are in Section {{ sect if sect is not none else "—" }}
 	  </span>
 	  <!-- Live-updating CTA container -->
 	  <span id="active-lecture-cta" style="margin-left: 1em;">
