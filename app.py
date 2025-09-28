@@ -1452,6 +1452,11 @@ def assignments():
         return f"<pre>{traceback.format_exc()}</pre>", 500
 
 
+@app.get("/screenshots")
+def screenshots_gallery():
+    return render_template("screenshots_gallery.html")
+
+
 def split_code_blocks(value):
     """
     Splits a string into a list of dicts: {type: 'code'|'text'|'inline_code', content: ...}

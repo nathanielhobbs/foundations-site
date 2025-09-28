@@ -1,25 +1,78 @@
-<!-- templates/tutorials/ssh.html -->
 {% extends "base.html" %}
-{% block title %}Generating SSH Keypairs{% endblock %}
+{% block title %}Generating SSH Keys for GitHub{% endblock %}
 {% block content %}
-<h1>Generating SSH Keypairs</h1>
+<div class="container mx-auto max-w-4xl">
+  <h1 class="text-3xl font-bold mb-4">Generating SSH Keys for GitHub</h1>
 
-<h2>What is an SSH Keypair?</h2>
-<p>An SSH keypair allows you to authenticate securely with GitHub and other services without entering your password each time. It consists of a private key (kept secret) and a public key (shared).</p>
+  <p class="mb-6 opacity-90">
+    SSH keys let you authenticate to GitHub without typing your password each time. You'll create a keypair on your computer,
+    add the <em>public</em> key to GitHub, and then verify the connection.
+  </p>
 
-<h2>Generate a Keypair</h2>
-<p>Open your terminal (or Git Bash on Windows) and run:</p>
-<pre><code>ssh-keygen -t rsa</code></pre>
-<p>Press Enter to accept the default save location. When prompted for a passphrase, just press Enter to skip.</p>
-<p>After this, you should have a folder .ssh in your home directory with a key pair: id_rsa (this is your PRIVATE key) and id_rsa.pub (your PUBLIC key). </p>
-<p><b>NEVER SHARE YOUR PRIVATE KEY!</b></b></p>
+  <div class="space-y-10">
+    <section class="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+      <h2 class="text-xl font-semibold mb-3">1) Create an SSH keypair</h2>
+      <p class="mb-3">Open your terminal (or Git Bash on Windows) and run:</p>
+      <pre class="bg-slate-900/60 rounded-lg p-3 overflow-x-auto"><code>ssh-keygen -t rsa</code></pre>
+      <p class="mt-3 text-sm opacity-90">Press <kbd>Enter</kbd> to accept the default save location. When prompted for a passphrase, you may leave it empty and press <kbd>Enter</kbd>.</p>
+      <figure class="mt-4 rounded-xl overflow-hidden border border-slate-700">
+        <img src="{{ url_for('static', filename='img/ssh/ssh_key_setup.png') }}" alt="Terminal creating an RSA SSH keypair and listing files in ~/.ssh" class="w-full">
+      </figure>
+      <p class="mt-2 text-sm opacity-80">
+        This creates two files in <code>~/.ssh</code>:
+        <strong>id_rsa</strong> (your <em>private</em> key — never share it) and <strong>id_rsa.pub</strong> (your <em>public</em> key — this is safe to share).
+      </p>
+    </section>
 
-<h2>Upload Your Public Key to GitHub</h2>
-<pre><code>cat ~/.ssh/id_rsa.pub</code></pre>
-<p>Copy the output, then visit <a href="https://github.com/settings/ssh/new">github.com/settings/ssh/new</a> and paste it in.</p>
+    <section class="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+      <h2 class="text-xl font-semibold mb-3">2) Copy your public key</h2>
+      <p class="mb-3">Print the public key and copy the entire line that begins with <code>ssh-rsa</code>:</p>
+      <pre class="bg-slate-900/60 rounded-lg p-3 overflow-x-auto"><code>cat ~/.ssh/id_rsa.pub</code></pre>
+    </section>
 
-<h2>Verify Setup</h2>
-<pre><code>ssh -T git@github.com</code></pre>
-<p>If everything is set up correctly, you’ll see a success message.</p>
+    <section class="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+      <h2 class="text-xl font-semibold mb-3">3) Add the key to GitHub</h2>
+      <ol class="list-decimal ml-6 space-y-3">
+        <li>Go to <a class="underline" href="https://github.com" target="_blank" rel="noopener">github.com</a> and sign in.</li>
+        <li>Open the user menu (top-right) and click <strong>Settings</strong>.</li>
+        <li>In the left sidebar, click <strong>SSH and GPG keys</strong>.</li>
+        <li>Click <strong>New SSH key</strong>, give it any name, and paste your public key.</li>
+      </ol>
+      <div class="grid md:grid-cols-2 gap-4 mt-4">
+        <figure class="rounded-xl overflow-hidden border border-slate-700">
+          <img src="{{ url_for('static', filename='img/ssh/github_ssh_copy1.png') }}" alt="GitHub dashboard" class="w-full">
+        </figure>
+        <figure class="rounded-xl overflow-hidden border border-slate-700">
+          <img src="{{ url_for('static', filename='img/ssh/github_ssh_copy2.png') }}" alt="Open user menu and click Settings" class="w-full">
+        </figure>
+        <figure class="rounded-xl overflow-hidden border border-slate-700">
+          <img src="{{ url_for('static', filename='img/ssh/github_ssh_copy3.png') }}" alt="Settings page - SSH and GPG keys" class="w-full">
+        </figure>
+        <figure class="rounded-xl overflow-hidden border border-slate-700">
+          <img src="{{ url_for('static', filename='img/ssh/github_ssh_copy4.png') }}" alt="SSH keys list - New SSH key button" class="w-full">
+        </figure>
+        <figure class="rounded-xl overflow-hidden border border-slate-700 md:col-span-2">
+          <img src="{{ url_for('static', filename='img/ssh/github_ssh_copy5.png') }}" alt="Add new SSH key form - paste public key" class="w-full">
+        </figure>
+      </div>
+    </section>
 
+    <section class="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+      <h2 class="text-xl font-semibold mb-3">4) Verify your connection</h2>
+      <p class="mb-3">Back in your terminal, test authentication:</p>
+      <pre class="bg-slate-900/60 rounded-lg p-3 overflow-x-auto"><code>ssh -T git@github.com</code></pre>
+      <p class="mt-2 text-sm opacity-90">A successful message looks like: <em>"Hi &lt;username&gt;! You've successfully authenticated, but GitHub does not provide shell access."</em></p>
+    </section>
+
+    <section class="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+      <h2 class="text-xl font-semibold mb-3">FAQ</h2>
+      <ul class="list-disc ml-6 space-y-2 text-sm opacity-90">
+        <li><strong>Where are my keys?</strong> <code>~/.ssh/id_rsa</code> (private) and <code>~/.ssh/id_rsa.pub</code> (public).</li>
+        <li><strong>Can I use ed25519 instead?</strong> Yes: <code>ssh-keygen -t ed25519</code>.</li>
+        <li><strong>Keep your private key safe.</strong> Never upload or email <code>id_rsa</code>.</li>
+      </ul>
+    </section>
+  </div>
+</div>
 {% endblock %}
+
