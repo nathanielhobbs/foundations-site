@@ -234,23 +234,17 @@ def section_from_row(row):
 
 def get_display_name(netid):
     """
-    Return 'First L.' (and Section if available), else fallback to netid.
+    Return 'netid' (and Section if available), else fallback to netid.
     """
     try:
         roster, row = roster_row_for_netid(netid)
         if row.empty:
             return netid
 
-        first = (row.iloc[0].get("first") or "").strip()
-        last  = (row.iloc[0].get("last") or "").strip()
         sect  = row.iloc[0].get("section")
 
         # Build base name
-        if first or last:
-            last_initial = (last[:1] or "").upper()
-            name = f"{first} {last_initial}.".strip()
-        else:
-            name = netid
+        name = netid
 
         # Append section if present
         if pd.notna(sect) and str(sect).strip() != "":

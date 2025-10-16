@@ -1,119 +1,307 @@
-{% extends 'base.html' %}
-{% block title %}Admin – {{ ch.title }}{% endblock %}
+{% extends "base.html" %}
+{% block title %}Admin · {{ ch.title }}{% endblock %}
+
 {% block content %}
-<h1>Admin: {{ ch.title }}
-  {% if active_lecture and active_lecture.slug == ch.slug %}
-    <span style="margin-left:.5rem; font-size:.7em; padding:.1rem .4rem; border:1px solid #4caf50; border-radius:999px; color:#4caf50; vertical-align:middle;">
-      Active
-    </span>
-  {% endif %}
-</h1>
+<h1 class="page-title">Lecture Admin — {{ ch.title }}</h1>
 
-<div style="margin: .5rem 0;">
-	  <label><input type="checkbox" id="isOpen" {% if ch.is_open %}checked{% endif %}> Accepting submissions</label>
-	  <label style="margin-left:1rem;"><input type="checkbox" id="showLB" {% if ch.show_leaderboard %}checked{% endif %}> Show leaderboard</label>
-	  <button id="saveSettings">Save</button>
-	  <button id="deleteChallenge" style="margin-left:1rem; border:1px solid #c33; background:#fff; color:#c33;">
-	  Delete
-	</button>
-	<form action="/admin/lecture/{{ ch.slug }}/activate" method="post" style="display:inline-block; margin-left:1rem;">
-	  <button type="submit">Set Active</button>
-	</form>
-	<form action="/admin/lecture/clear-active" method="post" style="display:inline-block; margin-left:.5rem;">
-	  <button type="submit">Clear Active</button>
-	</form>
-	{% if active_lecture and active_lecture.slug == ch.slug %}
-	  <span style="margin-left:.75rem; padding:.2rem .5rem; border:1px solid #4caf50; border-radius:999px; color:#4caf50;">
-	    Currently Active
-	  </span>
-	{% endif %}
-
-
+<div class="mb-3 flex items-center gap-3">
+  <label class="inline-flex items-center gap-1">
+    <input type="checkbox" id="toggleLeaderboard" {{ 'checked' if ch.show_leaderboard else '' }}>
+    <span>Show leaderboard on student page</span>
+  </label>
+  <span id="settingsStatus" class="text-sm text-muted"></span>
 </div>
 
-<table style="width:100%; border-collapse: collapse;">
-<thead>
-  <tr>
-    <th>Student</th>
-    <th>Submitted</th>
-    <th>Points</th>
-    <th>Decision</th>
-    <th>Feedback</th>
-    <th>Code / Output</th>
-    <th>Actions</th>
-  </tr>
-</thead>
-<tbody>
-  {% include 'admin_lecture_rows.html' %}
-</tbody>
+<!-- 3-column layout: Queue | Code/Output | Comment -->
+<div id="reviewShell"
+     style="display:grid; grid-template-columns: 320px 1fr 320px; gap:16px; align-items:stretch;">
 
-</table>
+  <!-- LEFT: Queue -->
+  <aside>
+    <div class="flex items-center gap-2 mb-2">
+      <select id="filterStatus" class="border rounded px-2 py-1">
+        <option value="">All</option>
+        <option value="pending" selected>Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+	<option value="replay">Replay</option>
+      </select>
+      <button id="refreshBtn" class="btn btn-secondary">Refresh</button>
+      <span id="queueStatus" class="text-sm text-muted"></span>
+    </div>
 
+    <ul id="queue" class="border rounded divide-y"
+        style="max-height: 78vh; overflow:auto; margin:0; padding:0; list-style:none;"></ul>
+  </aside>
+
+  <!-- MIDDLE: Code + Output (output visible by default) -->
+  <main id="reader" class="border rounded p-3" data-selected="" style="min-width:520px; overflow:hidden;">
+    <div class="flex items-center justify-between mb-2">
+      <div class="truncate">
+        <div class="text-sm text-muted">Submission</div>
+        <div class="text-lg font-semibold truncate">
+          <span id="readerNetid">—</span>
+          <span id="readerMeta" class="text-sm text-muted"></span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="approveBtn" class="btn btn-success">Approve (A)</button>
+        <button id="rejectBtn"  class="btn btn-danger">Reject (R)</button>
+	<label class="inline-flex items-center gap-1">
+	    <input type="checkbox" id="replayChk">
+	    <span>Public replay</span>
+	  </label>
+        <button id="prevBtn"    class="btn btn-secondary">Prev (K)</button>
+        <button id="nextBtn"    class="btn btn-primary">Next (J)</button>
+      </div>
+    </div>
+
+    <label class="block text-sm font-semibold mb-1">Code</label>
+    <pre id="codeBox" class="border rounded p-2"
+         style="height: 48vh; overflow:auto; white-space: pre; margin-bottom:10px;"></pre>
+
+    <label class="block text-sm font-semibold mb-1">Last run output</label>
+    <pre id="outputBox" class="border rounded p-2"
+         style="height: 24vh; overflow:auto; white-space: pre-wrap;"></pre>
+  </main>
+
+  <!-- RIGHT: Comment (autosaves) -->
+  <aside class="border rounded p-3" style="display:flex; flex-direction:column;">
+    <div class="text-lg font-semibold mb-2">Comment</div>
+    <textarea id="commentBox" class="border rounded w-full p-2" rows="12"
+              placeholder="Write brief feedback…"
+              style="flex:1; resize:vertical;"></textarea>
+    <div class="text-sm text-muted mt-2" id="saveStatus"></div>
+    <hr class="my-3">
+    <div class="text-sm text-muted">
+      <div><strong>Hotkeys</strong>: A=approve, R=reject, J=next, K=prev</div>
+    </div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
 <script>
-function patch(url, body){
-  return fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
-}
+	const toggleLeaderboard = document.getElementById('toggleLeaderboard');
+	const settingsStatus = document.getElementById('settingsStatus');
 
-document.getElementById('saveSettings').onclick = async ()=>{
-  const body = {
-    is_open: document.getElementById('isOpen').checked,
-    show_leaderboard: document.getElementById('showLB').checked,
-  };
-  const j = await patch(`/api/admin/lecture/{{ ch.slug }}/settings`, body);
-  alert(j.ok ? 'Saved' : 'Failed');
-};
-
-document.getElementById('deleteChallenge').onclick = async ()=>{
-  if(!confirm('Delete this challenge and all its submissions? This cannot be undone.')) return;
-  const r = await fetch('/api/admin/lecture/{{ ch.slug }}', { method:'DELETE' });
-  const j = await r.json().catch(()=>({}));
-  if (j.ok) { window.location.href = '/admin/lecture/new'; }
-  else { alert('Delete failed'); }
-};
-
-
-let POLL_PAUSED = false;
-function markDirty(){ POLL_PAUSED = true; }
-function clearDirtySoon(){ setTimeout(()=>{ POLL_PAUSED = false; }, 600); }
-
-function wireRowButtons(){
-  // mark dirty on any change
-  document.querySelectorAll('input, textarea').forEach(el=>{
-    el.addEventListener('input', markDirty);
-    el.addEventListener('change', markDirty);
-  });
-
-  Array.from(document.querySelectorAll('.saveRow')).forEach(btn=>{
-    btn.onclick = async ()=>{
-      const sid = btn.dataset.sid;
-      const row = btn.closest('tr');
-      const body = {
-        points: parseInt(row.querySelector('.points').value || '0'),
-        status: row.querySelector(`input[name="st_${sid}"]:checked`)?.value,
-        feedback: row.querySelector('.feedback')?.value || '',
-        public_replay: row.querySelector('.public').checked,
-      };
-      const j = await patch(`/api/admin/lecture/submission/${sid}`, body);
-      btn.textContent = j.ok ? 'Saved ✓' : 'Error';
-      if(j.ok){
-        row.style.background='rgba(0,255,0,.06)';
-        setTimeout(()=>row.style.background='transparent',600);
-        POLL_PAUSED = false;
-        reloadAdminTable(); // get the server-truth immediately
-      }
-    };
-  });
-}
-wireRowButtons();
-
-async function reloadAdminTable(){
-  if (POLL_PAUSED) return;
-  const r = await fetch(window.location.pathname + '?partial=1');
-  const html = await r.text();
-  const tbody = document.querySelector('tbody');
-  if (tbody && html.trim()) { tbody.innerHTML = html; wireRowButtons(); }
-}
-setInterval(reloadAdminTable, 10000);
+	toggleLeaderboard.addEventListener('change', async ()=>{
+	  settingsStatus.textContent = 'Saving…';
+	  const res = await fetch(`/api/admin/lecture/{{ ch.slug }}/settings`, {
+	    method:'PATCH',
+	    headers:{'Content-Type':'application/json'},
+	    body: JSON.stringify({ show_leaderboard: toggleLeaderboard.checked })
+	  });
+	  const ok = (await res.json()).ok;
+	  settingsStatus.textContent = ok ? 'Saved ✓' : 'Save failed';
+	  if (ok) setTimeout(()=> settingsStatus.textContent = '', 800);
+	});
 </script>
 
+<script>
+(function(){
+  const slug = {{ ch.slug|tojson }};
+
+  const queueEl      = document.getElementById('queue');
+  const readerEl     = document.getElementById('reader');
+  const readerNetid  = document.getElementById('readerNetid');
+  const readerMeta   = document.getElementById('readerMeta');
+  const codeBox      = document.getElementById('codeBox');
+  const outputBox    = document.getElementById('outputBox');
+  const filterSel    = document.getElementById('filterStatus');
+  const refreshBtn   = document.getElementById('refreshBtn');
+  const queueStatus  = document.getElementById('queueStatus');
+  const approveBtn   = document.getElementById('approveBtn');
+  const rejectBtn    = document.getElementById('rejectBtn');
+  const nextBtn      = document.getElementById('nextBtn');
+  const prevBtn      = document.getElementById('prevBtn');
+  const commentBox   = document.getElementById('commentBox');
+  const saveStatus   = document.getElementById('saveStatus');
+
+  let items = [];   // [{id, netid, status, comment, created_at}, ...] asc by created_at
+  let selectedId = null;
+
+  function iconFor(status){
+    return status === 'approved' ? '✅' : (status === 'rejected' ? '❌' : '⏳');
+  }
+  function setQueueStatus(m){ queueStatus.textContent = m || ''; }
+  function setSaveStatus(m){ saveStatus.textContent = m || ''; }
+
+  async function fetchQueue(){
+    const qs = new URLSearchParams();
+    if (filterSel.value) qs.set('status', filterSel.value);
+    const res = await fetch(`/api/admin/lecture/${slug}/submissions?`+qs.toString());
+    const data = await res.json();
+    if (!data.ok) throw new Error('Queue fetch failed');
+    items = (data.items||[]).sort((a,b)=> a.created_at.localeCompare(b.created_at));
+    renderQueue();
+  }
+
+  function renderQueue(){
+	  const keep = selectedId || readerEl.dataset.selected || null;
+	  queueEl.innerHTML = items.map((s, idx) => {
+	    const isSel = (String(s.id) === String(keep));
+	    const when = new Date(s.created_at).toLocaleString();
+	    const sec = s.section ? ` (Sec ${s.section})` : '';
+	    // one-line preview of feedback, trimmed
+	    const preview = (s.comment || '').split('\n')[0];
+	    const trimmed = preview.length > 120 ? preview.slice(0, 120) + '…' : preview;
+	    const replay = s.public_replay ? ' <span title="Public replay">▶︎</span>' : '';
+
+	    return `<li data-sid="${s.id}" style="padding:8px; cursor:pointer; ${isSel ? 'background:#eef6ff;' : ''}">
+	      <div class="flex items-center justify-between">
+		<div class="truncate">
+		  <span class="text-muted">${idx+1}.</span>
+		  ${iconFor(s.status)} <strong>${s.netid}</strong><span class="text-muted">${sec}</span>
+		</div>
+		<div class="text-xs text-muted">#${s.id}</div>
+	      </div>
+	      ${ trimmed ? `<div class="text-xs text-muted mt-1 truncate" title="${preview.replace(/"/g,'&quot;')}">${trimmed}</div>` : '' }
+	      <div class="text-xs text-muted">${when}</div>
+	    </li>`;
+	  }).join('');
+	}
+
+
+  const replayChk = document.getElementById('replayChk');
+
+	async function setReplay(sid, value){
+	  setSaveStatus('Saving…');
+	  const res = await fetch(`/api/admin/lecture/submission/${sid}`, {
+	    method:'PATCH',
+	    headers:{'Content-Type':'application/json'},
+	    body: JSON.stringify({ public_replay: !!value })
+	  });
+	  const ok = (await res.json()).ok;
+	  if (ok){
+	    const row = items.find(x=>String(x.id)===String(sid));
+	    if (row) row.public_replay = !!value;
+	    renderQueue(); // refresh icons/previews
+	    setSaveStatus('Saved ✓'); setTimeout(()=>setSaveStatus(''), 700);
+	  } else setSaveStatus('Save failed');
+	}
+
+	replayChk.addEventListener('change', ()=> {
+	  if (selectedId) setReplay(selectedId, replayChk.checked);
+	});
+
+  async function loadSubmission(sid){
+    try{
+      const res = await fetch(`/api/lecture/submission/${sid}/replay`);
+      const data = await res.json();
+      if (!data.ok) throw new Error('Load failed');
+      selectedId = sid;
+      readerEl.dataset.selected = sid;
+      const row = items.find(x=>String(x.id)===String(sid)) || {};
+      replayChk.checked = !!row.public_replay;
+      readerNetid.textContent = row.netid || '—';
+      readerMeta.textContent  = ` · id ${sid} · ${row.status||''}`;
+      codeBox.textContent     = data.code || '';
+      outputBox.textContent   = data.run_output || '';
+      commentBox.value        = row.comment || '';
+
+      // keep highlight
+      [...queueEl.querySelectorAll('li')].forEach(li=>{
+        li.style.background = (li.dataset.sid === String(sid)) ? '#eef6ff' : '';
+      });
+    }catch(e){ console.error(e); }
+  }
+
+  function neighbor(delta){
+    if (!items.length) return null;
+    if (!selectedId){ return items[0]?.id || null; }
+    const idx = items.findIndex(x=>String(x.id)===String(selectedId));
+    const j = Math.min(items.length-1, Math.max(0, idx + delta));
+    return items[j]?.id || null;
+  }
+
+  async function setStatus(sid, status){
+    setSaveStatus('Saving…');
+    const res = await fetch(`/api/admin/lecture/submission/${sid}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ status })
+    });
+    const ok = (await res.json()).ok;
+    if (ok){
+      const row = items.find(x=>String(x.id)===String(sid));
+      if (row){ row.status = status; }
+      renderQueue();
+      setSaveStatus('Saved ✓'); setTimeout(()=>setSaveStatus(''), 700);
+    } else setSaveStatus('Save failed');
+  }
+
+  // debounced comment save (autosave)
+  let commentTimer = null;
+  function scheduleCommentSave(){
+    if (!selectedId) return;
+    clearTimeout(commentTimer);
+    commentTimer = setTimeout(async ()=>{
+      setSaveStatus('Saving…');
+      const res = await fetch(`/api/admin/lecture/submission/${selectedId}`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ comment: commentBox.value })
+      });
+      const ok = (await res.json()).ok;
+      if (ok){
+        const row = items.find(x=>String(x.id)===String(selectedId));
+        if (row) row.comment = commentBox.value;
+	renderQueue()
+        setSaveStatus('Saved ✓'); setTimeout(()=>setSaveStatus(''), 700);
+      } else setSaveStatus('Save failed');
+    }, 400);
+  }
+
+  // events
+  queueEl.addEventListener('click', (e)=>{
+    const li = e.target.closest('li[data-sid]');
+    if (!li) return;
+    loadSubmission(li.dataset.sid);
+  });
+  approveBtn.addEventListener('click', ()=> { if (selectedId) setStatus(selectedId, 'approved'); });
+  rejectBtn .addEventListener('click', ()=> { if (selectedId) setStatus(selectedId, 'rejected'); });
+  nextBtn   .addEventListener('click', ()=> { const id = neighbor(+1); if (id) loadSubmission(id); });
+  prevBtn   .addEventListener('click', ()=> { const id = neighbor(-1); if (id) loadSubmission(id); });
+  commentBox.addEventListener('input', scheduleCommentSave);
+  filterSel.addEventListener('change', async ()=>{ await fetchQueue(); if (!selectedId && items.length) loadSubmission(items[0].id); });
+  refreshBtn.addEventListener('click', fetchQueue);
+
+  // Hotkeys: A/R/J/K
+  window.addEventListener('keydown', (e)=>{
+    if (['INPUT','TEXTAREA'].includes((e.target||{}).tagName)) return;
+    if (e.key.toLowerCase()==='a'){ if (selectedId) setStatus(selectedId, 'approved'); }
+    if (e.key.toLowerCase()==='r'){ if (selectedId) setStatus(selectedId, 'rejected'); }
+    if (e.key.toLowerCase()==='j'){ const id = neighbor(+1); if (id) loadSubmission(id); }
+    if (e.key.toLowerCase()==='k'){ const id = neighbor(-1); if (id) loadSubmission(id); }
+  });
+
+  // quiet poll
+  async function poll(){
+    const oldScroll = queueEl.scrollTop;
+    const keep = selectedId;
+    try{
+      await fetchQueue();
+      if (keep){
+        [...queueEl.querySelectorAll('li')].forEach(li=>{
+          li.style.background = (li.dataset.sid === String(keep)) ? '#eef6ff' : '';
+        });
+      }
+      queueEl.scrollTop = oldScroll;
+      setQueueStatus('');
+    }catch(e){
+      console.warn(e);
+      setQueueStatus('Refresh failed');
+    }finally{
+      setTimeout(poll, 5000);
+    }
+  }
+
+  // boot
+  (async ()=>{
+    await fetchQueue();
+    if (items.length) loadSubmission(items[0].id);
+    poll();
+  })();
+})();
+</script>
 {% endblock %}
+

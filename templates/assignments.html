@@ -147,31 +147,46 @@ user_repos={{ user_repos }}
     </table>
   </div>
 
-  <h2 class="text-xl font-semibold mb-3">How this works</h2>
-  <a class="underline text-sm" href="{{ url_for('screenshots_gallery') }}">Open screenshot gallery</a>
+  <!-- <h2 class="text-xl font-semibold mb-3">How this works</h2> -->
+  <a class="underline text-sm" href="{{ url_for('screenshots_gallery') }}">Open screenshot gallery for step by step guide</a>
 
   <ol class="list-decimal ml-6 space-y-6">
+	<li>
+  	<a href="https://classroom.github.com/a/HvPv3J5v">Accept Assignment 1 on Github</a>
+	</li>
     <li>
-      <p class="mb-2">Find your <strong>Classroom Identifier</strong> on the page and click it to match your GitHub account.</p>
+      <p class="mb-4">(Only once/semester) Find your <strong>Classroom Identifier</strong> on the page and click it to match your GitHub account.</p>
+      <!--
       <figure class="rounded-xl overflow-hidden border border-slate-700">
         <img src="{{ url_for('static', filename='img/hw_step_1.png') }}" alt="Step 1: Choose your classroom identifier" class="w-full">
       </figure>
+      -->
       <p class="text-sm opacity-80 mt-2">Tip: Your identifier is the username provided on <em>foundations.hobbsresearch.com</em>. If you forget it, check your Canvas inbox.</p>
     </li>
 
     <li>
-      <p class="mb-2">After you accept, GitHub Classroom creates <strong>your personal repository</strong> for the assignment.</p>
+      <p class="mb-2">(Once/Assignment) After you accept, GitHub Classroom creates <strong>your personal repository</strong> for the assignment.</p>
+      <!--
       <figure class="rounded-xl overflow-hidden border border-slate-700">
         <img src="{{ url_for('static', filename='img/hw_step_2.png') }}" alt="Step 2: Personal repository created" class="w-full">
       </figure>
-      <p class="text-sm opacity-80 mt-2">This is where you will push your work. The code lives on GitHub (remote), not just on your computer.</p>
+      -->
+      <p class="text-sm opacity-80 mt-2">This is where you will push your work. The code lives on GitHub (remote), not on your computer (local).</p>
     </li>
 
     <li>
-      <p class="mb-2">Open the repository and download it to your computer (<code>git clone</code>), then work locally and push changes.</p>
+	    <p class="mb-2">Open the repository on GitHub and download it to your computer (<code>git clone ...</code>)      <!--
       <figure class="rounded-xl overflow-hidden border border-slate-700">
         <img src="{{ url_for('static', filename='img/hw_step_3.png') }}" alt="Step 3: Clone the repository from GitHub" class="w-full">
       </figure>
+      -->
+    </li>
+    <li>
+       Work locally (probably editing in VSCode).
+
+    </li>
+    <li>
+	When you're ready to submit, push changes to the remote (<code>git add ...</code>/<code>git commit -m "..."</code>/<code>git push</code>).</p>
     </li>
   </ol>
 
@@ -179,7 +194,15 @@ user_repos={{ user_repos }}
     <h3 class="text-lg font-semibold mb-2">Quick notes</h3>
     <ul class="list-disc ml-6 space-y-1">
       <li>Use SSH when cloning if you have an SSH key set up on GitHub; otherwise HTTPS is fine.</li>
+      <li>You need <a href="tutorials/ssh">SSH keys</a> set up to push to GitHub.</li>
       <li>If your GitHub account is wrong, update it on the Foundations site or contact the instructor.</li>
+      <li>
+	      If when you're pushing you get a message about missing name/email, run these commands from the terminal, and then redo the push.
+	      <pre><code>
+		      git config --global user.name "Your Name"
+	              git config --global user.email "you@example.com"
+	      </code></pre>
+      </li>
     </ul>
   </div>
 </div>

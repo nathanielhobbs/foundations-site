@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Screenshot Gallery{% endblock %}
+{% block content %}
+<div class="container mx-auto max-w-6xl">
+  <h1 class="text-3xl font-bold mb-4">Screenshot Gallery</h1>
+  <p class="opacity-80 mb-6">Click any image to view it larger. Use ESC or click outside to close.</p>
+
+  <!-- Accepting an assignment -->
+  <section class="mb-10">
+    <h2 class="text-xl font-semibold mb-3">Accepting a GitHub Classroom assignment</h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <img src="{{ url_for('static', filename='img/hw_step_1.png') }}" alt="Step 1 – Choose classroom identifier" class="rounded-lg border border-slate-700 cursor-zoom-in" onclick="openLightbox(this)">
+      <img src="{{ url_for('static', filename='img/hw_step_2.png') }}" alt="Step 2 – Personal repo created" class="rounded-lg border border-slate-700 cursor-zoom-in" onclick="openLightbox(this)">
+      <img src="{{ url_for('static', filename='img/hw_step_3.png') }}" alt="Step 3 – Clone the repo" class="rounded-lg border border-slate-700 cursor-zoom-in" onclick="openLightbox(this)">
+    </div>
+  </section>
+
+  <!-- SSH setup -->
+  <section class="mb-10">
+    <h2 class="text-xl font-semibold mb-3">Setting up SSH for GitHub</h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <img src="{{ url_for('static', filename='img/ssh/ssh_key_setup.png') }}" alt="Generate SSH keys" class="rounded-lg border border-slate-700 cursor-zoom-in" onclick="openLightbox(this)">
+      <img src="{{ url_for('static', filename='img/ssh/github_ssh_copy1.png') }}" alt="GitHub dashboard" class="rounded-lg border border-slate-700 cursor-zoom-in" onclick="openLightbox(this)">
+      <img src="{{ url_for('static', filename='img/ssh/github_ssh_copy2.png') }}" alt="Open user menu → Settings" class="rounded-lg border border-slate-700 cursor-zoom-in" onclick="openLightbox(this)">
+      <img src="{{ url_for('static', filename='img/ssh/github_ssh_copy3.png') }}" alt="Settings → SSH and GPG keys" class="rounded-lg border border-slate-700 cursor-zoom-in" onclick="openLightbox(this)">
+      <img src="{{ url_for('static', filename='img/ssh/github_ssh_copy4.png') }}" alt="SSH keys list" class="rounded-lg border border-slate-700 cursor-zoom-in" onclick="openLightbox(this)">
+      <img src="{{ url_for('static', filename='img/ssh/github_ssh_copy5.png') }}" alt="Add new SSH key" class="rounded-lg border border-slate-700 cursor-zoom-in" onclick="openLightbox(this)">
+    </div>
+  </section>
+</div>
+
+<!-- Lightbox modal -->
+<div id="lb" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50" onclick="closeLightbox(event)">
+  <img id="lbimg" src="" alt="" class="max-h-[90vh] max-w-[95vw] rounded-lg shadow-2xl">
+  <button id="lbclose" class="absolute top-4 right-4 text-white text-2xl" aria-label="Close">✕</button>
+</div>
+
+<script>
+  function openLightbox(img) {
+    const lb = document.getElementById('lb');
+    const lbimg = document.getElementById('lbimg');
+    lbimg.src = img.src;
+    lbimg.alt = img.alt || '';
+    lb.classList.remove('hidden');
+    document.addEventListener('keydown', onEsc);
+  }
+  function onEsc(e) { if (e.key === 'Escape') closeLightbox(e); }
+  function closeLightbox(e) {
+    const lb = document.getElementById('lb');
+    if (e && (e.target.id === 'lb' || e.target.id === 'lbclose' || e.key === 'Escape')) {
+      lb.classList.add('hidden');
+      document.removeEventListener('keydown', onEsc);
+    }
+  }
+</script>
+{% endblock %}

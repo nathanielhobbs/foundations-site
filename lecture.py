@@ -93,6 +93,10 @@ def refresh_roster_cache():
     _roster_map.cache_clear()
     _roster_map()
 
+def section_for_netid(netid: str) -> str:
+    info = _roster_map().get((netid or "").lower()) or {}
+    return (info.get("section") or "").strip()
+
 
 def require_login(func):
     from functools import wraps
@@ -118,8 +122,8 @@ def is_admin_current_user() -> bool:
 def view_lecture(slug):
     ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
     netid = session['netid']
-    display = lookup_display_name(netid)
-    return render_template('lecture_challenge.html', ch=ch, netid=netid, display_name=display)
+    # display = lookup_display_name(netid)
+    return render_template('lecture_challenge.html', ch=ch, netid=netid, display_name=netid)#display)
 
 @lecture_bp.post('/api/lecture/<slug>/submit')
 @require_login
@@ -136,7 +140,7 @@ def submit_lecture(slug):
         sub = LectureSubmission(
             challenge_id=ch.id,
             netid=session['netid'],
-            display_name=lookup_display_name(session['netid']),
+            display_name=session['netid'],#lookup_display_name(session['netid']),
             code=code,
             keystrokes_json=data.get('keystrokes'),
             run_output=data.get('run_output'),
@@ -170,7 +174,7 @@ def lecture_leaderboard(slug):
 #            .limit(100).all())
 
     return jsonify({"ok": True, "entries": [
-        {"display_name": public_display_name(r.netid, include_section=False), "points": r.points, "submitted_at": r.created_at.isoformat(), "submission_id": r.id}
+        {"display_name": r.netid, "submitted_at": r.created_at.isoformat(), "submission_id": r.id}
         for r in rows
     ]})
 
@@ -194,22 +198,72 @@ def my_status(slug):
         "updated_at": sub.created_at.isoformat(),
     })
 
-
 @lecture_bp.get('/api/lecture/<slug>/replays')
-@require_login
-def lecture_replays(slug):
+def list_public_replays(slug):
     ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
-    q = LectureSubmission.query.filter_by(challenge_id=ch.id, public_replay=True)
-    # honor status column if present, else fall back to approved flag
+
+    q = (LectureSubmission.query
+         .filter(LectureSubmission.challenge_id == ch.id))
+
+    # require public replay flag if the column exists
+    if hasattr(LectureSubmission, 'public_replay'):
+        q = q.filter(LectureSubmission.public_replay.is_(True))
+
+    # optionally require approved
     if hasattr(LectureSubmission, 'status'):
         q = q.filter(LectureSubmission.status == 'approved')
-    else:
+    elif hasattr(LectureSubmission, 'approved'):
         q = q.filter(LectureSubmission.approved.is_(True))
-    rows = q.order_by(LectureSubmission.created_at.asc()).all()
-    return jsonify({"ok": True, "items": [
-        {"submission_id": r.id, "display_name": public_display_name(r.netid, include_section=False), "submitted_at": r.created_at.isoformat()}
-        for r in rows
-    ]})
+
+    rows = (q.order_by(LectureSubmission.created_at.desc())
+              .limit(100)
+              .all())
+
+    return jsonify({
+        "ok": True,
+        "items": [
+            {
+                "submission_id": s.id,
+                "netid": s.netid,          # show netid only
+                "submitted_at": s.created_at.isoformat(),
+            } for s in rows
+        ]
+    })
+
+@lecture_bp.get('/lecture/submission/<int:sid>')
+def view_public_replay(sid):
+    sub = LectureSubmission.query.get_or_404(sid)
+
+    # Only show if it’s actually published (and approved if you require that)
+    if hasattr(sub, 'public_replay') and not sub.public_replay:
+        abort(404)
+    if hasattr(sub, 'status') and sub.status != 'approved':
+        abort(404)
+    if hasattr(sub, 'approved') and not sub.approved:
+        abort(404)
+
+    return render_template(
+        'lecture_replay.html',
+        sub=sub,                      # has .netid, .code, .run_output, .created_at
+        slug=sub.challenge.slug if hasattr(sub, 'challenge') else None
+    )
+
+
+#@lecture_bp.get('/api/lecture/<slug>/replays')
+#@require_login
+#def lecture_replays(slug):
+#    ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
+#    q = LectureSubmission.query.filter_by(challenge_id=ch.id, public_replay=True)
+#    # honor status column if present, else fall back to approved flag
+#    if hasattr(LectureSubmission, 'status'):
+#        q = q.filter(LectureSubmission.status == 'approved')
+#    else:
+#        q = q.filter(LectureSubmission.approved.is_(True))
+#    rows = q.order_by(LectureSubmission.created_at.asc()).all()
+#    return jsonify({"ok": True, "items": [
+#        {"submission_id": r.id, "display_name": r.netid, "submitted_at": r.created_at.isoformat()}
+#        for r in rows
+#    ]})
 
 
 @lecture_bp.get('/api/lecture/submission/<int:sid>/replay')
@@ -224,7 +278,7 @@ def get_replay(sid):
         "code": sub.code,
         "keystrokes": sub.keystrokes_json,
         "run_output": sub.run_output,
-        "meta": {"display_name": sub.display_name, "submitted_at": sub.created_at.isoformat(), "language": sub.language}
+        "meta": {"display_name": sub.netid, "submitted_at": sub.created_at.isoformat(), "language": sub.language}
     })
 
 # === Admin views/APIs ===
@@ -367,6 +421,101 @@ def admin_lecture(slug):
     if request.args.get('partial') == '1':
         return render_template('admin_lecture_rows.html', subs=subs)
     return render_template('admin_lecture.html', ch=ch, subs=subs)
+
+@lecture_bp.get('/api/admin/lecture/<slug>/submissions')
+def admin_list_submissions(slug):
+    if not is_admin_current_user():
+        abort(403)
+    ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
+
+    q = (LectureSubmission.query
+         .filter_by(challenge_id=ch.id)
+         .order_by(LectureSubmission.created_at.asc()))
+
+    status = request.args.get('status')
+    if status == 'replay':
+        q = q.filter(LectureSubmission.public_replay.is_(True))
+    if status in ('pending', 'approved', 'rejected'):
+        if hasattr(LectureSubmission, 'status'):
+            q = q.filter(LectureSubmission.status == status)
+        else:
+            if status == 'pending':
+                q = q.filter(LectureSubmission.approved.is_(False))
+            elif status == 'approved':
+                q = q.filter(LectureSubmission.approved.is_(True))
+            else:
+                q = q.filter(LectureSubmission.approved.is_(False))
+
+    rows = q.all()
+    def row_status(s):
+        if hasattr(s, 'status'):
+            return s.status or 'pending'
+        return 'approved' if s.approved else 'pending'
+
+    def row_comment(s):
+        # be flexible about column name (comment/feedback/notes)
+        for attr in ('comment', 'feedback', 'feedback_text', 'notes'):
+            if hasattr(s, attr):
+                return getattr(s, attr) or ''
+        return ''
+
+    return jsonify({
+        "ok": True,
+        "items": [{
+            "id": s.id,
+            "netid": s.netid,
+            "section": section_for_netid(s.netid),
+            "status": row_status(s),
+            "public_replay": bool(getattr(s, 'public_replay', False)),
+            "comment": row_comment(s),
+            "created_at": s.created_at.isoformat(),
+        } for s in rows]
+    })
+
+@lecture_bp.patch('/api/admin/lecture/submission/<int:sid>')
+def admin_patch_submission(sid):
+    if not is_admin_current_user():
+        abort(403)
+    sub = LectureSubmission.query.get_or_404(sid)
+    data = request.get_json(force=True) or {}
+
+    # status → approved/rejected/pending mapping
+    if 'status' in data:
+        s = (data['status'] or '').lower()
+        if hasattr(sub, 'status'):
+            if s in ('approved','rejected','pending'):
+                sub.status = s
+        else:
+            if s == 'approved':
+                sub.approved = True
+            elif s == 'rejected':
+                sub.approved = False
+            elif s == 'pending':
+                sub.approved = False
+
+        # optional: auto toggle public_replay on approve
+        if s == 'approved' and hasattr(sub, 'public_replay'):
+            sub.public_replay = True
+
+    if 'public_replay' in data and hasattr(sub, 'public_replay'):
+        sub.public_replay = bool(data['public_replay'])
+
+    # comment/feedback/notes (write to whichever field exists)
+    if 'comment' in data:
+        val = (data['comment'] or '').strip()
+        written = False
+        for attr in ('comment', 'feedback', 'feedback_text', 'notes'):
+            if hasattr(sub, attr):
+                setattr(sub, attr, val)
+                written = True
+                break
+        if not written:
+            # fall back to run_output suffix (last resort; remove if undesired)
+            if hasattr(sub, 'run_output'):
+                sub.run_output = (sub.run_output or '') + f"\n\n[ADMIN COMMENT]\n{val}"
+
+    db.session.commit()
+    return jsonify({"ok": True})
 
 #@lecture_bp.patch('/api/admin/lecture/submission/<int:sid>')
 #def admin_update_submission(sid):

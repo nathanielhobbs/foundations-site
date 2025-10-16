@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Lecture Challenge – {{ ch.title }}{% endblock %}
 
-{% block head %}
+{% block extra_head %}
 {{ super() }}
 <!-- CodeMirror CSS -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
@@ -106,9 +106,7 @@
       <div id="studentStatusBody" style="padding:.6rem;"></div>
     </div>
 
-    <!--
-	    <textarea id="code" style="display:none;"># Start here…\nprint('hello lecture')</textarea>
-    -->
+	    <textarea id="code" style="display:none;"># Start here…</textarea>
 <div id="codeEditor" style="border-top:1px solid rgba(0,0,0,.08);"></div>
 
 <!--    <textarea id="code" spellcheck="false"># Start here…
@@ -121,15 +119,48 @@
   </div>
 
   <div class="io-grid">
+    {% if ch.show_leaderboard %}
     <div class="panel">
       <div class="panel-title">Leaderboard</div>
       <ol id="leaderboard" class="lb"></ol>
     </div>
+    {% endif %}
     <div class="panel">
       <div class="panel-title">Published Replays</div>
       <div id="replays"></div>
     </div>
   </div>
+
+<!-- Inline Replay Viewer (hidden until "Preview") -->
+<div id="replay-viewer" style="display:none;" class="border rounded p-2 mb-3">
+  <div class="flex items-center justify-between mb-2">
+    <div class="text-sm text-muted">
+      <strong>Previewing replay</strong> · <span id="rv-meta"></span>
+    </div>
+    <div class="flex gap-2">
+      <button id="rv-load" class="btn btn-primary">Load into editor</button>
+      <button id="rv-close" class="btn btn-secondary">Close</button>
+    </div>
+  </div>
+  <label class="block text-sm font-semibold mb-1">Replay code (read-only)</label>
+  <div id="rv-editor" class="border rounded" style="height: 260px;"></div>
+  <label class="block text-sm font-semibold mt-2 mb-1">Replay last run output</label>
+  <pre id="rv-output" class="border rounded p-2" style="max-height: 160px; overflow:auto; white-space: pre-wrap;"></pre>
+</div>
+
+<!-- Recovery bar (appears if there is a backup) -->
+<div id="recovery-bar" style="display:none;" class="border rounded p-2 bg-amber-50">
+  <div class="flex items-center justify-between">
+    <div class="text-sm">
+      A previous version of your code was auto-saved (<span id="recovery-when"></span>).
+    </div>
+    <div class="flex gap-2">
+      <button id="recovery-restore" class="btn btn-success">Restore my code</button>
+      <button id="recovery-dismiss" class="btn btn-secondary">Dismiss</button>
+    </div>
+  </div>
+</div>
+
 </div>
 {% endblock %}
 
@@ -141,7 +172,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
-
 <script>
 const slug = {{ ch.slug|tojson }};
 let keystrokes = [];
@@ -216,28 +246,28 @@ async function refreshLeaderboard(){
   const lb = document.getElementById('leaderboard'); lb.innerHTML = '';
   if(!j.ok) return;
   j.entries.forEach((e,i)=>{
-    const li = document.createElement('li'); li.textContent = `${i+1}. ${e.display_name} — ${e.points} pts`; lb.appendChild(li);
+    const li = document.createElement('li'); li.textContent = `${e.display_name}`; lb.appendChild(li);
   });
 }
-async function refreshReplays(){
-  const r = await fetch(`/api/lecture/${slug}/replays`);
-  const j = await r.json();
-  const box = document.getElementById('replays'); box.innerHTML = '';
-  if(!j.ok) return;
-  j.items.forEach(item=>{
-    const row = document.createElement('div'); row.className='replay-item'; row.innerHTML = `<span>${item.display_name}</span>`;
-    const btn = document.createElement('button'); btn.textContent = 'Replay';
-    btn.onclick = async ()=>{
-      const rr = await fetch(`/api/lecture/submission/${item.submission_id}/replay`);
-      const jj = await rr.json(); if(!jj.ok) return;
-      const ks = jj.keystrokes ? JSON.parse(jj.keystrokes) : null;
-      cm.setValue((ks && ks.length) ? (ks[ks.length-1].data?.value ?? jj.code) : jj.code);
-      outEl.textContent = jj.run_output || '';
-      statusEl.textContent = `Loaded replay from ${jj.meta.display_name}`;
-    };
-    row.appendChild(btn); box.appendChild(row);
-  });
-}
+//async function refreshReplays(){
+//  const r = await fetch(`/api/lecture/${slug}/replays`);
+//  const j = await r.json();
+//  const box = document.getElementById('replays'); box.innerHTML = '';
+//  if(!j.ok) return;
+//  j.items.forEach(item=>{
+//    const row = document.createElement('div'); row.className='replay-item'; row.innerHTML = `<span>${item.display_name}</span>`;
+//    const btn = document.createElement('button'); btn.textContent = 'Replay';
+//    btn.onclick = async ()=>{
+//      const rr = await fetch(`/api/lecture/submission/${item.submission_id}/replay`);
+//      const jj = await rr.json(); if(!jj.ok) return;
+//      const ks = jj.keystrokes ? JSON.parse(jj.keystrokes) : null;
+//      cm.setValue((ks && ks.length) ? (ks[ks.length-1].data?.value ?? jj.code) : jj.code);
+//      outEl.textContent = jj.run_output || '';
+//      statusEl.textContent = `Loaded replay from ${jj.meta.display_name}`;
+//    };
+//    row.appendChild(btn); box.appendChild(row);
+//  });
+//}
 async function fetchMyStatus() {
   const r = await fetch(`/api/lecture/${slug}/my_status`);
   const j = await r.json();
@@ -251,8 +281,8 @@ async function fetchMyStatus() {
     <div style="opacity:.8;margin-top:.25rem;">Last updated: ${new Date(j.updated_at || j.submitted_at).toLocaleString()}</div>
   `;
 }
-function startPolling(){ setInterval(()=>{ refreshLeaderboard(); refreshReplays(); fetchMyStatus(); }, 10000); }
-
+//function startPolling(){ setInterval(()=>{ refreshLeaderboard(); refreshReplays(); fetchMyStatus(); }, 10000); }
+function startPolling(){ setInterval(()=>{ refreshLeaderboard(); fetchMyStatus(); }, 10000); }
 // Buttons
 document.getElementById('runBtn').addEventListener('click', async ()=>{
   const { stdout, runtime_ms } = await runPython(cm.getValue());
@@ -295,7 +325,198 @@ document.getElementById('submitBtn').addEventListener('click', async ()=>{
 
 
 // Initial load
-refreshLeaderboard(); refreshReplays(); fetchMyStatus(); startPolling();
+//refreshLeaderboard(); refreshReplays(); fetchMyStatus(); startPolling();
+refreshLeaderboard(); fetchMyStatus(); startPolling();
 </script>
+<script>
+(function(){
+  // URLs from Flask
+  const slug         = {{ ch.slug|tojson }};
+  const netid        = {{ netid|default('', true)|tojson }};
+  const replaysUrl   = `/api/lecture/{{ ch.slug }}/replays`; 
+
+  // UI elements
+  const replaysBox   = document.getElementById('replays');
+  const rv           = document.getElementById('replay-viewer');
+  const rvMeta       = document.getElementById('rv-meta');
+  const rvOutput     = document.getElementById('rv-output');
+  const rvCloseBtn   = document.getElementById('rv-close');
+  const rvLoadBtn    = document.getElementById('rv-load');
+  const rvEditorHost = document.getElementById('rv-editor');
+  const recoverBar   = document.getElementById('recovery-bar');
+  const recoverWhen  = document.getElementById('recovery-when');
+  const restoreBtn   = document.getElementById('recovery-restore');
+  const dismissBtn   = document.getElementById('recovery-dismiss');
+
+  // Keys for localStorage backup
+  const LS_KEY = `replayBackup:${slug}:${netid}`;
+
+  // Access your main CodeMirror instance (cm/editor) safely
+  function getCM(){
+    return (window.cm || window.editor || null);
+  }
+  function getCurrentCode(){
+    const cm = getCM();
+    if (cm && typeof cm.getValue === 'function') return cm.getValue();
+    // Fallback: textarea with id="code" if you still keep it
+    const ta = document.getElementById('code');
+    return ta ? ta.value : '';
+  }
+  function setCurrentCode(txt){
+    const cm = getCM();
+    if (cm && typeof cm.setValue === 'function') { cm.setValue(txt || ''); return; }
+    const ta = document.getElementById('code');
+    if (ta) ta.value = txt || '';
+  }
+  function setOutput(txt){
+    const out = document.getElementById('output');
+    if (out) out.textContent = txt || '';
+  }
+
+  // Backup + restore
+  function backupCurrentCode(reason){
+    try{
+      const payload = {
+        code: getCurrentCode(),
+        reason: reason || 'manual',
+        ts: Date.now()
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify(payload));
+      showRecoveryBar(payload);
+    }catch(e){ console.warn('backup failed', e); }
+  }
+  function loadBackup(){
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    }catch{ return null; }
+  }
+  function showRecoveryBar(payload){
+    if (!payload) payload = loadBackup();
+    if (!payload) return;
+    const d = new Date(payload.ts);
+    recoverWhen.textContent = d.toLocaleString();
+    recoverBar.style.display = '';
+  }
+  function hideRecoveryBar(){
+    recoverBar.style.display = 'none';
+  }
+
+  restoreBtn?.addEventListener('click', ()=>{
+    const payload = loadBackup();
+    if (!payload) return;
+    setCurrentCode(payload.code || '');
+    hideRecoveryBar();
+  });
+  dismissBtn?.addEventListener('click', hideRecoveryBar);
+
+  // Inline replay viewer state
+  let rvCM = null;     // read-only CodeMirror for preview
+  let rvData = null;   // last fetched replay json
+
+  function ensureRvCM(){
+    if (rvCM) return rvCM;
+    // Spin up a read-only CodeMirror in the preview box (use same CM already loaded on the page)
+    rvCM = CodeMirror(rvEditorHost, {
+      value: '',
+      mode: 'python',
+      lineNumbers: true,
+      readOnly: 'nocursor',
+      indentUnit: 4
+    });
+    rvCM.setSize(null, '100%');
+    return rvCM;
+  }
+
+  async function previewReplay(sid){
+    try{
+      // Load from your existing JSON replay endpoint
+      const url = `/api/lecture/submission/${sid}/replay`;
+      const res = await fetch(url, {headers:{'Accept':'application/json'}});
+      const data = await res.json();
+      if (!data.ok) throw new Error('Replay load failed');
+
+      rvData = data;  // save for "Load into editor"
+      const cm = ensureRvCM();
+      cm.setValue(data.code || '');
+      rvOutput.textContent = data.run_output || '';
+      rvMeta.textContent = `id ${sid}`;
+      rv.style.display = '';
+      // scroll into view (nicely)
+      rv.scrollIntoView({behavior:'smooth', block:'center'});
+    }catch(e){
+      console.error(e);
+      alert('Unable to load replay.');
+    }
+  }
+
+  rvCloseBtn?.addEventListener('click', ()=>{
+    rv.style.display = 'none';
+    rvData = null;
+  });
+
+  rvLoadBtn?.addEventListener('click', ()=>{
+    if (!rvData) return;
+    // 1) backup current code (so “Restore my code” works)
+    backupCurrentCode('replay-load');
+    // 2) replace editor content/output with the replay
+    setCurrentCode(rvData.code || '');
+    setOutput(rvData.run_output || '');
+    // 3) keep the preview open (or close if you prefer)
+    // rv.style.display = 'none';
+  });
+
+  // Render the Published Replays list with PREVIEW + LOAD buttons
+  async function loadReplays(){
+    if (!replaysBox) return;
+    try{
+      const res = await fetch(replaysUrl, {headers:{'Accept':'application/json'}});
+      if (!res.ok){
+        replaysBox.innerHTML = `<div class="text-sm text-danger">Failed to load replays (HTTP ${res.status}).</div>`;
+        return;
+      }
+      const data = await res.json();
+      const items = data.items || [];
+      if (!items.length){
+        replaysBox.innerHTML = '<div class="text-sm text-muted">No public replays yet.</div>';
+        return;
+      }
+      replaysBox.innerHTML = '<ul class="space-y-1">' + items.map(i => {
+        const when = new Date(i.submitted_at).toLocaleString();
+        return `
+          <li class="flex items-center gap-2">
+            <span class="text-sm">${i.netid}</span>
+            <span class="text-xs text-muted">${when}</span>
+            <button class="btn btn-secondary btn-sm" data-preview="${i.submission_id}">Preview</button>
+            <button class="btn btn-primary btn-sm" data-load="${i.submission_id}">Load into editor</button>
+          </li>`;
+      }).join('') + '</ul>';
+
+      replaysBox.querySelectorAll('[data-preview]').forEach(btn=>{
+        btn.addEventListener('click', ()=> previewReplay(btn.getAttribute('data-preview')));
+      });
+      replaysBox.querySelectorAll('[data-load]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const sid = btn.getAttribute('data-load');
+          // If not previewed yet, fetch once, then load
+          if (!rvData || (rvMeta.textContent !== `id ${sid}`)){
+            await previewReplay(sid);
+          }
+          rvLoadBtn.click();
+        });
+      });
+    }catch(e){
+      console.error(e);
+      replaysBox.innerHTML = '<div class="text-sm text-danger">Failed to load replays (JS error).</div>';
+    }
+  }
+
+  // On load: show recovery bar if a backup exists + fetch replays
+  if (loadBackup()) showRecoveryBar();
+  document.addEventListener('DOMContentLoaded', loadReplays);
+})();
+</script>
+
 {% endblock %}
 
