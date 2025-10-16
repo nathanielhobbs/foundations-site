@@ -12,6 +12,61 @@
   <span id="settingsStatus" class="text-sm text-muted"></span>
 </div>
 
+<div class="mb-3 flex items-center gap-3">
+  <label class="inline-flex items-center gap-1">
+    <input type="checkbox" id="toggleHistory" {{ 'checked' if ch.history_enabled else '' }}>
+    <span>Students can view after it closes</span>
+  </label>
+  <span id="settingsStatusHistory" class="text-sm text-muted"></span>
+</div>
+
+<div class="mb-3">
+  <div class="text-sm font-semibold mb-1">Sections</div>
+
+  <!-- All sections -->
+  <label class="inline-flex items-center gap-2 mb-2">
+    <input type="checkbox" id="secAll">
+    <span>All sections</span>
+  </label>
+
+  <!-- Individual section checkboxes (from server) -->
+  <div id="secList" class="flex flex-wrap gap-3">
+    {% for s in sections %}
+      <label class="inline-flex items-center gap-1">
+        <input type="checkbox" class="secItem" value="{{ s }}">
+        <span>Sec {{ s }}</span>
+      </label>
+    {% endfor %}
+  </div>
+
+  <div class="text-sm text-muted mt-1" id="sectionsSaveStatus"></div>
+</div>
+
+<!--
+<script>
+const toggleHistory = document.getElementById('toggleHistory');
+const sectionInput  = document.getElementById('sectionInput');
+const settingsStatus = document.getElementById('settingsStatus');
+
+async function saveSettings(patch){
+  settingsStatus.textContent = 'Saving…';
+  const res = await fetch(`/api/admin/lecture/{{ ch.slug }}/settings`, {
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(patch)
+  });
+  settingsStatus.textContent = (await res.json()).ok ? 'Saved ✓' : 'Save failed';
+  setTimeout(()=>settingsStatus.textContent='', 900);
+}
+
+toggleHistory.addEventListener('change', ()=> saveSettings({ history_enabled: toggleHistory.checked }));
+sectionInput.addEventListener('change', ()=> {
+  const raw = sectionInput.value.trim();
+  // You can accept "ALL" or "1,2,6"
+  saveSettings({ section_scope: raw || 'ALL' });
+});
+</script>
+-->
+
 <!-- 3-column layout: Queue | Code/Output | Comment -->
 <div id="reviewShell"
      style="display:grid; grid-template-columns: 320px 1fr 320px; gap:16px; align-items:stretch;">
@@ -97,6 +152,85 @@
 	  if (ok) setTimeout(()=> settingsStatus.textContent = '', 800);
 	});
 </script>
+
+<script>
+(function(){
+  const slug = {{ ch.slug|tojson }};
+
+  // --- history toggle (separate status span to avoid ID collisions) ---
+  const toggleHistory = document.getElementById('toggleHistory');
+  const statusHistory = document.getElementById('settingsStatusHistory');
+  toggleHistory.addEventListener('change', async ()=>{
+    statusHistory.textContent = 'Saving…';
+    const res = await fetch(`/api/admin/lecture/${slug}/settings`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ history_enabled: toggleHistory.checked })
+    });
+    const ok = (await res.json()).ok;
+    statusHistory.textContent = ok ? 'Saved ✓' : 'Save failed';
+    setTimeout(()=> statusHistory.textContent='', 900);
+  });
+
+  // --- section multi-select ---
+  const secAll  = document.getElementById('secAll');
+  const secList = document.getElementById('secList');
+  const saveMsg = document.getElementById('sectionsSaveStatus');
+
+  // Current scope from server
+  const scopeRaw = {{ (ch.section_scope or 'ALL')|tojson }};
+  function parseScope(raw){
+    if (!raw || String(raw).toUpperCase() === 'ALL') return { all:true, set:new Set() };
+    const arr = String(raw).split(',').map(s=>s.trim()).filter(Boolean);
+    return { all:false, set:new Set(arr) };
+  }
+  const current = parseScope(scopeRaw);
+
+  // Apply initial state
+  (function init(){
+    secAll.checked = !!current.all;
+    document.querySelectorAll('#secList .secItem').forEach(cb=>{
+      cb.checked = current.all ? false : current.set.has(cb.value);
+      cb.disabled = current.all;
+    });
+  })();
+
+  function payload(){
+    if (secAll.checked) return { section_scope: 'ALL' };
+    const picked = [];
+    document.querySelectorAll('#secList .secItem').forEach(cb=>{
+      if (cb.checked) picked.push(cb.value);
+    });
+    return picked.length ? { section_scope: picked } : { section_scope: 'ALL' };
+  }
+
+  async function saveScope(){
+    saveMsg.textContent = 'Saving…';
+    const res = await fetch(`/api/admin/lecture/${slug}/settings`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload())
+    });
+    const ok = (await res.json()).ok;
+    saveMsg.textContent = ok ? 'Saved ✓' : 'Save failed';
+    setTimeout(()=> saveMsg.textContent='', 900);
+  }
+
+  secAll.addEventListener('change', ()=>{
+    const on = secAll.checked;
+    document.querySelectorAll('#secList .secItem').forEach(cb=>{
+      cb.checked = false;
+      cb.disabled = on;
+    });
+    saveScope();
+  });
+
+  secList.addEventListener('change', ()=>{
+    secAll.checked = false;
+    document.querySelectorAll('#secList .secItem').forEach(cb=> cb.disabled = false);
+    saveScope();
+  });
+})();
+</script>
+
 
 <script>
 (function(){

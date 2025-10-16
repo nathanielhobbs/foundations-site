@@ -13,6 +13,32 @@ class LectureChallenge(db.Model):
     open_at = db.Column(db.DateTime, nullable=True)
     close_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    history_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    # Comma-separated list of section labels; when NULL or 'ALL' => all sections
+    section_scope = db.Column(db.String(255), nullable=True)  # e.g. "1,2,6" or "ALL"
+    # --- visibility helpers ---
+    def allowed_sections(self):
+        """
+        Returns a list of allowed section strings, or None if open to ALL.
+        Examples stored: '1,2,6', 'ALL', or None.
+        """
+        if not self.section_scope:
+            return None
+        scope = str(self.section_scope).strip()
+        if not scope or scope.upper() == 'ALL':
+            return None
+        return [s.strip() for s in scope.split(',') if s.strip()]
+
+    def is_visible_to_section(self, section: str) -> bool:
+        """
+        True if the given section is allowed by section_scope (or ALL).
+        Accepts None/'' and handles both numeric and non-numeric labels.
+        """
+        allowed = self.allowed_sections()
+        if allowed is None:
+            return True
+        return str(section or "").strip() in allowed
+
 
 class LectureSubmission(db.Model):
     __tablename__ = 'lecture_submissions'

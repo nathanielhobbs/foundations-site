@@ -5,6 +5,8 @@
 {{ super() }}
 <!-- CodeMirror CSS -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/display/placeholder.min.js"></script>
+
 <!-- Light + Dark themes (we switch in JS) -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
@@ -85,7 +87,90 @@
     box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
   }
 
+  /* ----- Dark mode improvements ----- */
+:root[data-theme="dark"] {
+  --bg-1: #0d1117;      /* code/output bg */
+  --bg-2: #161b22;      /* dropdown bg */
+  --bd-1: #30363d;      /* borders */
+  --fg-1: #c9d1d9;      /* text */
+  --muted: #8b949e;     /* muted text */
+}
+
+/* Editor container + output */
+:root[data-theme="dark"] .CodeMirror {
+  background: var(--bg-1) !important;
+  color: var(--fg-1);
+  border-color: var(--bd-1);
+}
+:root[data-theme="dark"] .cm-s-material.CodeMirror { background: var(--bg-1) !important; }
+:root[data-theme="dark"] #output {
+  background: var(--bg-1);
+  color: var(--fg-1);
+  border-color: var(--bd-1);
+}
+
+/* Accepted Solutions dropdown */
+:root[data-theme="dark"] #replaysMenu {
+  background: var(--bg-2);
+  border-color: var(--bd-1);
+  color: var(--fg-1);
+}
+:root[data-theme="dark"] #replaysMenu .text-muted { color: var(--muted); }
+/* Preview/editor gutters + numbers in dark mode */
+:root[data-theme="dark"] .cm-s-material .CodeMirror-gutters {
+  background: var(--bg-1);
+  border-right: 1px solid var(--bd-1);
+}
+:root[data-theme="dark"] .cm-s-material .CodeMirror-linenumber {
+  color: var(--muted);
+}
+
+/* Selection tone in dark mode (less harsh) */
+:root[data-theme="dark"] .cm-s-material .CodeMirror-selected {
+  background: #26364a !important;
+}
+
+/* Token colors can look dim on some screens—nudge comments/numbers */
+:root[data-theme="dark"] .cm-s-material span.cm-comment   { color: #8b949e; }
+:root[data-theme="dark"] .cm-s-material span.cm-number    { color: #79c0ff; }
+
 </style>
+<style>
+/* Two-pane layout */
+#workArea.lc-grid {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 420px;
+  gap: 16px;
+  align-items: start;
+}
+
+/* Code areas */
+.CodeMirror { height: 360px; }
+#rv-editor .CodeMirror { height: 260px !important; }
+
+/* Output pane */
+#output {
+  height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+/* Toolbar: keep right buttons on same line */
+.lc-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.lc-toolbar-right { display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+
+/* Dropdown */
+#replaysMenu { position: absolute; right: 0; top: 100%; z-index: 1000; width: 22rem;
+  max-height: 60vh; overflow: auto; background: #fff; border: 1px solid #ddd; border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+}
+
+/* Small screens: stack */
+@media (max-width: 900px) {
+  #workArea.lc-grid { grid-template-columns: 1fr; }
+}
+</style>
+
 {% endblock %}
 
 
@@ -96,28 +181,83 @@
   <article class="prompt markdown-body">{{ ch.prompt_md|safe }}</article>
 
   <div class="editor-wrap">
+    <!--
     <div class="toolbar">
       <button id="runBtn">Run</button>
       <button id="submitBtn" {% if not ch.is_open %}disabled{% endif %}>Submit</button>
       <span class="status" id="statusText"></span>
     </div>
+    -->
+    <br>
+<!-- Toolbar -->
+<div class="lc-toolbar mb-2">
+  <!-- Left: Run / Submit -->
+  <div class="flex items-center gap-2">
+    <button id="runBtn" class="btn btn-primary">Run</button>
+    <button id="submitBtn" class="btn btn-success" {% if not can_submit %}disabled title="Submissions are closed for your section"{% endif %}>Submit</button>
+    <span id="status" class="text-sm text-muted"></span>
+  </div>
+
+  <!-- Right: Accepted Solutions dropdown + Restore (same line) -->
+  <div class="lc-toolbar-right">
+    <div style="position:relative">
+      <button id="replaysToggle" class="btn btn-secondary">See Accepted Solutions ▾</button>
+      <div id="replaysMenu" style="display:none">
+        <div class="text-sm text-muted p-2">Loading…</div>
+      </div>
+    </div>
+    <button id="restoreBtn" class="btn btn-warning" style="display:none;">Restore my Code</button>
+  </div>
+</div>
+
+<!-- Work area: left editor/output, right preview -->
+<div id="workArea" class="lc-grid">
+  <!-- LEFT -->
+  <div>
+    <label class="block text-sm font-semibold mb-1">Editor</label>
+    <div id="editor" class="border rounded"></div>
+
+    <label class="block text-sm font-semibold mt-3 mb-1">Output</label>
+    <pre id="output" class="border rounded p-2"></pre>
+  </div>
+
+  <!-- RIGHT -->
+  <aside id="replayPanel" class="border rounded p-2" style="display:none;">
+    <div class="flex items-center justify-between mb-2">
+      <div class="text-sm text-muted">
+        <strong>Previewing accepted solution</strong><span id="rv-meta"></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="rv-load" class="btn btn-primary btn-sm">Load into Editor</button>
+        <button id="rv-close" class="btn btn-secondary btn-sm">Close</button>
+      </div>
+    </div>
+
+    <label class="block text-sm font-semibold mb-1">Code (read-only)</label>
+    <div id="rv-editor" class="border rounded"></div>
+
+    <label class="block text-sm font-semibold mt-3 mb-1">Last run output</label>
+    <pre id="rv-output" class="border rounded p-2" style="max-height:160px; overflow:auto; white-space:pre-wrap;"></pre>
+  </aside>
+</div>
+
+
+
     <div id="studentStatus" class="panel" style="margin-top:.5rem;display:none;">
       <div class="panel-title">Submission Status</div>
       <div id="studentStatusBody" style="padding:.6rem;"></div>
     </div>
 
-	    <textarea id="code" style="display:none;"># Start here…</textarea>
-<div id="codeEditor" style="border-top:1px solid rgba(0,0,0,.08);"></div>
+	    <textarea id="code" style="display:none;"><textarea>
+
+    <h3 class="mt-4">Leaderboard</h3>
+    <ol id="leaderboard" class="list-decimal pl-5"></ol>
+
 
 <!--    <textarea id="code" spellcheck="false"># Start here…
 	print('hello lecture')</textarea> -->
   </div>
-
-  <div class="panel">
-    <div class="panel-title">Output</div>
-    <pre id="output"></pre>
-  </div>
-
+<!--
   <div class="io-grid">
     {% if ch.show_leaderboard %}
     <div class="panel">
@@ -130,8 +270,10 @@
       <div id="replays"></div>
     </div>
   </div>
+-->
 
 <!-- Inline Replay Viewer (hidden until "Preview") -->
+<!-- 
 <div id="replay-viewer" style="display:none;" class="border rounded p-2 mb-3">
   <div class="flex items-center justify-between mb-2">
     <div class="text-sm text-muted">
@@ -147,8 +289,9 @@
   <label class="block text-sm font-semibold mt-2 mb-1">Replay last run output</label>
   <pre id="rv-output" class="border rounded p-2" style="max-height: 160px; overflow:auto; white-space: pre-wrap;"></pre>
 </div>
-
+-->
 <!-- Recovery bar (appears if there is a backup) -->
+<!--
 <div id="recovery-bar" style="display:none;" class="border rounded p-2 bg-amber-50">
   <div class="flex items-center justify-between">
     <div class="text-sm">
@@ -160,7 +303,7 @@
     </div>
   </div>
 </div>
-
+-->
 </div>
 {% endblock %}
 
@@ -184,8 +327,10 @@ const statusEl = document.getElementById('statusText');
 function cmThemeFromPage() {
   return document.documentElement.getAttribute('data-theme') === 'dark' ? 'material' : 'eclipse';
 }
-const cm = CodeMirror(document.getElementById('codeEditor'), {
-  value: document.getElementById('code').value,
+const initialCode = {{ seed_code|default('', true)|tojson }};
+const cm = CodeMirror(document.getElementById('editor'), {
+  value: initialCode || "", //start empty
+  placeholder: initialCode ? "" : "Start here...", // disappears on first input
   mode: 'python',
   theme: cmThemeFromPage(),
   lineNumbers: true,
@@ -194,6 +339,13 @@ const cm = CodeMirror(document.getElementById('codeEditor'), {
 });
 new MutationObserver((muts) => {
   for (const m of muts) if (m.attributeName === 'data-theme') cm.setOption('theme', cmThemeFromPage());
+}).observe(document.documentElement, { attributes: true });
+new MutationObserver((muts)=>{
+  for (const m of muts) if (m.attributeName === 'data-theme') {
+    const t = (document.documentElement.getAttribute('data-theme') === 'dark') ? 'material' : 'eclipse';
+    cm.setOption('theme', t);
+    if (_rv.cm) _rv.cm.setOption('theme', t);      // <-- keep preview in sync
+  }
 }).observe(document.documentElement, { attributes: true });
 
 // Recorder hooks -> keep your keystroke replay
@@ -328,193 +480,143 @@ document.getElementById('submitBtn').addEventListener('click', async ()=>{
 //refreshLeaderboard(); refreshReplays(); fetchMyStatus(); startPolling();
 refreshLeaderboard(); fetchMyStatus(); startPolling();
 </script>
+
 <script>
 (function(){
-  // URLs from Flask
-  const slug         = {{ ch.slug|tojson }};
-  const netid        = {{ netid|default('', true)|tojson }};
-  const replaysUrl   = `/api/lecture/{{ ch.slug }}/replays`; 
+  const slug = {{ ch.slug|tojson }};
+  const netid = {{ netid|default('', true)|tojson }};
+  const listReplaysURL = `/api/lecture/${slug}/replays`;
+  const replayJSONURL  = (sid) => `/api/lecture/submission/${sid}/replay`;
 
-  // UI elements
-  const replaysBox   = document.getElementById('replays');
-  const rv           = document.getElementById('replay-viewer');
-  const rvMeta       = document.getElementById('rv-meta');
-  const rvOutput     = document.getElementById('rv-output');
-  const rvCloseBtn   = document.getElementById('rv-close');
-  const rvLoadBtn    = document.getElementById('rv-load');
-  const rvEditorHost = document.getElementById('rv-editor');
-  const recoverBar   = document.getElementById('recovery-bar');
-  const recoverWhen  = document.getElementById('recovery-when');
-  const restoreBtn   = document.getElementById('recovery-restore');
-  const dismissBtn   = document.getElementById('recovery-dismiss');
+  // Elements
+  const replaysToggle = document.getElementById('replaysToggle');
+  const replaysMenu   = document.getElementById('replaysMenu');
+  const restoreBtn    = document.getElementById('restoreBtn');
+  const replayPanel   = document.getElementById('replayPanel');
+  const rvMeta        = document.getElementById('rv-meta');
+  const rvOutput      = document.getElementById('rv-output');
+  const rvEditorHost  = document.getElementById('rv-editor');
+  const rvLoadBtn     = document.getElementById('rv-load');
+  const rvCloseBtn    = document.getElementById('rv-close');
 
-  // Keys for localStorage backup
-  const LS_KEY = `replayBackup:${slug}:${netid}`;
-
-  // Access your main CodeMirror instance (cm/editor) safely
+  // Main editor helpers
   function getCM(){
-    return (window.cm || window.editor || null);
+    if (window.cm && typeof window.cm.getValue === 'function') return window.cm;
+    if (window.editor && typeof window.editor.getValue === 'function') return window.editor;
+    const el = document.querySelector('.CodeMirror'); return el && el.CodeMirror ? el.CodeMirror : null;
   }
-  function getCurrentCode(){
-    const cm = getCM();
-    if (cm && typeof cm.getValue === 'function') return cm.getValue();
-    // Fallback: textarea with id="code" if you still keep it
-    const ta = document.getElementById('code');
-    return ta ? ta.value : '';
-  }
-  function setCurrentCode(txt){
-    const cm = getCM();
-    if (cm && typeof cm.setValue === 'function') { cm.setValue(txt || ''); return; }
-    const ta = document.getElementById('code');
-    if (ta) ta.value = txt || '';
-  }
-  function setOutput(txt){
-    const out = document.getElementById('output');
-    if (out) out.textContent = txt || '';
-  }
+  function setCurrentCode(txt){ const cm = getCM(); if (cm) cm.setValue(txt||''); }
+  function setMainOutput(txt){ const out = document.getElementById('output'); if (out) out.textContent = txt || ''; }
 
-  // Backup + restore
-  function backupCurrentCode(reason){
-    try{
-      const payload = {
-        code: getCurrentCode(),
-        reason: reason || 'manual',
-        ts: Date.now()
-      };
-      localStorage.setItem(LS_KEY, JSON.stringify(payload));
-      showRecoveryBar(payload);
-    }catch(e){ console.warn('backup failed', e); }
-  }
-  function loadBackup(){
-    try{
-      const raw = localStorage.getItem(LS_KEY);
-      if (!raw) return null;
-      return JSON.parse(raw);
-    }catch{ return null; }
-  }
-  function showRecoveryBar(payload){
-    if (!payload) payload = loadBackup();
-    if (!payload) return;
-    const d = new Date(payload.ts);
-    recoverWhen.textContent = d.toLocaleString();
-    recoverBar.style.display = '';
-  }
-  function hideRecoveryBar(){
-    recoverBar.style.display = 'none';
-  }
+  // Backup/restore
+  const LS_KEY = `replayBackup:${slug}:${netid}`;
+  function backup(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({ code: getCM()?.getValue()||'', ts: Date.now() })); restoreBtn.style.display=''; }catch{} }
+  function hasBackup(){ try{ return !!localStorage.getItem(LS_KEY); }catch{ return false; } }
+  function restore(){ try{ const j = JSON.parse(localStorage.getItem(LS_KEY)||'null'); if (j) setCurrentCode(j.code||''); }catch{} }
+  if (hasBackup()) restoreBtn.style.display = '';
+  restoreBtn.addEventListener('click', restore);
 
-  restoreBtn?.addEventListener('click', ()=>{
-    const payload = loadBackup();
-    if (!payload) return;
-    setCurrentCode(payload.code || '');
-    hideRecoveryBar();
+  // Dropdown
+  function hideMenu(){ replaysMenu.style.display='none'; }
+  function toggleMenu(){ replaysMenu.style.display = (replaysMenu.style.display==='block')?'none':'block'; }
+  replaysToggle.addEventListener('click', async ()=>{
+    if (replaysMenu.style.display!=='block') await populateMenu();
+    toggleMenu();
   });
-  dismissBtn?.addEventListener('click', hideRecoveryBar);
-
-  // Inline replay viewer state
-  let rvCM = null;     // read-only CodeMirror for preview
-  let rvData = null;   // last fetched replay json
-
-  function ensureRvCM(){
-    if (rvCM) return rvCM;
-    // Spin up a read-only CodeMirror in the preview box (use same CM already loaded on the page)
-    rvCM = CodeMirror(rvEditorHost, {
-      value: '',
-      mode: 'python',
-      lineNumbers: true,
-      readOnly: 'nocursor',
-      indentUnit: 4
-    });
-    rvCM.setSize(null, '100%');
-    return rvCM;
-  }
-
-  async function previewReplay(sid){
-    try{
-      // Load from your existing JSON replay endpoint
-      const url = `/api/lecture/submission/${sid}/replay`;
-      const res = await fetch(url, {headers:{'Accept':'application/json'}});
-      const data = await res.json();
-      if (!data.ok) throw new Error('Replay load failed');
-
-      rvData = data;  // save for "Load into editor"
-      const cm = ensureRvCM();
-      cm.setValue(data.code || '');
-      rvOutput.textContent = data.run_output || '';
-      rvMeta.textContent = `id ${sid}`;
-      rv.style.display = '';
-      // scroll into view (nicely)
-      rv.scrollIntoView({behavior:'smooth', block:'center'});
-    }catch(e){
-      console.error(e);
-      alert('Unable to load replay.');
-    }
-  }
-
-  rvCloseBtn?.addEventListener('click', ()=>{
-    rv.style.display = 'none';
-    rvData = null;
+  document.addEventListener('click', (e)=>{
+    if (!replaysMenu.contains(e.target) && !replaysToggle.contains(e.target)) hideMenu();
   });
 
-  rvLoadBtn?.addEventListener('click', ()=>{
-    if (!rvData) return;
-    // 1) backup current code (so “Restore my code” works)
-    backupCurrentCode('replay-load');
-    // 2) replace editor content/output with the replay
-    setCurrentCode(rvData.code || '');
-    setOutput(rvData.run_output || '');
-    // 3) keep the preview open (or close if you prefer)
-    // rv.style.display = 'none';
-  });
-
-  // Render the Published Replays list with PREVIEW + LOAD buttons
-  async function loadReplays(){
-    if (!replaysBox) return;
+  async function populateMenu(){
+    replaysMenu.innerHTML = '<div class="text-sm text-muted p-2">Loading…</div>';
     try{
-      const res = await fetch(replaysUrl, {headers:{'Accept':'application/json'}});
-      if (!res.ok){
-        replaysBox.innerHTML = `<div class="text-sm text-danger">Failed to load replays (HTTP ${res.status}).</div>`;
-        return;
-      }
+      const res = await fetch(listReplaysURL, {headers:{'Accept':'application/json'}});
+      if (!res.ok) { replaysMenu.innerHTML = `<div class="text-sm text-danger p-2">Failed (${res.status}).</div>`; return; }
       const data = await res.json();
       const items = data.items || [];
-      if (!items.length){
-        replaysBox.innerHTML = '<div class="text-sm text-muted">No public replays yet.</div>';
-        return;
-      }
-      replaysBox.innerHTML = '<ul class="space-y-1">' + items.map(i => {
-        const when = new Date(i.submitted_at).toLocaleString();
-        return `
-          <li class="flex items-center gap-2">
-            <span class="text-sm">${i.netid}</span>
-            <span class="text-xs text-muted">${when}</span>
-            <button class="btn btn-secondary btn-sm" data-preview="${i.submission_id}">Preview</button>
-            <button class="btn btn-primary btn-sm" data-load="${i.submission_id}">Load into editor</button>
-          </li>`;
-      }).join('') + '</ul>';
-
-      replaysBox.querySelectorAll('[data-preview]').forEach(btn=>{
-        btn.addEventListener('click', ()=> previewReplay(btn.getAttribute('data-preview')));
+      if (!items.length){ replaysMenu.innerHTML = '<div class="text-sm text-muted p-2">No accepted solutions yet.</div>'; return; }
+      replaysMenu.innerHTML = `
+        <ul class="divide-y">
+          ${items.map(i=>{
+            const when = new Date(i.submitted_at).toLocaleString();
+            return `<li class="p-2 flex items-center justify-between gap-2">
+              <div class="truncate"><span class="font-mono text-sm">${i.netid}</span>
+              <span class="text-xs text-muted">· ${when}</span></div>
+              <div class="flex gap-1">
+                <button class="btn btn-secondary btn-sm" data-prev="${i.submission_id}">Preview</button>
+                <button class="btn btn-primary btn-sm" data-load="${i.submission_id}">Load</button>
+              </div>
+            </li>`;
+          }).join('')}
+        </ul>`;
+      replaysMenu.querySelectorAll('[data-prev]').forEach(btn=>{
+        btn.addEventListener('click', ()=> { previewReplay(btn.getAttribute('data-prev')); hideMenu(); });
       });
-      replaysBox.querySelectorAll('[data-load]').forEach(btn=>{
+      replaysMenu.querySelectorAll('[data-load]').forEach(btn=>{
         btn.addEventListener('click', async ()=>{
           const sid = btn.getAttribute('data-load');
-          // If not previewed yet, fetch once, then load
-          if (!rvData || (rvMeta.textContent !== `id ${sid}`)){
-            await previewReplay(sid);
-          }
-          rvLoadBtn.click();
+          const ok = await ensureReplayLoaded(sid);
+          if (ok){ backup(); setCurrentCode(_rv.data.code||''); setMainOutput(_rv.data.run_output||''); }
+          hideMenu();
+          // focus editor so change is obvious
+          const cm = getCM(); if (cm && cm.focus) { cm.focus(); setTimeout(()=>cm.refresh&&cm.refresh(),0); }
         });
       });
-    }catch(e){
-      console.error(e);
-      replaysBox.innerHTML = '<div class="text-sm text-danger">Failed to load replays (JS error).</div>';
-    }
+    }catch(e){ replaysMenu.innerHTML = '<div class="text-sm text-danger p-2">Failed to load.</div>'; }
   }
 
-  // On load: show recovery bar if a backup exists + fetch replays
-  if (loadBackup()) showRecoveryBar();
-  document.addEventListener('DOMContentLoaded', loadReplays);
+  // Inline preview
+  let _rv = { cm:null, data:null, sid:null };
+  
+  function ensureRvCM(){
+	  if (_rv.cm) return _rv.cm;
+	  // Use the same theme as the main editor (fallback to current page theme)
+	  const main = (window.cm || window.editor || null);
+	  const theme = main && typeof main.getOption === 'function'
+	    ? main.getOption('theme')
+	    : (document.documentElement.getAttribute('data-theme') === 'dark' ? 'material' : 'eclipse');
+
+	  _rv.cm = CodeMirror(rvEditorHost, {
+	    value: '',
+	    mode: 'python',
+	    lineNumbers: true,
+	    readOnly: 'nocursor',
+	    indentUnit: 4,
+	    theme,                    // <-- match main editor
+	  });
+	  _rv.cm.setSize(null, '100%');
+	  return _rv.cm;
+	}
+
+
+  async function ensureReplayLoaded(sid){
+    try{
+      const res = await fetch(replayJSONURL(sid), {headers:{'Accept':'application/json'}});
+      const data = await res.json();
+      if (!data.ok) throw new Error('replay load failed');
+      _rv.sid = sid; _rv.data = data; return true;
+    }catch(e){ console.error(e); return false; }
+  }
+  async function previewReplay(sid){
+    // Show the panel first so CodeMirror can size itself correctly
+    replayPanel.style.display = '';
+    const ok = await ensureReplayLoaded(sid);
+    if (!ok) return;
+    const cm = ensureRvCM();
+    cm.setValue(_rv.data.code || '');
+    rvOutput.textContent = _rv.data.run_output || '';
+    rvMeta.textContent = ` · id ${sid}`;
+    // IMPORTANT: refresh after showing the panel so first click works
+    setTimeout(()=> cm.refresh && cm.refresh(), 0);
+  }
+  rvLoadBtn.addEventListener('click', ()=>{
+    if (!_rv.data) return;
+    backup();
+    setCurrentCode(_rv.data.code || '');
+    setMainOutput(_rv.data.run_output || '');
+    const cm = getCM(); if (cm && cm.focus){ cm.focus(); setTimeout(()=>cm.refresh&&cm.refresh(),0); }
+  });
+  rvCloseBtn.addEventListener('click', ()=> { replayPanel.style.display='none'; _rv.data=null; _rv.sid=null; });
 })();
 </script>
 

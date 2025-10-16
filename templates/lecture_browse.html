@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Browse Challenges{% endblock %}
+{% block content %}
+<h1>Challenges</h1>
+<div id="listOpen"></div>
+<div id="listPastYou"></div>
+<div id="listPastAll"></div>
+<script>
+(async function(){
+  const boxOpen = document.getElementById('listOpen');
+  const boxYou  = document.getElementById('listPastYou');
+  const boxAll  = document.getElementById('listPastAll');
+
+  const res = await fetch('/api/lecture/browse');
+  const j = await res.json();
+
+  function section(title, items){
+    if(!items || !items.length) return '';
+    return `<h3>${title}</h3><ul>${items.map(i=> `<li><a href="/lecture/${i.slug}">${i.title}</a></li>`).join('')}</ul>`;
+  }
+
+  boxOpen.innerHTML = section('Open for your section', j.open);
+  boxYou .innerHTML = section('Past challenges you participated in', j.past_participated);
+  boxAll .innerHTML = section('Past challenges', j.past_global);
+})();
+</script>
+{% endblock %}
+

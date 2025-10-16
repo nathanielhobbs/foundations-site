@@ -8,6 +8,7 @@ from flask import session as flask_session
 from flask import current_app
 import csv, os
 from functools import lru_cache
+from datetime import datetime
 
 
 lecture_bp = Blueprint('lecture', __name__)
@@ -88,6 +89,36 @@ def public_display_name(netid: str, include_section: bool = False) -> str:
         return f"{name} (Sec {info['section']})"
     return name
 
+def student_section() -> str:
+    # however you already store this; from roster map is fine
+    netid = session.get('netid')
+    if not netid: return ""
+    row = _roster_map().get(netid.lower()) or {}
+    return str(row.get('section', '')).strip()
+
+def student_can_view(ch: LectureChallenge) -> bool:
+    sec = student_section()
+    if ch.is_open and ch.is_visible_to_section(sec):
+        return True
+    if ch.history_enabled and ch.is_visible_to_section(sec):
+        return True
+    # participated?
+    has_sub = LectureSubmission.query.filter_by(challenge_id=ch.id, netid=session.get('netid')).first()
+    return bool(ch.history_enabled and has_sub)
+
+def all_sections():
+    """Unique, sorted section labels from the roster cache."""
+    secs = set()
+    for info in _roster_map().values():
+        s = (info.get('section') or '').strip()
+        if s:
+            secs.add(s)
+    # natural sort: numbers before strings, 1,2,10
+    def k(x):
+        return (0, int(x)) if str(x).isdigit() else (1, str(x).lower())
+    return sorted(secs, key=k)
+
+
 def refresh_roster_cache():
     """Call this if you replace the CSV at runtime (optional admin hook)."""
     _roster_map.cache_clear()
@@ -121,14 +152,91 @@ def is_admin_current_user() -> bool:
 @require_login
 def view_lecture(slug):
     ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
+    if not student_can_view(ch):
+        abort(403)
+        
     netid = session['netid']
     # display = lookup_display_name(netid)
-    return render_template('lecture_challenge.html', ch=ch, netid=netid, display_name=netid)#display)
+    # Seed the editor with the student's last submission (for past challenges)
+    seed_code = ""
+    last = (LectureSubmission.query
+            .filter_by(challenge_id=ch.id, netid=netid)
+            .order_by(LectureSubmission.created_at.desc())
+            .first())
+    if last:
+        seed_code = last.code or ""
+
+    # can submit only if challenge is open AND this section is allowed
+    can_submit = bool(ch.is_open and ch.is_visible_to_section(student_section()))
+
+    return render_template('lecture_challenge.html', ch=ch, netid=netid, display_name=netid,seed_code=seed_code)
+
+@lecture_bp.get('/lecture/browse')
+@require_login
+def browse_challenges_page():
+    return render_template('lecture_browse.html')  # small page with a list; see below
+
+def available_time(ch):
+    # pick best available timestamp for ordering
+    for attr in ('opened_at', 'open_start', 'created_at'):
+        val = getattr(ch, attr, None)
+        if val:
+            return val
+    # fallback – make it sortable
+    try:
+        return datetime.fromtimestamp(0)
+    except Exception:
+        return datetime.min
+
+@lecture_bp.get('/api/lecture/browse')
+@require_login
+def browse_challenges_api():
+    netid = session['netid']
+    sec = student_section()
+
+    # open + allowed
+    open_q = LectureChallenge.query.filter_by(is_open=True).all()
+    # history-enabled (closed but viewable)
+    past_q = LectureChallenge.query.filter_by(is_open=False, history_enabled=True).all()
+
+    # participation set
+    sub_cids = {cid for (cid,) in
+        db.session.query(LectureSubmission.challenge_id)
+                  .filter_by(netid=netid).distinct().all()
+    }
+
+    def allowed(ch): return ch.is_visible_to_section(sec)
+
+    # Build typed lists (keep the objects for sorting)
+    open_allowed = [ch for ch in open_q if allowed(ch)]
+    past_participated = [ch for ch in past_q if ch.id in sub_cids]
+    past_global = [ch for ch in past_q if allowed(ch) and ch.id not in sub_cids]
+
+    # Sort by when they were made available (desc = newest first)
+    open_allowed.sort(key=available_time, reverse=True)
+    past_participated.sort(key=available_time, reverse=True)
+    past_global.sort(key=available_time, reverse=True)
+
+    def entry(ch):
+        return {"slug": ch.slug, "title": ch.title, "open": bool(ch.is_open),
+                "available_at": (getattr(ch, 'opened_at', None) or
+                                 getattr(ch, 'open_start', None) or
+                                 getattr(ch, 'created_at', None))}
+    return jsonify({
+        "ok": True,
+        "open": [entry(c) for c in open_allowed],
+        "past_participated": [entry(c) for c in past_participated],
+        "past_global": [entry(c) for c in past_global],
+    })
 
 @lecture_bp.post('/api/lecture/<slug>/submit')
 @require_login
 def submit_lecture(slug):
     ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
+     # HARD GUARD: closed or not for this section -> 403
+    if not (ch.is_open and ch.is_visible_to_section(student_section())):
+        return jsonify(ok=False, error="Submissions are closed for your section."), 403
+
     if not ch.is_open:
         return jsonify({"ok": False, "error": "Submissions are closed."}), 403
     try:
@@ -420,7 +528,7 @@ def admin_lecture(slug):
             .order_by(LectureSubmission.created_at.desc()).all())
     if request.args.get('partial') == '1':
         return render_template('admin_lecture_rows.html', subs=subs)
-    return render_template('admin_lecture.html', ch=ch, subs=subs)
+    return render_template('admin_lecture.html', ch=ch, subs=subs, sections=all_sections())
 
 @lecture_bp.get('/api/admin/lecture/<slug>/submissions')
 def admin_list_submissions(slug):
@@ -561,5 +669,13 @@ def admin_update_challenge(slug):
     for key in ('is_open', 'show_leaderboard'):
         if key in data:
             setattr(ch, key, bool(data[key]))
+
+    if 'history_enabled' in data: ch.history_enabled = bool(data['history_enabled'])
+    if 'section_scope' in data:
+        val = data['section_scope']
+        if isinstance(val, list):
+            ch.section_scope = 'ALL' if not val or val == ['ALL'] else ','.join(str(v).strip() for v in val)
+        else:
+            ch.section_scope = (val or '').strip() or None
     db.session.commit()
     return jsonify({"ok": True})

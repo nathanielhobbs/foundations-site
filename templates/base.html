@@ -52,7 +52,7 @@
 	{% elif session.get("netid") %}
 	{% set sect = session.get('section') %}
 	  <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">
-		  Hello, {{ netid }}, you are in Section {{ sect if sect is not none else "—" }}
+		  Hello, {{ session.get('netid')|default('—') }} (Section {{ sect|default('—') }})
 	  </span>
 	  <!-- Live-updating CTA container -->
 	  <span id="active-lecture-cta" style="margin-left: 1em;">
@@ -86,6 +86,7 @@
         <a href="/chat{% if session.get('is_admin') %}{% else %}/{{ session['section'] }}{% endif %}"><i data-lucide="message-circle"></i>Live Chat</a>
       -->
         <a href="/notebooks"><i data-lucide="file-text"></i>Notebooks</a>
+        <a href="/lecture/browse"><i data-lucide="swords"></i>Lecture Challenges</a>
       {% endif %}
       <a href="/tutorials"><i data-lucide="graduation-cap"></i>Tutorials</a>
       <a href="/sandbox"><i data-lucide="code"></i>Python Sandbox</a>
