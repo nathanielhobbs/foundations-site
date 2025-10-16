@@ -33,7 +33,15 @@
         <div class="muted" style="font-size:.9rem; margin-bottom:.5rem;">Updated: ${it.date ? new Date(it.date).toLocaleString() : '—'}</div>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
           <a class="btn" style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none;" href="https://github.com/${it.github_path}" target="_blank" rel="noopener">View on GitHub</a>
-          <a class="btn" style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none;" href="${it.download_url}" download>Download .ipynb</a>
+	<!-- inside each card -->
+	<a class="btn nb-dl"
+	   style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none; cursor:pointer;"
+	   href="#"
+	   data-url="${it.download_url}"
+	   data-name="${(it.title || 'notebook').replace(/[^A-Za-z0-9._-]+/g,'_')}.ipynb">
+	  Download .ipynb
+	</a>
+
         </div>`;
       wrap.appendChild(card);
     });
@@ -42,5 +50,47 @@
   }
 })();
 </script>
+<script>
+function nbSafeName(s) {
+  return (s || 'notebook').replace(/[^A-Za-z0-9._-]+/g, '_');
+}
+
+async function downloadIpynb(url, filename) {
+  // Try to fetch and force a download via Blob
+  const res = await fetch(url, { credentials: 'omit' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const blob = await res.blob();
+
+  // Prefer the server-provided filename if available
+  const disp = res.headers.get('Content-Disposition') || '';
+  const m = /filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i.exec(disp);
+  const name = m ? decodeURIComponent(m[1]) : filename;
+
+  const a = document.createElement('a');
+  const objectUrl = URL.createObjectURL(blob);
+  a.href = objectUrl;
+  a.download = name || nbSafeName('notebook') + '.ipynb';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+document.addEventListener('click', async (e) => {
+  const a = e.target.closest('a.nb-dl');
+  if (!a) return;
+  e.preventDefault();
+  const url = a.getAttribute('data-url');
+  const name = a.getAttribute('data-name') || 'notebook.ipynb';
+  try {
+    await downloadIpynb(url, name);
+  } catch (err) {
+    // Fallback: if fetch fails (CORS, etc.), navigate normally
+    console.warn('Blob download failed, falling back:', err);
+    window.location.href = url;
+  }
+});
+</script>
+
 {% endblock %}
 
