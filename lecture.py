@@ -9,7 +9,8 @@ from flask import current_app
 import csv, os
 from functools import lru_cache
 from datetime import datetime
-
+from extensions import socketio
+from lecture_utils import is_open_now
 
 lecture_bp = Blueprint('lecture', __name__)
 
@@ -51,9 +52,14 @@ def _roster_map():
     (case/whitespace-insensitive).
     """
     m = {}
-    if not os.path.exists(ROSTER_CSV):
+    try:
+        path = current_app.config.get("ROSTER_FILE")
+    except RuntimeError:
+        path = None
+    path = path or ROSTER_CSV
+    if not os.path.exists(path):
         return m
-    with open(ROSTER_CSV, newline="", encoding="utf-8") as f:
+    with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         H = _header_map(reader.fieldnames)
         for row in reader:
@@ -65,6 +71,38 @@ def _roster_map():
             name = _normalize_full_name(full) or f"Student {netid[:2]}…"
             m[netid] = {"name": name, "section": section}
     return m
+
+def _parse_dt(s):
+    s = (s or '').strip()
+    if not s:
+        return None
+    # Accept ISO or HTML datetime-local (no tz)
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(s)
+    except Exception:
+        return None
+
+def _rooms_for(ch):
+    scope = (ch.section_scope or "").strip().upper()
+    if not scope or scope in {"ALL","*"}:
+        return [f"section:{s}" for s in (1,2,5,6)]  # list your real sections here
+    rooms = []
+    for tok in scope.split(","):
+        tok = tok.strip()
+        if tok.isdigit():
+            rooms.append(f"section:{int(tok)}")
+    return rooms or ["section:none"]
+
+def _payload_for(ch):
+    # Only send payload if it should show right now; otherwise send None to hide
+    if is_open_now(ch):
+        return {"slug": ch.slug, "title": ch.title}
+    return None
 
 def lookup_display_name(netid: str) -> str:
     """Canonical human name (admin or internal use)."""
@@ -169,7 +207,7 @@ def view_lecture(slug):
     # can submit only if challenge is open AND this section is allowed
     can_submit = bool(ch.is_open and ch.is_visible_to_section(student_section()))
 
-    return render_template('lecture_challenge.html', ch=ch, netid=netid, display_name=netid,seed_code=seed_code)
+    return render_template('lecture_challenge.html', ch=ch, netid=netid, display_name=netid,seed_code=seed_code,can_submit=can_submit)
 
 @lecture_bp.get('/lecture/browse')
 @require_login
@@ -195,7 +233,8 @@ def browse_challenges_api():
     sec = student_section()
 
     # open + allowed
-    open_q = LectureChallenge.query.filter_by(is_open=True).all()
+    # open_q = LectureChallenge.query.filter_by(is_open=True).all()
+    qs = LectureChallenge.query.filter_by(is_open=True).all()
     # history-enabled (closed but viewable)
     past_q = LectureChallenge.query.filter_by(is_open=False, history_enabled=True).all()
 
@@ -208,7 +247,8 @@ def browse_challenges_api():
     def allowed(ch): return ch.is_visible_to_section(sec)
 
     # Build typed lists (keep the objects for sorting)
-    open_allowed = [ch for ch in open_q if allowed(ch)]
+    # open_allowed = [ch for ch in open_q if allowed(ch)]
+    open_allowed = [ch for ch in qs if is_open_now(ch) and allowed(ch)]
     past_participated = [ch for ch in past_q if ch.id in sub_cids]
     past_global = [ch for ch in past_q if allowed(ch) and ch.id not in sub_cids]
 
@@ -648,6 +688,9 @@ def admin_delete_lecture(slug):
     db.session.delete(ch)
     db.session.commit()
 
+    for room in _rooms_for(ch):
+        socketio.emit("active_lecture_changed", None, to=room)
+
     # Redis cleanup (best-effort)
     try:
         from extensions_redis import r as redis_client
@@ -665,6 +708,10 @@ def admin_update_challenge(slug):
     if not is_admin_current_user():
         abort(403)
     ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
+
+    # --- capture old rooms BEFORE changes ---
+    old_rooms = set(_rooms_for(ch))
+
     data = request.get_json(force=True) or {}
     for key in ('is_open', 'show_leaderboard'):
         if key in data:
@@ -677,5 +724,22 @@ def admin_update_challenge(slug):
             ch.section_scope = 'ALL' if not val or val == ['ALL'] else ','.join(str(v).strip() for v in val)
         else:
             ch.section_scope = (val or '').strip() or None
+    if 'open_at' in data:
+        ch.open_at = _parse_dt(data['open_at'])
+    if 'close_at' in data:
+        ch.close_at = _parse_dt(data['close_at'])
     db.session.commit()
+
+     # --- compute new rooms AFTER changes ---
+    new_rooms = set(_rooms_for(ch))
+
+    # send fresh payload to new/kept rooms
+    payload = _payload_for(ch)
+    for room in new_rooms:
+        socketio.emit("active_lecture_changed", payload, to=room)
+
+    # send CLEAR to rooms that lost access
+    for room in (old_rooms - new_rooms):
+        socketio.emit("active_lecture_changed", None, to=room)
+
     return jsonify({"ok": True})

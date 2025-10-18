@@ -63,6 +63,9 @@
             </form>
           {% endif %}
 
+	  &nbsp;·&nbsp;
+	  <button class="linklike" onclick="del('{{ ch.slug }}')">Delete</button>
+
           &nbsp;·&nbsp;
           <form action="/admin/lecture/{{ ch.slug }}/toggle-open" method="post" style="display:inline;">
             <button type="submit">{{ "Close" if ch.is_open else "Open" }}</button>
@@ -72,6 +75,16 @@
       {% endfor %}
     </tbody>
   </table>
+  <script>
+	async function del(slug){
+	  if (!confirm(`Delete "${slug}" and all its submissions?`)) return;
+	  const res = await fetch(`/api/admin/lecture/${slug}`, { method:'DELETE' });
+	  const ok = (await res.json()).ok;
+	  if (ok) location.reload();
+	  else alert('Delete failed');
+	}
+	</script>
+
 </div>
 {% endblock %}
 

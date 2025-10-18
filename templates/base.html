@@ -53,8 +53,14 @@
 	{% set sect = session.get('section') %}
 	  <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">
 		  Hello, {{ session.get('netid')|default('—') }} (Section {{ sect|default('—') }})
+          <span id="active-lecture-cta">
+		  {% if active_lecture %}
+		    <a href="{{ url_for('lecture.view_lecture', slug=active_lecture.slug) }}"
+		       class="badge">Join the {{ active_lecture.title }} challenge</a>
+		  {% endif %}
+	</span>
 	  </span>
-	  <!-- Live-updating CTA container -->
+	  <!-- Live-updating CTA container 
 	  <span id="active-lecture-cta" style="margin-left: 1em;">
 	    {% if active_lecture %}
 	      <a href="/lecture/{{ active_lecture.slug }}"
@@ -63,6 +69,7 @@
 	      </a>
 	    {% endif %}
 	  </span>
+	  -->
 	{% endif %}
 
 
@@ -218,6 +225,38 @@
 
     <script>
 	(function () {
+	  var cta = document.getElementById("active-lecture-cta");
+	  if (!cta || typeof io === "undefined") return;
+	  var socket = io({ withCredentials: true });
+
+	  // Put this browser into its section room
+	  socket.emit("join_section");
+
+	  function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;")
+	    .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
+
+	  socket.on("active_lecture_changed", function (payload) {
+	    if (!payload || !payload.slug || !payload.title) {
+	      cta.innerHTML = "";
+	      cta.style.display = "none";
+	      return;
+	    }
+	    cta.style.display = "inline";
+	    cta.innerHTML =
+	      '<a href="/lecture/' + esc(payload.slug) + '" class="badge">' +
+	      'Join the ' + esc(payload.title) + ' challenge</a>';
+	  });
+	})();
+     </script>
+
+	<style>
+	/* simple chip style */
+	.badge { font-weight: 500; text-decoration:none; border:1px solid #bbb;
+	  padding:.2em .6em; border-radius:999px; }
+	</style>
+
+<!--    <script>
+	(function () {
 	  // If user isn't logged in, there's no CTA container — bail early.
 	  var cta = document.getElementById("active-lecture-cta");
 	  if (!cta || typeof io === "undefined") return;
@@ -251,7 +290,7 @@
 	  });
 	})();
     </script>
-
+    -->
   {% block extra_scripts %}
   {% endblock %}
 </body>

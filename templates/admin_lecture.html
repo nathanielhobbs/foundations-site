@@ -20,24 +20,166 @@
   <span id="settingsStatusHistory" class="text-sm text-muted"></span>
 </div>
 
-<div class="mb-3">
-  <div class="text-sm font-semibold mb-1">Sections</div>
+	<style>
+	  .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+	  .stack  { display:flex; flex-direction:column; gap: 8px; }
+	  .row    { display:flex; align-items:center; gap: 10px; flex-wrap: wrap; }
+	  .muted  { color: #666; font-size: 0.9rem; }
+	  fieldset { border:1px solid #ddd; border-radius:10px; padding:12px 14px; }
+	  legend   { padding:0 6px; font-weight:600; }
+	  .btn     { border:1px solid #ccc; border-radius:10px; padding:6px 10px; background:#f7f7f7; cursor:pointer; }
+	  .btn-primary { background:#eef5ff; border-color:#bcd2ff; }
+	  .btn-danger  { background:#ffecec; border-color:#ffb3b3; }
+	  .spacer { flex:1; }
+	  .tick   { margin-left:8px; color:#058d2b; font-size:0.9rem; }
+	</style>
 
-  <!-- All sections -->
-  <label class="inline-flex items-center gap-2 mb-2">
-    <input type="checkbox" id="secAll">
-    <span>All sections</span>
-  </label>
+	<div class="grid-2">
+	  <!-- Sections -->
+	  <fieldset class="stack">
+	    <legend>Audience</legend>
+	    <div class="row">
+	      <label><input type="checkbox" id="allSections"> All sections</label>
+	      <span class="muted">If checked, everyone can access & submit during the open window.</span>
+	    </div>
+	    <div class="row" id="sectionChecks">
+	      <!-- Update the labels to your real section names if needed -->
+	      <label><input type="checkbox" class="secBox" value="1"> Sec 1</label>
+	      <label><input type="checkbox" class="secBox" value="2"> Sec 2</label>
+	      <label><input type="checkbox" class="secBox" value="5"> Sec 5</label>
+	      <label><input type="checkbox" class="secBox" value="6"> Sec 6</label>
+	    </div>
+	    <div class="muted">Tip: “All sections” overrides any specific section selections.</div>
+	  </fieldset>
 
-  <!-- Individual section checkboxes (from server) -->
-  <div id="secList" class="flex flex-wrap gap-3">
-    {% for s in sections %}
-      <label class="inline-flex items-center gap-1">
-        <input type="checkbox" class="secItem" value="{{ s }}">
-        <span>Sec {{ s }}</span>
-      </label>
-    {% endfor %}
-  </div>
+	  <!-- Availability -->
+	  <fieldset class="stack">
+	    <legend>Availability</legend>
+	    <div class="row">
+	      <label class="stack" style="flex:1;">
+		<span>Opens at</span>
+		<input id="openAt" type="datetime-local" class="border rounded px-2 py-1"
+		       value="{{ ch.open_at.strftime('%Y-%m-%dT%H:%M') if ch.open_at else '' }}">
+	      </label>
+	      <label class="stack" style="flex:1;">
+		<span>Closes at</span>
+		<input id="closeAt" type="datetime-local" class="border rounded px-2 py-1"
+		       value="{{ ch.close_at.strftime('%Y-%m-%dT%H:%M') if ch.close_at else '' }}">
+	      </label>
+	    </div>
+	    <div class="row">
+	      <label><input type="checkbox" id="isOpen" {{ 'checked' if ch.is_open else '' }}> Open now</label>
+	      <span class="muted">Acts as a manual gate in addition to the window.</span>
+	      <span id="saveStatus" class="tick" style="display:none;">Saved ✓</span>
+	    </div>
+	    <div class="row">
+	      <button id="saveWindow" class="btn btn-primary">Save settings</button>
+	      <span class="muted">Saves sections, window, and “Open now”.</span>
+	    </div>
+	  </fieldset>
+	</div>
+
+	<!-- Danger zone -->
+	<fieldset style="margin-top:16px;">
+	  <legend>Danger zone</legend>
+	  <div class="row">
+	    <div class="muted">Deletes this challenge and all of its submissions.</div>
+	    <div class="spacer"></div>
+	    <button id="deleteBtn" class="btn btn-danger">Delete challenge…</button>
+	  </div>
+	</fieldset>
+
+	<script>
+	(function(){
+	  const slug    = {{ ch.slug|tojson }};
+	  const openAt  = document.getElementById('openAt');
+	  const closeAt = document.getElementById('closeAt');
+	  const isOpen  = document.getElementById('isOpen');
+	  const saveBtn = document.getElementById('saveWindow');
+	  const status  = document.getElementById('saveStatus');
+	  const delBtn  = document.getElementById('deleteBtn');
+
+	  const allSections = document.getElementById('allSections');
+	  const secBoxes    = Array.from(document.querySelectorAll('.secBox'));
+
+	  // --- Initialize section checkboxes from current value ---
+	  (function hydrateSections(){
+	    // Server sends ch.section_scope as string like "1,2,6", "ALL", empty, or None.
+	    const raw = {{ (ch.section_scope or '')|tojson }};
+	    const norm = (raw || '').trim().toUpperCase();
+	    if (!norm || norm === 'ALL' || norm === '*') {
+	      allSections.checked = true;
+	      toggleSpecifics(true);
+	    } else {
+	      const set = new Set(norm.split(',').map(s => s.trim()));
+	      secBoxes.forEach(cb => cb.checked = set.has(String(cb.value).toUpperCase()));
+	      allSections.checked = false;
+	      toggleSpecifics(false);
+	    }
+	  })();
+
+	  function toggleSpecifics(allOn){
+	    secBoxes.forEach(cb => { cb.disabled = allOn; });
+	  }
+
+	  allSections.addEventListener('change', e => {
+	    const allOn = e.target.checked;
+	    toggleSpecifics(allOn);
+	    if (allOn) secBoxes.forEach(cb => cb.checked = false);
+	  });
+
+	  // --- Save settings (sections + window + is_open) ---
+	  async function saveAll(){
+	    // sections
+	    let section_scope = null;
+	    if (allSections.checked) {
+	      section_scope = 'ALL';
+	    } else {
+	      const vals = secBoxes.filter(cb => cb.checked).map(cb => cb.value);
+	      section_scope = vals.length ? vals : []; // backend accepts list or 'ALL'
+	    }
+
+	    const payload = {
+	      is_open: !!isOpen.checked,
+	      open_at: openAt.value || null,
+	      close_at: closeAt.value || null,
+	      section_scope
+	    };
+
+	    status.style.display = 'none';
+	    saveBtn.disabled = true;
+	    try {
+	      const res = await fetch(`/api/admin/lecture/${slug}/settings`, {
+		method:'PATCH',
+		headers:{'Content-Type':'application/json'},
+		body: JSON.stringify(payload)
+	      });
+	      const data = await res.json().catch(()=>({ok:false}));
+	      if (data && data.ok) {
+		status.style.display = '';
+		setTimeout(()=> status.style.display='none', 1200);
+	      } else {
+		alert('Save failed.');
+	      }
+	    } catch(e){
+	      alert('Network error while saving.');
+	    } finally {
+	      saveBtn.disabled = false;
+	    }
+	  }
+	  saveBtn.addEventListener('click', saveAll);
+
+	  // --- Delete ---
+	  delBtn.addEventListener('click', async ()=>{
+	    if (!confirm('Delete this challenge and all submissions? This cannot be undone.')) return;
+	    const res = await fetch(`/api/admin/lecture/${slug}`, { method:'DELETE' });
+	    const data = await res.json().catch(()=>({ok:false}));
+	    if (data.ok) location.href = '/admin/lecture/';
+	    else alert('Delete failed.');
+	  });
+	})();
+	</script>
+
 
   <div class="text-sm text-muted mt-1" id="sectionsSaveStatus"></div>
 </div>
@@ -437,5 +579,42 @@ sectionInput.addEventListener('change', ()=> {
   })();
 })();
 </script>
+<script>
+(function(){
+  const slug = {{ ch.slug|tojson }};
+  const openAt  = document.getElementById('openAt');
+  const closeAt = document.getElementById('closeAt');
+  const isOpen  = document.getElementById('isOpen');
+  const saveBtn = document.getElementById('saveWindow');
+  const msg     = document.getElementById('windowStatus');
+  const delBtn  = document.getElementById('deleteBtn');
+
+  async function saveWindow(){
+    msg.textContent = 'Saving…';
+    const body = {
+      is_open: isOpen.checked,
+      open_at: openAt.value || null,
+      close_at: closeAt.value || null
+    };
+    const res = await fetch(`/api/admin/lecture/${slug}/settings`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const ok = (await res.json()).ok;
+    msg.textContent = ok ? 'Saved ✓' : 'Save failed';
+    setTimeout(()=> msg.textContent='', 900);
+  }
+  saveBtn.addEventListener('click', saveWindow);
+
+  delBtn.addEventListener('click', async ()=>{
+    if (!confirm('Delete this challenge and all submissions? This cannot be undone.')) return;
+    const res = await fetch(`/api/admin/lecture/${slug}`, { method:'DELETE' });
+    const ok = (await res.json()).ok;
+    if (ok) location.href = '/admin/lecture/';
+    else alert('Delete failed');
+  });
+})();
+</script>
+
 {% endblock %}
 

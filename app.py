@@ -4,9 +4,12 @@ import traceback
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, Response, abort, redirect, url_for, session, make_response
 import pandas as pd
-from flask_socketio import SocketIO, emit, join_room, disconnect
+from flask_socketio import emit, join_room, disconnect
+from extensions import socketio
+from lecture_utils import is_open_now, current_active_lecture_for, student_can_access
 import redis
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import json
 import re
 from flask import session as flask_session
@@ -18,6 +21,7 @@ import contextlib
 from extensions import db
 import base64
 
+TZ_NAME = "America/New_York"  # or "UTC" if you prefer comparing in UTC
 
 load_dotenv()
 
@@ -42,6 +46,7 @@ app.config['ROSTER_FILE'] = os.environ.get('ROSTER_FILE')
 
 CURRENT_LOGIN_VERSION = "2025-09-24-username-reset"
 
+
 #app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://foundations:foundation$P4ss;@localhost/foundations_site"
 # Initialize SQLAlchemy (uses app.config['SQLALCHEMY_DATABASE_URI'])
 #db.init_app(app)
@@ -60,6 +65,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_timeout": 10,     # fail fast instead of hanging forever
 }
 
+socketio.init_app(app, cors_allowed_origins="*", async_mode="eventlet")
 db.init_app(app)
 
 from lecture import lecture_bp
@@ -69,6 +75,10 @@ app.register_blueprint(lecture_bp)
 from models_lecture import LectureChallenge, LectureSubmission
 # ... import any other models you want in the same metadata
 
+def _aware_local(dt):
+    if dt is None: return None
+    return dt.replace(tzinfo=TZ) if dt.tzinfo is None else dt.astimezone(TZ)
+
 # NOTE: Flask 3.x removed before_first_request. Just do this once at import time.
 with app.app_context():
     try:
@@ -76,7 +86,6 @@ with app.app_context():
     except Exception as e:
         app.logger.warning(f"db.create_all() skipped/failed: {e}")
 
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
 # >>> Minimal fix: use configured roster path if provided
@@ -262,15 +271,30 @@ def get_display_name(netid):
 def save_roster(df):
     df.to_csv(ROSTER_FILE, index=False)
 
-def _is_open_now(ch):
-    now = datetime.now(est)
-    if not ch.is_open:
+def _aware(dt, tz: ZoneInfo):
+    """
+    Return a timezone-aware datetime in tz.
+    - If dt is None -> None
+    - If dt is naive -> attach tz (treat stored value as tz-local wall time)
+    - If dt is aware -> convert to tz
+    """
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=tz) if dt.tzinfo is None else dt.astimezone(tz)
+
+def _is_open_now(ch, *, now: datetime | None = None, tz: ZoneInfo | None = None) -> bool:
+    tz = tz or ZoneInfo(TZ_NAME)
+    now = now or datetime.now(tz)
+
+    open_at  = _aware(ch.open_at, tz)
+    close_at = _aware(ch.close_at, tz)
+
+    if open_at and now < open_at:
         return False
-    if ch.open_at and now < (ch.open_at.astimezone(est) if ch.open_at.tzinfo else ch.open_at):
+    if close_at and now > close_at:
         return False
-    if ch.close_at and now > (ch.close_at.astimezone(est) if ch.close_at.tzinfo else ch.close_at):
-        return False
-    return True
+    # gate by the manual toggle as well
+    return bool(getattr(ch, "is_open", False))
 
 # This just set a redis key, it doesn't touch the DB
 @app.post("/admin/lecture/<slug>/activate")
@@ -335,12 +359,16 @@ def admin_lecture_index():
         active_slug = None
 
     # If you already defined _is_open_now elsewhere, reuse it.
+    #def _open_now(ch):
+    #    return _is_open_now(ch) if "_is_open_now" in globals() else (
+    #        ch.is_open and
+    #        (ch.open_at is None or datetime.now(est) >= (ch.open_at.astimezone(est) if ch.open_at.tzinfo else ch.open_at)) and
+    #        (ch.close_at is None or datetime.now(est) <= (ch.close_at.astimezone(est) if ch.close_at.tzinfo else ch.close_at))
+    #    )
+
+    # Jinja helper (used in admin_lecture_index.html)
     def _open_now(ch):
-        return _is_open_now(ch) if "_is_open_now" in globals() else (
-            ch.is_open and
-            (ch.open_at is None or datetime.now(est) >= (ch.open_at.astimezone(est) if ch.open_at.tzinfo else ch.open_at)) and
-            (ch.close_at is None or datetime.now(est) <= (ch.close_at.astimezone(est) if ch.close_at.tzinfo else ch.close_at))
-        )
+        return _is_open_now(ch)
 
     return render_template("admin_lecture_index.html",
                            challenges=challenges,
@@ -509,30 +537,56 @@ def enforce_login_version():
 def inject_admin_netid():
     return dict(ADMIN_NETID=app.config.get("ADMIN_NETID", "admin"))
 
+# app.py
 @app.context_processor
 def inject_active_lecture():
-    """
-    Make an 'active_lecture' available to all templates.
-    Priority:
-      1) Redis override: lecture_challenge:active_slug
-      2) Fallback: most recently-created open challenge right now
-    """
+    # Only for logged-in users
+    if not session.get("netid"):
+        return {"active_lecture": None}
+
+    sec = session.get("section")
+    ch = None
+
+    # If an admin has pinned an active slug in Redis, honor it
     try:
-        active_slug = r.get("lecture_challenge:active_slug")
-        if active_slug:
-            ch = LectureChallenge.query.filter_by(slug=active_slug).first()
-            if ch:
-                return {"active_lecture": {"slug": ch.slug, "title": ch.title}}
-        # Fallback: “best open” by created_at DESC
-        ch = (LectureChallenge.query
-              .order_by(LectureChallenge.created_at.desc())
-              .all())
-        for c in ch:
-            if _is_open_now(c):
-                return {"active_lecture": {"slug": c.slug, "title": c.title}}
+        pinned = r.get("lecture_challenge:active_slug")
+        if pinned:
+            cand = LectureChallenge.query.filter_by(slug=str(pinned)).first()
+            if cand and student_can_access(cand, sec):
+                ch = cand
     except Exception:
         pass
-    return {"active_lecture": None}
+
+    # Otherwise fall back to “best open for this section right now”
+    if ch is None:
+        ch = current_active_lecture_for(sec)
+
+    # Return only a minimal dict (what the header needs)
+    return {"active_lecture": ({"slug": ch.slug, "title": ch.title} if ch else None)}
+
+
+@app.get("/_debug/lecture/<slug>/eligibility")
+def debug_challenge_eligibility(slug):
+    from flask import jsonify, session, abort
+    chal = LectureChallenge.query.filter_by(slug=slug).first_or_404()
+    student_section = session.get("section")  # int or None
+    ok, reasons = challenge_eligibility(chal, student_section)
+    return jsonify({
+        "slug": chal.slug,
+        "eligible": ok,
+        "reasons": reasons,
+        "session": {
+            "netid": session.get("netid"),
+            "section": student_section
+        },
+        "chal": {
+            "published": chal.published,
+            "opens_at": chal.opens_at.isoformat() if chal.opens_at else None,
+            "closes_at": chal.closes_at.isoformat() if chal.closes_at else None,
+            "allow_submissions": getattr(chal, "allow_submissions", True),
+            "sections": chal.sections,
+        }
+    })
 
 @app.get("/_debug/roster_lookup")
 def _debug_roster_lookup():
@@ -773,6 +827,13 @@ def set_section():
     return jsonify(success=True, section=session["section"])
 
 
+
+@socketio.on("join_section")
+def on_join_section():
+    sec = session.get("section")
+    room = f"section:{sec}" if sec is not None else "section:none"
+    join_room(room)
+    
 @socketio.on("poll")
 def handle_poll(data):
     section = data.get("section")
