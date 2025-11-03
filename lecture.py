@@ -128,11 +128,17 @@ def public_display_name(netid: str, include_section: bool = False) -> str:
     return name
 
 def student_section() -> str:
-    # however you already store this; from roster map is fine
+    # Admins: use the chosen section (from dropdown)
+    if session.get('is_admin'):
+        sec = session.get('admin_view_section') or session.get('section')
+        return (str(sec).strip() if sec is not None else "")
+    # Students: map from roster
     netid = session.get('netid')
-    if not netid: return ""
+    if not netid:
+        return ""
     row = _roster_map().get(netid.lower()) or {}
     return str(row.get('section', '')).strip()
+
 
 def student_can_view(ch: LectureChallenge) -> bool:
     sec = student_section()
@@ -284,6 +290,8 @@ def submit_lecture(slug):
         code = data.get('code', '')
         if not code.strip():
             return jsonify({"ok": False, "error": "Empty submission."}), 400
+        code = (data.get('code', '') or '').replace('\t', '    ')
+
 
         sub = LectureSubmission(
             challenge_id=ch.id,
@@ -294,6 +302,7 @@ def submit_lecture(slug):
             run_output=data.get('run_output'),
             runtime_ms=data.get('runtime_ms')
         )
+        sub.section = str(student_section())  # <-- make replays scope-able by section
         db.session.add(sub); db.session.commit()
         return jsonify({"ok": True, "submission_id": sub.id})
     except Exception as e:
@@ -347,38 +356,34 @@ def my_status(slug):
     })
 
 @lecture_bp.get('/api/lecture/<slug>/replays')
+@require_login
 def list_public_replays(slug):
     ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
 
-    q = (LectureSubmission.query
-         .filter(LectureSubmission.challenge_id == ch.id))
+    q = LectureSubmission.query.filter_by(
+        challenge_id=ch.id,
+        public_replay=True,
+        status='approved'
+    )
 
-    # require public replay flag if the column exists
-    if hasattr(LectureSubmission, 'public_replay'):
-        q = q.filter(LectureSubmission.public_replay.is_(True))
+    # scope to the same section if the toggle is on
+    if getattr(ch, 'replays_same_section_only', False):
+        viewer_section = student_section()
+        if viewer_section:
+            q = q.filter(LectureSubmission.section == str(viewer_section))
 
-    # optionally require approved
-    if hasattr(LectureSubmission, 'status'):
-        q = q.filter(LectureSubmission.status == 'approved')
-    elif hasattr(LectureSubmission, 'approved'):
-        q = q.filter(LectureSubmission.approved.is_(True))
-
-    rows = (q.order_by(LectureSubmission.created_at.desc())
-              .limit(100)
-              .all())
-
+    rows = q.order_by(LectureSubmission.created_at.asc()).all()
     return jsonify({
         "ok": True,
         "items": [
-            {
-                "submission_id": s.id,
-                "netid": s.netid,          # show netid only
-                "submitted_at": s.created_at.isoformat(),
-            } for s in rows
+            {"submission_id": s.id, "netid": s.netid, "submitted_at": s.created_at.isoformat()}
+            for s in rows
         ]
     })
 
+
 @lecture_bp.get('/lecture/submission/<int:sid>')
+@require_login
 def view_public_replay(sid):
     sub = LectureSubmission.query.get_or_404(sid)
 
@@ -389,6 +394,13 @@ def view_public_replay(sid):
         abort(404)
     if hasattr(sub, 'approved') and not sub.approved:
         abort(404)
+
+    # Enforce section scope when enabled
+    ch = sub.challenge  # relationship is already used later for slug
+    if getattr(ch, 'replays_same_section_only', False):
+        viewer_section = student_section()
+        if viewer_section and str(sub.section) != str(viewer_section):
+            abort(403)
 
     return render_template(
         'lecture_replay.html',
@@ -718,6 +730,9 @@ def admin_update_challenge(slug):
             setattr(ch, key, bool(data[key]))
 
     if 'history_enabled' in data: ch.history_enabled = bool(data['history_enabled'])
+    if 'replays_same_section_only' in data:
+        ch.replays_same_section_only = bool(data['replays_same_section_only'])
+
     if 'section_scope' in data:
         val = data['section_scope']
         if isinstance(val, list):

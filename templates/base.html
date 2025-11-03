@@ -161,6 +161,9 @@
       if (location.pathname === '/chat' || /^\/chat\/\d+/.test(location.pathname)) {
         location.href = `/chat/${v}`;
       }
+      if (location.pathname.startsWith('/lecture')) {
+        location.reload();
+      }
     });
   })();
   </script>

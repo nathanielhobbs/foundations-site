@@ -3,6 +3,175 @@
 {% block title %}Home{% endblock %}
 {% block content %}
 <h1>Welcome to Foundations of Business Programming</h1>
+<br>
+<h2><a href="static/exams/practice-midterm/2025_Fall_Foundations_midterm_practice.pdf">Download</a> practice midterm </h2>
+<br>
+<!-- ===== Midterm Practice — Solution Key (collapsible) ===== -->
+<style>
+  /* Scoped styles so we don't leak into the rest of the page */
+  .soln-card {
+    --bg: var(--panel-bg, #f6f8fa);
+    --fg: var(--panel-text, #24292f);
+    --border: var(--panel-border, #d0d7de);
+    --muted: rgba(127, 127, 127, 0.9);
+    --accent: var(--accent, #2563eb);
+
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 0;
+    overflow: hidden;
+    margin: 1rem 0;
+  }
+  @media (prefers-color-scheme: dark) {
+    .soln-card {
+      --bg: var(--panel-bg, #0b1020);
+      --fg: var(--panel-text, #e6e6e6);
+      --border: var(--panel-border, #2a324a);
+      --muted: rgba(200, 200, 200, 0.7);
+      --accent: var(--accent, #60a5fa);
+    }
+  }
+  .soln-card summary {
+    list-style: none;          /* hide default marker */
+    cursor: pointer;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    font-weight: 800;
+    font-size: clamp(1.05rem, 1.2vw + 1rem, 1.4rem);
+    line-height: 1.2;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    background: linear-gradient(180deg, transparent, rgba(0,0,0,0.02));
+  }
+  .soln-card summary::before {
+    content: "▶";
+    font-size: 0.95rem;
+    transform: translateY(1px);
+    color: var(--accent);
+  }
+  details[open].soln-card summary::before { content: "▼"; }
+
+  .soln-inner { padding: 1rem 1.25rem 1.25rem; }
+
+  .soln-inner h3 {
+    margin: 1.1rem 0 .5rem;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: .01em;
+  }
+  .soln-inner ol { padding-left: 1.25rem; margin: .2rem 0 .8rem; }
+  .soln-inner li { margin: .35rem 0; }
+  .soln-note { font-size: .9rem; color: var(--muted); }
+
+  .soln-code {
+    border: 1px solid var(--border);
+    background: rgba(127,127,127,.06);
+    padding: .6rem .75rem;
+    border-radius: 10px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: .92rem;
+    line-height: 1.35;
+    margin: .4rem 0 .6rem;
+  }
+
+  .ans { font-weight: 800; }
+  .tick { color: var(--accent); font-weight: 900; }
+</style>
+
+<details class="soln-card">
+  <summary>Midterm Practice — <span style="color:var(--accent)">Solution Key</span></summary>
+  <div class="soln-inner">
+
+    <section>
+      <h3>1) Multiple Choice</h3>
+      <ol>
+        <li>
+          <strong>1.1</strong> <span class="ans"><span class="tick">#</span> 2. <code>#</code> This is a comment.</span>
+          <div class="soln-note">Python single-line comments start with <code>#</code>.</div>
+        </li>
+        <li>
+          <strong>1.2</strong> <span class="ans"><span class="tick">#</span> 2.</span>
+          <div class="soln-note"><code>elif</code> runs only if all prior <code>if/elif</code> conditions were false and its own condition is true.</div>
+        </li>
+        <li>
+          <strong>1.3</strong> <span class="ans"><span class="tick">#</span> 1. 2.5</span>
+          <div class="soln-note"><code>5/2</code> is floating-point division in Python 3 → <code>2.5</code>.</div>
+        </li>
+        <li>
+          <strong>1.4</strong> <span class="ans"><span class="tick">#</span> 1.</span>
+          <div class="soln-note">Lists are mutable; tuples are immutable.</div>
+        </li>
+        <li>
+          <strong>1.5</strong> <span class="ans"><span class="tick">#</span> 1</span> and <span class="ans"><span class="tick">#</span> 3</span>
+          <div class="soln-note">
+            The shown output is a single line. (1) a single <code>print</code> with the exact string works;
+            (3) <code>print("This is", name, "and he’s", age, "years old.")</code> matches intent.
+            (2) is wrong: concatenating <code>str</code> with <code>int</code> without <code>str(age)</code> raises a <code>TypeError</code>.
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h3>2) True/False</h3>
+      <ol>
+        <li><strong>2.1</strong> <span class="ans">False</span> — <code>if</code> doesn’t require an <code>else</code>.</li>
+        <li><strong>2.2</strong> <span class="ans">False</span> — <code>+=</code> is not “by 1” specifically; it adds the RHS.</li>
+        <li><strong>2.3</strong> <span class="ans">False</span> — Positional parameter order matters (unless keywords are used).</li>
+        <li><strong>2.4</strong> <span class="ans">True</span> — You can mix required and defaulted parameters.</li>
+        <li><strong>2.5</strong> <span class="ans">True</span> — <code>*args</code> packs a variable number of args into a tuple.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h3>3) Code Problem Identification</h3>
+      <ol>
+        <li><strong>3.1</strong> <span class="ans"><span class="tick">#</span> 1. <code>def function_name(parameters):</code></span></li>
+        <li>
+          <strong>3.2</strong> <span class="ans"><span class="tick">#</span> 4.</span>
+          <div class="soln-note">It executes (no syntax error) but returns <code>None</code> because there’s no <code>return</code>; printing the call shows <code>None</code>.</div>
+        </li>
+        <li>
+          <strong>3.3</strong> <span class="ans"><span class="tick">#</span> 3. <code>()</code> then <code>3</code></span>
+          <div class="soln-note"><code>*more</code> is empty → prints <code>()</code>, then the returned <code>1+2=3</code> is printed by the outer <code>print</code>.</div>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h3>4) Open-Ended</h3>
+
+      <p><strong>4.1</strong> Define a function that returns the sum of values at even indices (0,2,4,…).</p>
+      <pre class="soln-code"><code>def sum_even_indices(nums):
+    """Assumes nums is a list of exactly 10 integers."""
+    return sum(nums[i] for i in range(0, len(nums), 2))</code></pre>
+      <div class="soln-note">Equivalent answers (e.g., <code>sum(nums[0::2])</code>) earn full credit.</div>
+
+      <p><strong>4.2</strong> What does this code do?</p>
+      <pre class="soln-code"><code>def sum(a, b):
+    return a + b
+
+print('The sum of 5 and 6 is ' + sum('5', '6'))
+print('The sum of 1 and 2 is ' + sum(1, 2))</code></pre>
+      <div class="soln-note">
+        First line concatenates strings → prints <code>The sum of 5 and 6 is 56</code>.
+        Second line raises <code>TypeError</code> because you’re adding a string to an int.
+        A robust fix:
+      </div>
+      <pre class="soln-code"><code>print(f"The sum of 5 and 6 is {sum(5, 6)}")
+print(f"The sum of 1 and 2 is {sum(1, 2)}")</code></pre>
+    </section>
+
+  </div>
+</details>
+<!-- ===== /Solution Key ===== -->
+
+
+<br><br>
 <section id="schedule">
   <h2>Course Schedule</h2>
   <table class="schedule">
@@ -44,12 +213,12 @@
         <td>Nested loops, <code>break</code>, <code>continue</code>, <code>enumerate</code></td>
         <td></td>
       </tr>
-      <tr>
+      <tr class="done">
         <td>7</td>
         <td>Comprehensions: List, dictionary, and set comprehensions</td>
         <td>HW2 released</td>
       </tr>
-      <tr>
+      <tr class="done">
         <td>8</td>
         <td>File I/O: <code>open</code> and <code>with</code>, Exceptions: <code>try/except</code></td>
         <td>HW2 due</td>

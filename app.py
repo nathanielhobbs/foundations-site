@@ -2,7 +2,7 @@ import os
 import requests
 import traceback
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, Response, abort, redirect, url_for, session, make_response
+from flask import Flask, render_template, request, Response, abort, redirect, url_for, session, make_response, g
 import pandas as pd
 from flask_socketio import emit, join_room, disconnect
 from extensions import socketio
@@ -20,6 +20,8 @@ import io
 import contextlib
 from extensions import db
 import base64
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 
 TZ_NAME = "America/New_York"  # or "UTC" if you prefer comparing in UTC
 
@@ -230,6 +232,29 @@ def roster_row_for_netid(netid: str):
     roster = load_roster()
     row = roster.loc[roster["netid_lc"] == (netid or "").lower()]
     return roster, row
+
+@app.template_filter("due_et")
+def due_et(val: str):
+    if not val:
+        return "—"
+    dt = None
+    # Try ISO first (e.g., 2025-10-28T23:59:00-04:00)
+    try:
+        dt = datetime.fromisoformat(val)
+    except Exception:
+        pass
+    # Fallback to "Oct 8, 2025 03:59" style (assume ET)
+    if dt is None:
+        try:
+            dt = datetime.strptime(val, "%b %d, %Y %H:%M")
+            dt = est.localize(dt)
+        except Exception:
+            return val  # show raw if unparseable
+
+    dt_et = dt.astimezone(est)
+    # portable day/month formatting (no %-d portability issues)
+    return dt_et.strftime("%a, %b ") + str(int(dt_et.strftime("%d"))) + dt_et.strftime(", %Y %I:%M %p ET")
+
 
 def section_from_row(row):
     """Extract int section from a single-row DataFrame; return None if missing."""
@@ -545,6 +570,8 @@ def inject_active_lecture():
         return {"active_lecture": None}
 
     sec = session.get("section")
+    if session.get("is_admin"):
+        sec = session.get("admin_view_section", sec)
     ch = None
 
     # If an admin has pinned an active slug in Redis, honor it
@@ -564,12 +591,20 @@ def inject_active_lecture():
     # Return only a minimal dict (what the header needs)
     return {"active_lecture": ({"slug": ch.slug, "title": ch.title} if ch else None)}
 
+@app.after_request
+def _no_cache_for_admin_and_lecture(resp):
+    if request.path.startswith(("/lecture", "/admin")):
+        resp.headers["Cache-Control"] = "no-store, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
+
 
 @app.get("/_debug/lecture/<slug>/eligibility")
 def debug_challenge_eligibility(slug):
     from flask import jsonify, session, abort
     chal = LectureChallenge.query.filter_by(slug=slug).first_or_404()
-    student_section = session.get("section")  # int or None
+    slist_public_replaystudent_section = session.get("section")  # int or None
     ok, reasons = challenge_eligibility(chal, student_section)
     return jsonify({
         "slug": chal.slug,
@@ -824,6 +859,9 @@ def set_section():
         return jsonify(success=False, error="Invalid section"), 400
 
     session["section"] = int(new_section)
+
+    if session.get("is_admin"):
+        session["admin_view_section"] = int(new_section)
     return jsonify(success=True, section=session["section"])
 
 
@@ -1375,10 +1413,17 @@ def norm_section(s):
     return s.lstrip("0") or "0"
 
 def repo_exists(org: str, repo: str) -> bool:
-    # Lightweight existence check (no token needed)
-    url = f"https://github.com/{org}/{repo}"
+    """
+    Check existence of a (private) repo using the GitHub API.
+    Requires GITHUB_TOKEN (or GH_TOKEN) with read access to the org.
+    """
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    headers = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     try:
-        r = requests.get(url, timeout=5)
+        r = requests.get(f"https://api.github.com/repos/{org}/{repo}",
+                         headers=headers, timeout=8)
         return r.status_code == 200
     except Exception:
         return False
@@ -1437,8 +1482,8 @@ def assignments():
         assignments = [
             {
                 "slug": "a01",
-                "name": "Assignment1 – Functions/Strings/Lists",
-                "short": "Basics only: define/call functions; simple string ops; tuple/list basics.",
+                "name": "Assignment 1 – Functions/Strings/Lists",
+                #"short": "Basics only: define/call functions; simple string ops; tuple/list basics.",
                 "due_utc": "Oct 8, 2025 03:59",
                 "sections": ["all"],        # visible to all sections or e.g. ["1","2"] not [1,2]
                 "released": True,
@@ -1456,14 +1501,21 @@ def assignments():
                 "org": "hobbs-foundations-f25",
                 "repo_prefix": "a01-template",
             },
-            #{
-            #    "slug": "a02",
-            #    "name": "Assignment2 – Coming soon...",
-            #    "due_utc": None,
-            #    "sections": ["all"],
-            #    "released": False,
-            #    "invite_by_section": {},    # not released yet
-            #},
+            {
+              "slug": "hw2-loops-comprehensions-dicts",
+              "name": "Assignment 2 - Loops, Comprehensions & Dictionaries",
+              "due_utc": "2025-10-28T23:59:00-04:00",
+              "sections": ["all"],
+              "released": True, 
+              "template_repo": "https://github.com/hobbs-foundations-f25/hw2-loops-comprehensions-dicts",
+              "invite_by_section": {
+                  "all": "https://classroom.github.com/a/lcLtgWsV"
+              },
+              "org": "hobbs-foundations-f25",
+              "repo_prefix": "hw2-loops-comprehensions-and-dictionaries",
+              #"repo_prefix": "hw2-loops-comprehensions-dicts"
+            },
+
         ]
 
         # For each assignment, select the correct invite link for this student’s section.
@@ -1480,20 +1532,41 @@ def assignments():
             #    a["invite_link"] = ibs["all"]
 
         # --- Build user_repos (only if the GitHub repo actually exists) ------------
-        user_repos = {
-            "a01": f"https://github.com/hobbs-foundations-f25/a01-template-{github_username}"
-        }
-        #user_repos = {}
-        #for a in assignments:
-        #    org = a.get("org")
-        #    prefix = a.get("repo_prefix")
-        #    if org and prefix and github_username:
-        #        repo_name = f"{prefix}-{github_username}"  # Classroom default
-        #        if repo_exists(org, repo_name):
-        #            user_repos[a["slug"]] = f"https://github.com/{org}/{repo_name}"
+        #user_repos = {
+        #    "a01": f"https://github.com/hobbs-foundations-f25/a01-template-{github_username}"
+        #}
+        # --- Build user_repos (detect student repos for all assignments) ---
+        user_repos = {}
+        for a in assignments:
+            org = a.get("org")
+            prefix = a.get("repo_prefix")
+            if org and prefix and github_username:
+                repo_name = f"{prefix}-{github_username}"  # Classroom default naming
+                if repo_exists(org, repo_name):
+                    user_repos[a["slug"]] = f"https://github.com/{org}/{repo_name}"
 
         # --- Admin flag for the template toggle --------------------------------
         is_admin = bool(flask_session.get("is_admin"))
+
+        # 1) Compute per-viewer invite link (by their section or 'all')
+        viewer_section = (session.get("section") or "all")
+        for a in assignments:
+            inv_by_section = a.get("invite_by_section") or {}
+            a["invite_link"] = inv_by_section.get(viewer_section) or inv_by_section.get("all")
+
+        # 2) Build user_repos for this viewer (auto-flip Accept → View on GitHub)
+        user_repos = {}
+        gh_user = (github_username or "").strip()
+        if gh_user:
+            for a in assignments:
+                org = a.get("org")
+                prefix = a.get("repo_prefix")
+                if not (org and prefix):
+                    continue
+                repo_name = f"{prefix}-{gh_user}"
+                if repo_exists(org, repo_name):
+                    user_repos[a["slug"]] = f"https://github.com/{org}/{repo_name}"
+
 
         return render_template(
             "assignments.html",              # use the per-assignment admin+copy template you installed
@@ -1506,6 +1579,101 @@ def assignments():
     except Exception:
         return f"<pre>{traceback.format_exc()}</pre>", 500
 
+@app.get("/admin/act_as_section")
+def admin_act_as_section():
+    # use the session-admin flag you already set at login()
+    if not session.get("is_admin"):
+        abort(403)
+    sec = request.args.get("sec", type=int)
+    session["admin_view_section"] = sec  # None clears override
+    return redirect(request.referrer or url_for("index"))
+
+def current_view_section():
+    # prefer admin override if present
+    sec = session.get("section")
+    if session.get("is_admin"):
+        sec = session.get("admin_view_section", sec)
+    return sec
+
+@app.get("/api/assignments/check")
+def api_assignments_check():
+    org  = request.args.get("org")
+    repo = request.args.get("repo")
+    if not org or not repo:
+        return jsonify(ok=False), 400
+    url = f"https://api.github.com/repos/{org}/{repo}"
+    h   = {"Accept":"application/vnd.github+json"}
+    if GITHUB_TOKEN: h["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    r = requests.get(url, headers=h)
+    if r.status_code == 403 and "rate limit" in r.text.lower():
+        return jsonify(ok=True, exists=False, rate_limited=True)
+    return jsonify(ok=True, exists=(r.status_code==200))
+
+def _slugify(s):
+    s = s.lower().replace("&", "and")
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s
+
+@app.get("/api/assignments/check2")
+def api_assignments_check2():
+    org      = request.args.get("org")
+    username = request.args.get("username")
+    slug     = request.args.get("slug") or ""   # your internal assignment slug
+    if not org or not username:
+        return jsonify(ok=False), 400
+
+    # Optional: pull the assignment title/prefix you store for better matching
+    # a = Assignment.query.filter_by(slug=slug).first()
+    # title   = a.title if a else slug
+    # prefix1 = getattr(a, "repo_prefix", None)
+    # title_slug = _slugify(title)
+
+    headers = {"Accept":"application/vnd.github+json"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+
+    # list repos in org (private)
+    repos = []
+    page = 1
+    while page <= 3:  # up to ~300 repos
+        r = requests.get(
+            f"https://api.github.com/orgs/{org}/repos",
+            params={"per_page": 100, "page": page, "type": "private", "sort": "created"},
+            headers=headers, timeout=15
+        )
+        if r.status_code == 403 and "rate limit" in r.text.lower():
+            return jsonify(ok=True, exists=False, rate_limited=True)
+        if r.status_code != 200:
+            break
+        batch = r.json()
+        if not batch:
+            break
+        repos.extend(batch)
+        page += 1
+
+    # look for repos that end with -username
+    suffix = f"-{username.lower()}"
+    candidates = []
+    now = time.time()
+    for repo in repos:
+        name = repo.get("name","").lower()
+        if not name.endswith(suffix):
+            continue
+        # must be fairly recent (last 14 days) to avoid old assignments
+        created_at = repo.get("created_at") or ""
+        # slack on parsing; just accept if present
+        # lightweight heuristic: prefer names containing tokens from your assignment
+        # tokens = {"loops","comprehensions","dictionaries","hw2"}
+        tokens = {"loops","comprehensions","dictionaries","hw2"}
+        score = sum(1 for t in tokens if t in name)
+        candidates.append((score, repo))
+
+    if not candidates:
+        return jsonify(ok=True, exists=False)
+
+    # best-scoring candidate
+    best = sorted(candidates, key=lambda x: (-x[0], x[1].get("name","")))[0][1]
+    return jsonify(ok=True, exists=True, repo_html_url=best.get("html_url"))
 
 @app.get("/screenshots")
 def screenshots_gallery():

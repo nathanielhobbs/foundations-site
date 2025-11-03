@@ -50,6 +50,31 @@
 	      <label><input type="checkbox" class="secBox" value="6"> Sec 6</label>
 	    </div>
 	    <div class="muted">Tip: “All sections” overrides any specific section selections.</div>
+	    <div class="mb-3 flex items-center gap-3">
+		  <label class="inline-flex items-center gap-1">
+		    <input type="checkbox" id="toggleReplayScope" {{ 'checked' if ch.replays_same_section_only else '' }}>
+		    <span>Limit public replays to same section</span>
+		  </label>
+		  <span id="settingsStatusReplayScope" class="text-sm text-muted"></span>
+		</div>
+		<script>
+		(function(){
+		  const slug = {{ ch.slug|tojson }};
+		  const box  = document.getElementById('toggleReplayScope');
+		  const msg  = document.getElementById('settingsStatusReplayScope');
+		  box.addEventListener('change', async ()=>{
+		    msg.textContent = 'Saving…';
+		    const res = await fetch(`/api/admin/lecture/${slug}/settings`,{
+		      method:'PATCH', headers:{'Content-Type':'application/json'},
+		      body: JSON.stringify({ replays_same_section_only: box.checked })
+		    });
+		    const ok = (await res.json()).ok;
+		    msg.textContent = ok ? 'Saved ✓' : 'Save failed';
+		    setTimeout(()=> msg.textContent='', 900);
+		  });
+		})();
+		</script>
+
 	  </fieldset>
 
 	  <!-- Availability -->
@@ -76,6 +101,12 @@
 	      <button id="saveWindow" class="btn btn-primary">Save settings</button>
 	      <span class="muted">Saves sections, window, and “Open now”.</span>
 	    </div>
+	    <div class="row">
+		  <button type="button" class="btn" id="open5">Open 5 min</button>
+		  <button type="button" class="btn" id="open10">Open 10 min</button>
+		  <button type="button" class="btn" id="closeNow">Close now</button>
+		  <span id="countdown" class="muted"></span>
+		</div>
 	  </fieldset>
 	</div>
 
@@ -613,6 +644,92 @@ sectionInput.addEventListener('change', ()=> {
     if (ok) location.href = '/admin/lecture/';
     else alert('Delete failed');
   });
+})();
+</script>
+
+<script>
+(function(){
+  const slug = {{ ch.slug|tojson }};
+  const openAt    = document.getElementById('openAt');
+  const closeAt   = document.getElementById('closeAt');
+  const isOpen    = document.getElementById('isOpen');
+  const btn5      = document.getElementById('open5');
+  const btn10     = document.getElementById('open10');
+  const closeNow  = document.getElementById('closeNow');
+  const countdown = document.getElementById('countdown');
+  const tickBadge = document.getElementById('saveStatus'); // the green "Saved ✓" badge
+
+  function pad(n){ return n<10 ? '0'+n : ''+n; }
+  function toLocalISO(dt){
+    // "YYYY-MM-DDTHH:MM" for <input type="datetime-local">
+    return dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate())
+         +'T'+pad(dt.getHours())+':'+pad(dt.getMinutes());
+  }
+
+  async function autoSave(){
+    // show saving state subtly by toggling the badge
+    if (tickBadge) tickBadge.style.display = 'none';
+    try{
+      const body = {
+        is_open: !!isOpen.checked,
+        open_at: openAt.value || null,
+        close_at: closeAt.value || null
+      };
+      const res = await fetch(`/api/admin/lecture/${slug}/settings`, {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      const data = await res.json().catch(()=>({ok:false}));
+      if (data.ok && tickBadge){
+        tickBadge.style.display = '';
+        setTimeout(()=> tickBadge.style.display = 'none', 1200);
+      } else {
+        console.warn('Auto-save failed');
+      }
+    }catch(e){
+      console.warn('Network error during auto-save', e);
+    }
+  }
+
+  function setWindowFor(minutes){
+    const now = new Date();
+    const end = new Date(now.getTime() + minutes*60*1000);
+    openAt.value  = toLocalISO(now);
+    closeAt.value = toLocalISO(end);
+    isOpen.checked = true;
+  }
+
+  btn5.addEventListener('click', async ()=>{
+    setWindowFor(5);
+    await autoSave();
+  });
+
+  btn10.addEventListener('click', async ()=>{
+    setWindowFor(10);
+    await autoSave();
+  });
+
+  closeNow.addEventListener('click', async ()=>{
+    closeAt.value = toLocalISO(new Date());
+    isOpen.checked = false;
+    await autoSave();
+  });
+
+  // live countdown
+  function tick(){
+    if (!closeAt.value){ countdown.textContent=''; return setTimeout(tick, 1000); }
+    const end = new Date(closeAt.value);
+    const now = new Date();
+    const ms  = end - now;
+    if (isNaN(ms)){ countdown.textContent=''; return setTimeout(tick, 1000); }
+    if (ms <= 0){ countdown.textContent='Closed'; return setTimeout(tick, 1000); }
+    const total = Math.floor(ms/1000);
+    const m = Math.floor(total/60), s = total%60;
+    countdown.textContent = `Time remaining: ${m}:${pad(s)}`;
+    setTimeout(tick, 250);
+  }
+  tick();
 })();
 </script>
 

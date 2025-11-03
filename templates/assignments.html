@@ -7,6 +7,55 @@ user_repos={{ user_repos }}
 </pre>
 {% endif %}
 
+
+<style>
+  /* Only affects this table */
+  .assignments-table {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: separate !important;  /* override global collapse */
+    border-spacing: 0 1.25rem;             /* vertical gap between rows (~20px) */
+  }
+  .assignments-table th,
+  .assignments-table td {
+    padding: 1.5rem 1.25rem;               /* nice roomy cells */
+    vertical-align: top;
+  }
+  /* lock column widths */
+  .assignments-table th.col-assignment { width: 46%; }
+  .assignments-table th.col-due        { width: 18%; }
+  .assignments-table th.col-sections   { width: 10%; }
+  .assignments-table th.col-status     { width: 12%; }
+  .assignments-table th.col-links      { width: 14%; }
+
+  /* card effect for each row */
+  .assignments-table tbody tr {
+    background: rgba(30, 41, 59, 0.6);     /* slate-800/60 vibe */
+    border: 1px solid rgba(51, 65, 85, 0.7);
+    border-radius: 14px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.25);
+  }
+</style>
+
+<style>
+  /* Guarantees visible vertical spacing between assignment rows */
+  .gap-row td {
+    height: 22px;           /* adjust to taste: 16–32px */
+    padding: 0 !important;
+    border: 0 !important;
+    line-height: 0;
+  }
+
+  /* Optional: make each assignment row look like a card */
+  .assignment-row {
+    background: rgba(30,41,59,0.6);
+    border: 1px solid rgba(51,65,85,0.7);
+    border-radius: 14px;    /* rounded corners need display:block on cells in some browsers; if you don't see rounding, it's fine */
+    box-shadow: 0 1px 6px rgba(0,0,0,.25);
+  }
+</style>
+
+
 {% block title %}Assignments{% endblock %}
 {% block content %}
 <div class="container mx-auto max-w-5xl">
@@ -44,138 +93,143 @@ user_repos={{ user_repos }}
   </div>
 
   <div class="overflow-x-auto mb-10">
-    <table class="w-full text-left border border-slate-700 rounded-xl overflow-hidden">
-      <colgroup>
-        <col class="w-[46%]">
-        <col class="w-[14%]">
-        <col class="w-[10%]">
-        <col class="w-[12%]">
-        <col class="w-[18%]">
-      </colgroup>
-      <thead class="bg-slate-800/70">
-        <tr>
-          <th class="px-4 py-3">Assignment</th>
-          <th class="px-4 py-3">Due (UTC)</th>
-          <th class="px-4 py-3">Sections</th>
-          <th class="px-4 py-3">Status</th>
-          <th class="px-4 py-3">Links</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% set ns = namespace(any_visible=false) %}
-        {% set show_all = (is_admin and request.args.get('show') == 'all') %}
-        {% for a in assignments %}
-          {% set visible_to_section = (not a.sections) or (section and section in a.sections) or ('all' in a.sections) %}
-          {% if show_all or visible_to_section %}
-            {% set ns.any_visible = true %}
-            {% set repo_url = (user_repos and a.slug and user_repos.get(a.slug)) %}
-            <tr class="border-t border-slate-700">
-              <td class="px-4 py-4 align-top">
-                <div class="font-medium leading-snug">{{ a.name }}</div>
-                {% if a.short %}<div class="text-[0.92rem] opacity-80 mt-1 leading-relaxed">{{ a.short }}</div>{% endif %}
-              </td>
-              <td class="px-4 py-4 align-top whitespace-nowrap">{{ a.due_utc or "—" }}</td>
-              <td class="px-4 py-4 align-top">
-                {% if a.sections %}
-                  {% if 'all' in a.sections %}All{% else %}{{ a.sections | join(', ') }}{% endif %}
-                {% else %}
-                  All
-                {% endif %}
-              </td>
-              <td class="px-4 py-4 align-top">
-                {% if repo_url %}
-                  <span class="inline-block rounded-md px-2 py-1 text-xs bg-blue-700/60 border border-blue-600">Accepted</span>
-                {% elif a.released %}
-                  <span class="inline-block rounded-md px-2 py-1 text-xs bg-emerald-700/60 border border-emerald-600">Released</span>
-                {% else %}
-                  <span class="inline-block rounded-md px-2 py-1 text-xs bg-slate-700/60 border border-slate-600">Coming soon</span>
-                {% endif %}
-              </td>
-              <td class="px-4 py-4 align-top space-x-2 whitespace-nowrap">
-                {% if repo_url %}
-                  <a href="{{ repo_url }}" target="_blank" rel="noopener"
-                    class="inline-block px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 transition text-white text-sm">
-                    View on GitHub
-                  </a>
-                  <span class="inline-flex items-center border border-slate-600 rounded-lg overflow-hidden align-middle ml-1">
-                    <button type="button"
-                            class="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600"
-                            data-clone="ssh"
-                            data-repo-url="{{ repo_url }}"
-                            onclick="copyClone(this)">
-                      git clone command
-                    </button>
-		    <!--
-                    <button type="button"
-                            class="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 border-l border-slate-600"
-                            data-clone="https"
-                            data-repo-url="{{ repo_url }}"
-                            onclick="copyClone(this)">
-                      HTTPS
-                    </button>
-                    <button type="button"
-                            class="px-2 py-1 text-xs bg-emerald-700 hover:bg-emerald-600 border-l border-slate-600"
-                            data-clone="ssh"
-                            data-repo-url="{{ repo_url }}"
-                            title="Copy git clone">
-                      📋
-                    </button>
-		    -->
-                  </span>
-                {% elif a.released and a.invite_link %}
-                  <a href="{{ a.invite_link }}" target="_blank" rel="noopener"
-                    class="inline-block px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition text-white text-sm">
-                    Accept
-                  </a>
-                {% endif %}
-                <!--
-                {% if a.template_repo %}
-                  <a href="{{ a.template_repo }}" target="_blank" rel="noopener" class="underline text-sm">Assignment</a>
-                {% endif %}
-                {% if a.readme or a.docs %}
-                  <a href="{{ a.readme or a.docs }}" target="_blank" rel="noopener" class="underline text-sm">Instructions</a>
-                {% endif %}
-		-->
-              </td>
-            </tr>
-          {% endif %}
-        {% endfor %}
-        {% if not ns.any_visible %}
-          <tr><td colspan="5" class="px-4 py-6 text-center opacity-80">No assignments to show yet.</td></tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </div>
+	  {# put border/rounding on the wrapper, not the table, so spacing is visible #}
+	  <div class="rounded-2xl border border-slate-700 bg-slate-900/20 p-2">
+
+	    <table class="assignments-table">
+	      <thead>
+		<tr>
+		  <th class="col-assignment">Assignment</th>
+		  <th class="col-due">Due (EST)</th>
+		  <th class="col-sections">Sections</th>
+		  <th class="col-status">Status</th>
+		  <th class="col-links">Links</th>
+		</tr>
+	      </thead>
+
+	      <tbody>
+		{% set ns = namespace(any_visible=false) %}
+		{% set show_all = (is_admin and request.args.get('show') == 'all') %}
+		{% for a in assignments %}
+		  {% set visible_to_section = (not a.sections) or (section and section in a.sections) or ('all' in a.sections) %}
+		  {% if show_all or visible_to_section %}
+		    {% set ns.any_visible = true %}
+		    {% set repo_url = user_repos.get(a.slug) %}
+
+		    <tr class="assignment-row">
+		      <td class="px-5 py-8 align-top">
+			<div class="font-medium leading-snug break-words">{{ a.name }}</div>
+			{% if is_admin and username %}
+			  <div class="text-xs text-slate-400 mt-1">
+			    Expecting: {{ a.repo_prefix }}-{{ username }} @ {{ a.org }}
+			  </div>
+			{% endif %}
+			{% if a.description %}
+			  <div class="text-slate-300 text-sm leading-relaxed mt-1">{{ a.description }}</div>
+			{% endif %}
+			{% if a.short %}
+			  <div class="text-[0.92rem] opacity-80 mt-1 leading-relaxed">{{ a.short }}</div>
+			{% endif %}
+		      </td>
+
+		      <td class="px-5 py-8 align-top whitespace-nowrap">{{ a.due_utc | due_et }}</td>
+
+		      <td class="px-5 py-8 align-top whitespace-nowrap">
+			{% if a.sections %}
+			  {% if 'all' in a.sections %}All{% else %}{{ a.sections | join(', ') }}{% endif %}
+			{% else %}All{% endif %}
+		      </td>
+
+		      <td class="px-5 py-8 align-top">
+			{% if repo_url %}
+			  <span class="inline-block rounded-md px-2 py-1 text-xs bg-blue-700/60 border border-blue-600">Accepted</span>
+			{% elif a.released %}
+			  <span class="inline-block rounded-md px-2 py-1 text-xs bg-emerald-700/60 border border-emerald-600">Released</span>
+			{% else %}
+			  <span class="inline-block rounded-md px-2 py-1 text-xs bg-slate-700/60 border border-slate-600">Coming soon</span>
+			{% endif %}
+		      </td>
+
+		      <td class="px-5 py-8 align-top whitespace-nowrap">
+			{% if repo_url %}
+			  <a href="{{ repo_url }}" target="_blank" rel="noopener"
+			     class="inline-block px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 transition text-white text-sm">
+			    View on GitHub
+			  </a>
+			  <button type="button"
+				  class="inline-block px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded-lg border border-slate-600 ml-2"
+				  data-clone="ssh" data-repo-url="{{ repo_url }}"
+				  onclick="copyClone(this)">
+			    git clone (SSH)
+			  </button>
+			  {% elif a.released and a.invite_link %}
+				  <a href="{{ a.invite_link }}" target="_blank" rel="noopener"
+				     class="inline-block px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition text-white text-sm">
+				    Accept
+				  </a>
+				  <!--
+				  <button type="button"
+				  onclick="checkRepoSmart('{{ a.slug }}','hobbs-foundations-f25','{{ username }}')">
+				  I’ve accepted — refresh
+				</button>
+
+				<script>
+				async function checkRepoSmart(slug, org, username){
+				  const res = await fetch(`/api/assignments/check2?slug=${encodeURIComponent(slug)}&org=${encodeURIComponent(org)}&username=${encodeURIComponent(username)}`);
+				  const data = await res.json().catch(()=>({}));
+				  if (data.ok && data.repo_html_url){
+				    location.reload(); // your template will render "View on GitHub" once it sees it
+				  }else{
+				    alert(data.rate_limited ? 'GitHub rate limit; try again in a minute.' : 'Not created yet; give Classroom a few seconds.');
+				  }
+				}
+				</script>
+                                -->
+				<button type="button"
+				  onclick="checkRepo('{{ a.slug }}','hobbs-foundations-f25','hw2-loops-comprehensions-and-dictionaries','{{ username }}')">
+				  I’ve accepted — refresh
+				</button>
+				{% endif %}
+		      </td>
+		    </tr>
+
+		    <tr class="gap-row"><td colspan="5"></td></tr>
+		    <tr class="gap-row"><td colspan="5"></td></tr>
+		    <tr class="gap-row"><td colspan="5"></td></tr>
+		  {% endif %}
+		{% endfor %}
+		{% if not ns.any_visible %}
+		  <tr><td colspan="5" class="px-4 py-8 text-center opacity-80">No assignments to show yet.</td></tr>
+		{% endif %}
+	      </tbody>
+	    </table>
+
+	  </div>
+	</div>
+
+
   <br><br><br><br>
   <!-- <h2 class="text-xl font-semibold mb-3">How this works</h2> -->
   <a class="underline text-sm" href="{{ url_for('screenshots_gallery') }}">Open screenshot gallery for step by step guide</a>
 
   <ol class="list-decimal ml-6 space-y-6">
+	  <!--
 	<li>
-  	<a href="https://classroom.github.com/a/HvPv3J5v">Accept Assignment 1 on Github</a>
+		<a href="https://classroom.github.com/a/HvPv3J5v">Accept Assignment 1 on Github</a>
 	</li>
     <li>
       <p class="mb-4">(Only once/semester) Find your <strong>Classroom Identifier</strong> on the page and click it to match your GitHub account.</p>
-      <!--
-      <figure class="rounded-xl overflow-hidden border border-slate-700">
-        <img src="{{ url_for('static', filename='img/hw_step_1.png') }}" alt="Step 1: Choose your classroom identifier" class="w-full">
-      </figure>
-      -->
       <p class="text-sm opacity-80 mt-2">Tip: Your identifier is the username provided on <em>foundations.hobbsresearch.com</em>. If you forget it, check your Canvas inbox.</p>
     </li>
 
+	-->
     <li>
-      <p class="mb-2">(Once/Assignment) After you accept, GitHub Classroom creates <strong>your personal repository</strong> for the assignment.</p>
-      <!--
-      <figure class="rounded-xl overflow-hidden border border-slate-700">
-        <img src="{{ url_for('static', filename='img/hw_step_2.png') }}" alt="Step 2: Personal repository created" class="w-full">
-      </figure>
-      -->
+	    <p class="mb-2">After you accept, GitHub Classroom creates <strong><a href={{ repo_url}}>your personal repository</a></strong> for the assignment.</p>
       <p class="text-sm opacity-80 mt-2">This is where you will push your work. The code lives on GitHub (remote), not on your computer (local).</p>
     </li>
 
     <li>
-	    <p class="mb-2">Open the repository on GitHub and download it to your computer (<code>git clone ...</code>)      <!--
+	    <p class="mb-2">Open the repository on GitHub and download it to your computer (you can copy the <code>git clone ...</code> command from this page by clicking the button next to the assignment. You paste this in the terminal where you want to download the assignment.)      <!--
       <figure class="rounded-xl overflow-hidden border border-slate-700">
         <img src="{{ url_for('static', filename='img/hw_step_3.png') }}" alt="Step 3: Clone the repository from GitHub" class="w-full">
       </figure>
@@ -186,7 +240,7 @@ user_repos={{ user_repos }}
 
     </li>
     <li>
-	When you're ready to submit, push changes to the remote (<code>git add ...</code>/<code>git commit -m "..."</code>/<code>git push</code>).</p>
+	When you're ready to submit, push changes to the remote (the specific commands <code>git add ...</code>/<code>git commit -m "..."</code>/<code>git push</code> can be copied from the homework description on GitHub. You can paste these into the terminal that is open on the directory with the assignment).</p>
     </li>
   </ol>
 
@@ -206,6 +260,50 @@ user_repos={{ user_repos }}
     </ul>
   </div>
 </div>
+
+{# ---------- THEME-AWARE STYLES (uses your CSS vars with fallbacks) ---------- #}
+<style>
+.cmd-block {
+  position: relative;
+  background: var(--panel-bg, #0b1020);
+  color: var(--panel-text, #e5e7eb);
+  border: 1px solid var(--panel-border, #334155);
+  border-radius: 12px;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.cmd-actions { display:flex; gap:8px; margin-bottom:8px; align-items:center; justify-content: space-between; }
+.copy-btn {
+  cursor:pointer; padding:6px 10px; border:1px solid var(--panel-border, #334155);
+  border-radius:10px; background:transparent; color:inherit;
+}
+.copy-btn:hover { background: color-mix(in oklab, var(--panel-bg, #0b1020) 80%, #ffffff 20%); }
+pre { margin:0; white-space:pre-wrap; word-break:break-word; }
+h3.assign-title { margin: 1.2rem 0 0.35rem; }
+.small { opacity:.8; font-size:.92rem; }
+</style>
+
+{# ---------- JINJA MACRO TO RENDER A THEME-AWARE COPY BLOCK ---------- #}
+{% macro cmd_block(id, title, note, code) -%}
+  <h3 class="assign-title">{{ title }}</h3>
+  {% if note %}<div class="small">{{ note }}</div>{% endif %}
+  <div class="cmd-block" id="{{ id }}">
+    <div class="cmd-actions">
+      <strong>SSH</strong>
+      <button class="copy-btn" data-copy="#{{ id }}-code">Copy</button>
+    </div>
+    <pre id="{{ id }}-code">{{ code }}</pre>
+  </div>
+{%- endmacro %}
+
+<h2> Homework extras </h2>
+
+<h3><a href="/static/exams/assignment_solution.py">Download</a> HW1 solution</h3>
+<h3> HW2 test command </h3>
+<code>
+	python -m pytest -q
+</code>
+
 
 <div id="toast" class="hidden fixed bottom-4 right-4 bg-emerald-700 text-white px-3 py-2 rounded-lg shadow-lg text-sm"></div>
 
@@ -243,5 +341,18 @@ user_repos={{ user_repos }}
       .catch(() => showToast('Could not copy'));
   };
 </script>
+<script>
+async function checkRepo(slug, org, prefix, username){
+  const repo = `${prefix}-${username}`;
+  const res  = await fetch(`/api/assignments/check?slug=${encodeURIComponent(slug)}&org=${encodeURIComponent(org)}&repo=${encodeURIComponent(repo)}`);
+  const data = await res.json().catch(()=>({}));
+  if (data.ok && data.exists) { location.reload(); }
+  else {
+    const msg = (data.rate_limited ? 'GitHub rate limit; try again in a minute.' : 'Not created yet; give Classroom a few seconds.');
+    alert(msg);
+  }
+}
+</script>
+
 {% endblock %}
 

@@ -178,13 +178,34 @@
 {% block content %}
 <div class="container">
   <h1>{{ ch.title }}</h1>
+  <div id="studentCountdown" class="text-sm opacity-80 mb-2"></div>
+	<script>
+	(function(){
+	  // server should render ch.close_at (ISO) if present
+	  const closeISO = {{ (ch.close_at.isoformat() if ch.close_at else 'null')|tojson }};
+	  const box = document.getElementById('studentCountdown');
+	  function pad(n){ return n<10 ? '0'+n : n; }
+	  function tick(){
+	    if (!closeISO){ box.textContent=''; return; }
+	    const end = new Date(closeISO);
+	    const ms  = end - new Date();
+	    if (ms <= 0){ box.textContent = 'Challenge closed'; return; }
+	    const s = Math.floor(ms/1000), m = Math.floor(s/60), r = s%60;
+	    box.textContent = `Time remaining: ${m}:${pad(r)}`;
+	    setTimeout(tick, 250);
+	  }
+	  tick();
+	})();
+	</script>
+
   <article class="prompt markdown-body">{{ ch.prompt_md|safe }}</article>
 
   <div class="editor-wrap">
     <!--
     <div class="toolbar">
       <button id="runBtn">Run</button>
-      <button id="submitBtn" {% if not ch.is_open %}disabled{% endif %}>Submit</button>
+      <button id="submitBtn" ... {% if not can_submit %}disabled title="Submissions are closed for your section"{% endif %}>Submit</button>
+
       <span class="status" id="statusText"></span>
     </div>
     -->
@@ -209,6 +230,11 @@
     <button id="restoreBtn" class="btn btn-warning" style="display:none;">Restore my Code</button>
   </div>
 </div>
+
+    <div id="studentStatus" class="panel" style="margin-top:.5rem;display:none;">
+      <div class="panel-title">Submission Status</div>
+      <div id="studentStatusBody" style="padding:.6rem;"></div>
+    </div>
 
 <!-- Work area: left editor/output, right preview -->
 <div id="workArea" class="lc-grid">
@@ -243,12 +269,7 @@
 
 
 
-    <div id="studentStatus" class="panel" style="margin-top:.5rem;display:none;">
-      <div class="panel-title">Submission Status</div>
-      <div id="studentStatusBody" style="padding:.6rem;"></div>
-    </div>
-
-	    <textarea id="code" style="display:none;"><textarea>
+	    <textarea id="code" style="display:none;"></textarea>
 
     <h3 class="mt-4">Leaderboard</h3>
     <ol id="leaderboard" class="list-decimal pl-5"></ol>
@@ -321,7 +342,10 @@ let keystrokes = [];
 let startTime = null;
 
 const outEl = document.getElementById('output');
-const statusEl = document.getElementById('statusText');
+
+const statusEl = document.getElementById('status');
+const setStatus = (t) => { if (statusEl) statusEl.textContent = t; };
+
 
 // --- CodeMirror init (matches weekly/sandbox) ---
 function cmThemeFromPage() {
@@ -438,7 +462,7 @@ function startPolling(){ setInterval(()=>{ refreshLeaderboard(); fetchMyStatus()
 // Buttons
 document.getElementById('runBtn').addEventListener('click', async ()=>{
   const { stdout, runtime_ms } = await runPython(cm.getValue());
-  statusEl.textContent = `Ran in ${runtime_ms} ms`;
+  setStatus(`Ran in ${runtime_ms} ms`);
 });
 
 function fetchWithTimeout(url, opts={}, ms=12000){
@@ -448,7 +472,7 @@ function fetchWithTimeout(url, opts={}, ms=12000){
 }
 
 document.getElementById('submitBtn').addEventListener('click', async ()=>{
-  statusEl.textContent = 'Submitting…';
+  setStatus('Submitting…')
   try {
     const { stdout, runtime_ms } = await runPython(cm.getValue());
     const payload = {
