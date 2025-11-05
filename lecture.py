@@ -25,6 +25,51 @@ ROSTER_CSV = os.environ.get(
     os.path.join(os.path.dirname(__file__), "data", "github_roster.csv")
 )
 
+# ---------- Feedback pickers (student-visible & per-submission) ----------
+def _pick_feedback(sub):
+    """Return the first non-empty text from common feedback/comment fields on a single submission."""
+    for attr in ('feedback', 'comment', 'feedback_text', 'notes'):
+        if hasattr(sub, attr):
+            val = getattr(sub, attr) or ''
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+    return ''
+
+def _latest_student_feedback(challenge_id: int, netid: str):
+    """Return the newest non-empty feedback across *all* of this student's submissions for the challenge."""
+    from models_lecture import LectureSubmission  # avoid cycle if you have blueprints split
+    subs = (LectureSubmission.query
+            .filter_by(challenge_id=challenge_id, netid=netid)
+            .order_by(LectureSubmission.created_at.desc())
+            .all())
+    for s in subs:
+        f = _pick_feedback(s)
+        if f:
+            return f
+    return ''
+
+def _extract_feedback(sub):
+    """Return the first non-empty text from common feedback/comment fields."""
+    for attr in ('feedback', 'comment', 'feedback_text', 'notes'):
+        if hasattr(sub, attr):
+            val = getattr(sub, attr) or ''
+            if val.strip():
+                return val
+    return None
+
+def _viewer_section():
+    sec = session.get("section")
+    if session.get("is_admin"):
+        sec = session.get("admin_view_section", sec)
+    return sec
+
+def _can_view_public_replay(ch, sub):
+    if not (getattr(sub, "public_replay", False) and getattr(sub, "status", "") == "approved"):
+        return False
+    if not getattr(ch, "replays_same_section_only", False):
+        return True
+    return sub.section == _viewer_section()
+
 def _normalize_full_name(full: str) -> str:
     """Convert 'Last, First [Middle]' -> 'First [Middle] Last' and tidy spaces."""
     if not full:
@@ -103,6 +148,63 @@ def _payload_for(ch):
     if is_open_now(ch):
         return {"slug": ch.slug, "title": ch.title}
     return None
+
+def _get_replays_scope(ch) -> bool:
+    """
+    Return True => same-section only, False => cross-section allowed.
+    Works even if the DB column doesn't exist by reading a Redis mirror.
+    Defaults to True (lockdown) if nothing is stored.
+    """
+    # 1) If the model has the column, use it
+    if hasattr(ch, 'replays_same_section_only'):
+        val = getattr(ch, 'replays_same_section_only')
+        if val is not None:
+            return bool(val)
+
+    # 2) Fall back to Redis mirror
+    try:
+        from extensions_redis import r as redis_client
+        raw = redis_client.get(f"lecture:flags:{ch.slug}")
+        if raw:
+            import json as _json
+            doc = _json.loads(raw)
+            if "replays_same_section_only" in doc:
+                return bool(doc["replays_same_section_only"])
+    except Exception:
+        pass
+
+    # 3) Safe default (locked to same section)
+    return True
+
+
+def _set_replays_scope(slug: str, value: bool) -> None:
+    """Mirror the scope flag in Redis so readers can see it even without a DB column."""
+    try:
+        from extensions_redis import r as redis_client
+        import json as _json
+        k = f"lecture:flags:{slug}"
+        # merge if an object already exists
+        doc = {}
+        raw = redis_client.get(k)
+        if raw:
+            try:
+                doc = _json.loads(raw)
+            except Exception:
+                doc = {}
+        doc["replays_same_section_only"] = bool(value)
+        redis_client.set(k, _json.dumps(doc))
+    except Exception:
+        # best-effort mirror
+        pass
+
+def _submission_section(sub):
+    """Return the section for a submission, even if there's no DB column."""
+    # prefer the DB column if present
+    val = getattr(sub, 'section', None)
+    if val is not None and str(val).strip():
+        return str(val).strip()
+    # fall back to roster-derived section from the submitter's netid
+    return section_for_netid(getattr(sub, 'netid', '')).strip()
 
 def lookup_display_name(netid: str) -> str:
     """Canonical human name (admin or internal use)."""
@@ -340,19 +442,26 @@ def lecture_leaderboard(slug):
 def my_status(slug):
     ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
     me = session['netid']
-    sub = (LectureSubmission.query
-           .filter_by(challenge_id=ch.id, netid=me)
-           .order_by(LectureSubmission.created_at.desc())
-           .first())
-    if not sub:
+
+    latest = (LectureSubmission.query
+              .filter_by(challenge_id=ch.id, netid=me)
+              .order_by(LectureSubmission.created_at.desc())
+              .first())
+
+    if not latest:
         return jsonify({"ok": True, "status": None})
+
+    # what students should see as feedback (newest non-empty across all attempts)
+    student_visible_feedback = _latest_student_feedback(ch.id, me) or None
+
     return jsonify({
         "ok": True,
-        "status": getattr(sub, 'status', 'approved' if sub.approved else 'pending'),
-        "points": sub.points,
-        "feedback": getattr(sub, 'feedback', None),
-        "submitted_at": sub.created_at.isoformat(),
-        "updated_at": sub.created_at.isoformat(),
+        "status": getattr(latest, 'status', 'approved' if getattr(latest, 'approved', False) else 'pending'),
+        "points": getattr(latest, 'points', None),
+        "feedback": student_visible_feedback,
+        "comment": student_visible_feedback,  # mirror for any old UI that reads "comment"
+        "submitted_at": latest.created_at.isoformat(),
+        "updated_at": latest.created_at.isoformat(),
     })
 
 @lecture_bp.get('/api/lecture/<slug>/replays')
@@ -360,19 +469,20 @@ def my_status(slug):
 def list_public_replays(slug):
     ch = LectureChallenge.query.filter_by(slug=slug).first_or_404()
 
-    q = LectureSubmission.query.filter_by(
-        challenge_id=ch.id,
-        public_replay=True,
-        status='approved'
-    )
+    # fetch first; we’ll do Python-side filtering so it works with/without a .section column
+    rows_all = (LectureSubmission.query
+                .filter_by(challenge_id=ch.id, public_replay=True, status='approved')
+                .order_by(LectureSubmission.created_at.asc())
+                .all())
 
-    # scope to the same section if the toggle is on
-    if getattr(ch, 'replays_same_section_only', False):
+    if _get_replays_scope(ch):
         viewer_section = student_section()
-        if viewer_section:
-            q = q.filter(LectureSubmission.section == str(viewer_section))
+        if not viewer_section:
+            return jsonify({"ok": True, "items": []})
+        rows = [s for s in rows_all if _submission_section(s) == str(viewer_section)]
+    else:
+        rows = rows_all
 
-    rows = q.order_by(LectureSubmission.created_at.asc()).all()
     return jsonify({
         "ok": True,
         "items": [
@@ -397,9 +507,9 @@ def view_public_replay(sid):
 
     # Enforce section scope when enabled
     ch = sub.challenge  # relationship is already used later for slug
-    if getattr(ch, 'replays_same_section_only', False):
+    if _get_replays_scope(ch):
         viewer_section = student_section()
-        if viewer_section and str(sub.section) != str(viewer_section):
+        if viewer_section and str(_submission_section(sub)) != str(viewer_section):
             abort(403)
 
     return render_template(
@@ -431,15 +541,37 @@ def view_public_replay(sid):
 def get_replay(sid):
     sub = LectureSubmission.query.get_or_404(sid)
     owner = (session.get('netid') == sub.netid)
-    if not (owner or sub.public_replay or is_admin_current_user()):
-        abort(403)
+    admin = is_admin_current_user()
+
+    # If not owner/admin, the replay must be actually public *and* approved
+    if not owner and not admin:
+        is_public = bool(getattr(sub, 'public_replay', False))
+        is_approved = (
+            (hasattr(sub, 'status') and getattr(sub, 'status') == 'approved') or
+            (hasattr(sub, 'approved') and getattr(sub, 'approved') is True)
+        )
+        if not (is_public and is_approved):
+            abort(403)
+
+        # Enforce same-section scoping when the challenge requires it
+        ch = sub.challenge
+        if _get_replays_scope(ch):
+            vsec = student_section()
+            if not vsec or str(_submission_section(sub)) != str(vsec):
+                abort(403)
+
     return jsonify({
         "ok": True,
         "code": sub.code,
         "keystrokes": sub.keystrokes_json,
         "run_output": sub.run_output,
-        "meta": {"display_name": sub.netid, "submitted_at": sub.created_at.isoformat(), "language": sub.language}
+        "meta": {
+            "display_name": sub.netid,
+            "submitted_at": sub.created_at.isoformat(),
+            "language": sub.language
+        }
     })
+
 
 # === Admin views/APIs ===
 SLUG_RE = re.compile(r'^[a-z0-9][a-z0-9\-]{1,62}[a-z0-9]$')
@@ -520,55 +652,53 @@ def admin_create_lecture():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@lecture_bp.patch('/api/admin/lecture/submission/<int:sid>')
-def admin_update_submission(sid):
-    if not is_admin_current_user():
-        abort(403)
-    sub = LectureSubmission.query.get_or_404(sid)
-    data = request.get_json(force=True) or {}
+#@lecture_bp.patch('/api/admin/lecture/submission/<int:sid>')
+#def admin_update_submission(sid):
+#    if not is_admin_current_user():
+#        abort(403)
+#    sub = LectureSubmission.query.get_or_404(sid)
+#    data = request.get_json(force=True) or {}
+#
+#    if 'points' in data:
+#        sub.points = int(data['points'])
+#
+#    if 'status' in data:
+#        s = data['status']
+#        if s not in ('pending','approved','rejected'):
+#            return jsonify({"ok": False, "error": "invalid status"}), 400
+#        # write to DB if column exists
+#        if hasattr(sub, 'status'):
+#            sub.status = s
+#        sub.approved = (s == 'approved')  # keep legacy flag consistent
+#
+#    if 'feedback' in data and hasattr(sub, 'feedback'):
+#        sub.feedback = data['feedback']
+#
+#    if 'public_replay' in data:
+#        sub.public_replay = bool(data['public_replay'])
+#
+#    db.session.commit()
+#
+#    # Mirror to Redis (best-effort, so student polls see it even before a reload)
+#    try:
+#        from extensions_redis import r as redis_client
+#        k = f"lecture:submissions:{sub.challenge.slug}"
+#        lst = redis_client.lrange(k, 0, -1)
+#        for idx, raw in enumerate(lst):
+#            sdoc = json.loads(raw)
+#            if str(sdoc.get('id')) == str(sub.id):
+#                sdoc['points'] = sub.points
+#                sdoc['approved'] = sub.approved
+#                sdoc['public_replay'] = sub.public_replay
+#                sdoc['status'] = getattr(sub, 'status', 'approved' if sub.approved else 'pending')
+#                sdoc['feedback'] = getattr(sub, 'feedback', None)
+#                redis_client.lset(k, idx, json.dumps(sdoc))
+#                break
+#    except Exception as e:
+#        current_app.logger.warning("Redis mirror failed (admin update %s): %s", sid, e)
+#
+#    return jsonify({"ok": True})
 
-    if 'points' in data:
-        sub.points = int(data['points'])
-
-    if 'status' in data:
-        s = data['status']
-        if s not in ('pending','approved','rejected'):
-            return jsonify({"ok": False, "error": "invalid status"}), 400
-        # write to DB if column exists
-        if hasattr(sub, 'status'):
-            sub.status = s
-        sub.approved = (s == 'approved')  # keep legacy flag consistent
-
-    if 'feedback' in data and hasattr(sub, 'feedback'):
-        sub.feedback = data['feedback']
-
-    if 'public_replay' in data:
-        sub.public_replay = bool(data['public_replay'])
-
-    db.session.commit()
-
-    # Mirror to Redis (best-effort, so student polls see it even before a reload)
-    try:
-        from extensions_redis import r as redis_client
-        k = f"lecture:submissions:{sub.challenge.slug}"
-        lst = redis_client.lrange(k, 0, -1)
-        for idx, raw in enumerate(lst):
-            sdoc = json.loads(raw)
-            if str(sdoc.get('id')) == str(sub.id):
-                sdoc['points'] = sub.points
-                sdoc['approved'] = sub.approved
-                sdoc['public_replay'] = sub.public_replay
-                sdoc['status'] = getattr(sub, 'status', 'approved' if sub.approved else 'pending')
-                sdoc['feedback'] = getattr(sub, 'feedback', None)
-                redis_client.lset(k, idx, json.dumps(sdoc))
-                break
-    except Exception as e:
-        current_app.logger.warning("Redis mirror failed (admin update %s): %s", sid, e)
-
-    return jsonify({"ok": True})
-
-
-# lecture.py
 
 @lecture_bp.get('/admin/lecture/<slug>')
 def admin_lecture(slug):
@@ -607,30 +737,47 @@ def admin_list_submissions(slug):
                 q = q.filter(LectureSubmission.approved.is_(False))
 
     rows = q.all()
+    def _pick_feedback(sub):
+        for attr in ('feedback', 'comment', 'feedback_text', 'notes'):
+            if hasattr(sub, attr):
+                val = getattr(sub, attr) or ''
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+        return ''
+
+    def _latest_student_feedback(challenge_id, netid):
+        subs = (LectureSubmission.query
+                .filter_by(challenge_id=challenge_id, netid=netid)
+                .order_by(LectureSubmission.created_at.desc())
+                .all())
+        for s in subs:
+            f = _pick_feedback(s)
+            if f:
+                return f
+        return ''
+
     def row_status(s):
         if hasattr(s, 'status'):
             return s.status or 'pending'
         return 'approved' if s.approved else 'pending'
 
-    def row_comment(s):
-        # be flexible about column name (comment/feedback/notes)
-        for attr in ('comment', 'feedback', 'feedback_text', 'notes'):
-            if hasattr(s, attr):
-                return getattr(s, attr) or ''
-        return ''
-
-    return jsonify({
-        "ok": True,
-        "items": [{
+    rows_out = []
+    for s in rows:
+        rows_out.append({
             "id": s.id,
             "netid": s.netid,
             "section": section_for_netid(s.netid),
             "status": row_status(s),
             "public_replay": bool(getattr(s, 'public_replay', False)),
-            "comment": row_comment(s),
             "created_at": s.created_at.isoformat(),
-        } for s in rows]
-    })
+            # NEW: per-submission preview (what’s on THIS row)
+            "feedback_display": _pick_feedback(s) or None,
+            # NEW: exactly what the student will see (newest non-empty across attempts)
+            "student_visible_feedback": _latest_student_feedback(s.challenge_id, s.netid) or None,
+        })
+
+    return jsonify({"ok": True, "items": rows_out})
+
 
 @lecture_bp.patch('/api/admin/lecture/submission/<int:sid>')
 def admin_patch_submission(sid):
@@ -731,8 +878,12 @@ def admin_update_challenge(slug):
 
     if 'history_enabled' in data: ch.history_enabled = bool(data['history_enabled'])
     if 'replays_same_section_only' in data:
-        ch.replays_same_section_only = bool(data['replays_same_section_only'])
-
+        val = bool(data['replays_same_section_only'])
+        # write to DB if the model has the column
+        if hasattr(ch, 'replays_same_section_only'):
+            ch.replays_same_section_only = val
+        # always mirror to Redis so readers can see it
+        _set_replays_scope(ch.slug, val)
     if 'section_scope' in data:
         val = data['section_scope']
         if isinstance(val, list):

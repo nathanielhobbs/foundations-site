@@ -51,16 +51,24 @@
 	    </div>
 	    <div class="muted">Tip: “All sections” overrides any specific section selections.</div>
 	    <div class="mb-3 flex items-center gap-3">
+		    <!--
 		  <label class="inline-flex items-center gap-1">
 		    <input type="checkbox" id="toggleReplayScope" {{ 'checked' if ch.replays_same_section_only else '' }}>
 		    <span>Limit public replays to same section</span>
 		  </label>
+		    -->
+		    <label style="display:inline-flex; gap:.5rem; align-items:center">
+		  <input id="limitReplaysSameSection" type="checkbox"
+			 checked="{{ (ch.replays_same_section_only is not defined) or ch.replays_same_section_only }}">
+		  Limit public replays to the same section
+		</label>
+
 		  <span id="settingsStatusReplayScope" class="text-sm text-muted"></span>
 		</div>
 		<script>
 		(function(){
 		  const slug = {{ ch.slug|tojson }};
-		  const box  = document.getElementById('toggleReplayScope');
+		  const box  = document.getElementById('limitReplaysSameSection');
 		  const msg  = document.getElementById('settingsStatusReplayScope');
 		  box.addEventListener('change', async ()=>{
 		    msg.textContent = 'Saving…';
@@ -176,6 +184,7 @@
 	      close_at: closeAt.value || null,
 	      section_scope
 	    };
+	    payload.replays_same_section_only = document.getElementById('limitReplaysSameSection').checked;
 
 	    status.style.display = 'none';
 	    saveBtn.disabled = true;
@@ -451,7 +460,9 @@ sectionInput.addEventListener('change', ()=> {
 	    const when = new Date(s.created_at).toLocaleString();
 	    const sec = s.section ? ` (Sec ${s.section})` : '';
 	    // one-line preview of feedback, trimmed
-	    const preview = (s.comment || '').split('\n')[0];
+	    // const preview = (s.comment || '').split('\n')[0];
+	    const preview = (s.student_visible_feedback ?? s.feedback_display ?? '').split('\n')[0];
+
 	    const trimmed = preview.length > 120 ? preview.slice(0, 120) + '…' : preview;
 	    const replay = s.public_replay ? ' <span title="Public replay">▶︎</span>' : '';
 
@@ -627,6 +638,7 @@ sectionInput.addEventListener('change', ()=> {
       open_at: openAt.value || null,
       close_at: closeAt.value || null
     };
+    body.replays_same_section_only = document.getElementById('limitReplaysSameSection').checked;
     const res = await fetch(`/api/admin/lecture/${slug}/settings`, {
       method:'PATCH', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body)
@@ -675,6 +687,7 @@ sectionInput.addEventListener('change', ()=> {
         open_at: openAt.value || null,
         close_at: closeAt.value || null
       };
+      body.replays_same_section_only = document.getElementById('limitReplaysSameSection').checked;
       const res = await fetch(`/api/admin/lecture/${slug}/settings`, {
         method: 'PATCH',
         headers: {'Content-Type':'application/json'},

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+
 {% block title %}Lecture Challenge – {{ ch.title }}{% endblock %}
 
 {% block extra_head %}
@@ -169,6 +170,108 @@
 @media (max-width: 900px) {
   #workArea.lc-grid { grid-template-columns: 1fr; }
 }
+
+
+
+/* Base palette as CSS variables (works with light/dark) */
+:root {
+  --ok: 22 163 74;      /* green-600 */
+  --warn: 202 138 4;    /* amber-600 */
+  --bad: 220 38 38;     /* red-600 */
+  --fg: 17 24 39;       /* slate-900 */
+  --muted: 71 85 105;   /* slate-500 */
+  --card: 255 255 255;  /* white */
+  --border: 226 232 240;/* slate-200 */
+  --tint: 248 250 252;  /* slate-50 */
+}
+
+:root[data-theme="dark"] {
+  --fg: 226 232 240;      /* slate-200 */
+  --muted: 148 163 184;   /* slate-400 */
+  --card: 15 23 42;       /* slate-900 */
+  --border: 51 65 85;     /* slate-700 */
+  --tint: 2 6 23;         /* slate-950 */
+}
+
+/* (optional) explicitly force light when data-theme="light" */
+:root[data-theme="light"] {
+  --fg: 17 24 39;
+  --muted: 71 85 105;
+  --card: 255 255 255;
+  --border: 226 232 240;
+  --tint: 248 250 252;
+}
+
+
+/* Card container */
+.substatus-card{
+  background: rgb(var(--card));
+  border: 1px solid rgb(var(--border));
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+  max-width: 720px;
+}
+
+/* Header */
+.substatus-header{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  justify-content: space-between;
+}
+.substatus-title{ font-weight: 700; color: rgb(var(--fg)); font-size: 0.95rem; }
+
+.substatus-points{ font-weight: 700; color: rgb(var(--fg)); }
+
+/* Status badge */
+.status-badge{
+  font-weight: 800;
+  letter-spacing: .02em;
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  font-size: 0.80rem;
+}
+.status-approved{
+  color: rgb(var(--ok));
+  background: color-mix(in srgb, rgb(var(--ok)) 16%, transparent);
+  border-color: rgb(var(--ok));
+}
+.status-pending{
+  color: rgb(var(--warn));
+  background: color-mix(in srgb, rgb(var(--warn)) 16%, transparent);
+  border-color: rgb(var(--warn));
+}
+.status-rejected{
+  color: rgb(var(--bad));
+  background: color-mix(in srgb, rgb(var(--bad)) 16%, transparent);
+  border-color: rgb(var(--bad));
+}
+
+/* Feedback block */
+.feedback-card{
+  margin-top: 12px;
+  border: 1px solid rgb(var(--border));
+  border-left-width: 6px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgb(var(--tint));
+}
+.status-approved ~ .feedback-card{ border-left-color: rgb(var(--ok)); }
+.status-pending  ~ .feedback-card{ border-left-color: rgb(var(--warn)); }
+.status-rejected ~ .feedback-card{ border-left-color: rgb(var(--bad)); }
+
+.feedback-label{
+  font-size: .80rem; font-weight: 700; text-transform: uppercase; letter-spacing:.04em;
+  color: rgb(var(--muted)); margin-bottom: 4px;
+}
+.feedback-body{ font-size: 1rem; line-height: 1.45; color: rgb(var(--fg)); }
+.feedback-muted{ opacity: .7; font-style: italic; }
+
+/* Meta line */
+.substatus-meta{
+  margin-top: 8px; font-size: .8rem; color: rgb(var(--muted));
+}
+
 </style>
 
 {% endblock %}
@@ -231,10 +334,14 @@
   </div>
 </div>
 
+<!--
     <div id="studentStatus" class="panel" style="margin-top:.5rem;display:none;">
       <div class="panel-title">Submission Status</div>
       <div id="studentStatusBody" style="padding:.6rem;"></div>
     </div>
+--->
+    <div id="submission-status"></div>
+
 
 <!-- Work area: left editor/output, right preview -->
 <div id="workArea" class="lc-grid">
@@ -331,9 +438,6 @@
 {% block extra_scripts %}
 {{ super() }}
 <!-- CodeMirror (same versions as your weekly challenge is fine) -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
 <script>
@@ -444,21 +548,6 @@ async function refreshLeaderboard(){
 //    row.appendChild(btn); box.appendChild(row);
 //  });
 //}
-async function fetchMyStatus() {
-  const r = await fetch(`/api/lecture/${slug}/my_status`);
-  const j = await r.json();
-  const box = document.getElementById('studentStatus');
-  const body = document.getElementById('studentStatusBody');
-  if (!j.ok || !j.status) { box.style.display = 'none'; return; }
-  box.style.display = 'block';
-  body.innerHTML = `
-    <b>Status:</b> ${j.status.toUpperCase()}${j.points != null ? ` — <b>${j.points} pts</b>` : ''}<br>
-    ${j.feedback ? `<b>Feedback:</b> ${j.feedback.replaceAll('\\n','<br>')}` : ''}
-    <div style="opacity:.8;margin-top:.25rem;">Last updated: ${new Date(j.updated_at || j.submitted_at).toLocaleString()}</div>
-  `;
-}
-//function startPolling(){ setInterval(()=>{ refreshLeaderboard(); refreshReplays(); fetchMyStatus(); }, 10000); }
-function startPolling(){ setInterval(()=>{ refreshLeaderboard(); fetchMyStatus(); }, 10000); }
 // Buttons
 document.getElementById('runBtn').addEventListener('click', async ()=>{
   const { stdout, runtime_ms } = await runPython(cm.getValue());
@@ -492,7 +581,7 @@ document.getElementById('submitBtn').addEventListener('click', async ()=>{
       statusEl.textContent = `Submit failed: ${j.error || text || r.status}`;
     } else {
       statusEl.textContent = 'Submitted! Waiting for instructor review.';
-      refreshLeaderboard(); fetchMyStatus();
+      refreshLeaderboard();fetchMyStatusAndRender();
     }
   } catch (e) {
     statusEl.textContent = `Network/timeout during submit`;
@@ -500,9 +589,6 @@ document.getElementById('submitBtn').addEventListener('click', async ()=>{
 });
 
 
-// Initial load
-//refreshLeaderboard(); refreshReplays(); fetchMyStatus(); startPolling();
-refreshLeaderboard(); fetchMyStatus(); startPolling();
 </script>
 
 <script>
@@ -643,6 +729,100 @@ refreshLeaderboard(); fetchMyStatus(); startPolling();
   rvCloseBtn.addEventListener('click', ()=> { replayPanel.style.display='none'; _rv.data=null; _rv.sid=null; });
 })();
 </script>
+
+
+
+<script>
+function renderStatusCard(ctx){
+  const html = `
+    <section class="substatus-card" aria-labelledby="substatus-title">
+      <header class="substatus-header">
+        <span id="substatus-title" class="substatus-title">Submission Status</span>
+        <span class="status-badge status-${ctx.status}" role="status" aria-live="polite">
+          ${ctx.status === 'approved' ? '✓ APPROVED' : ctx.status === 'rejected' ? '✕ REJECTED' : '• PENDING'}
+        </span>
+        <span class="substatus-points">${ctx.points ?? '—'} pts</span>
+      </header>
+      <div class="feedback-card ${ctx.feedback ? '' : 'feedback-empty'}">
+        <div class="feedback-label">Feedback</div>
+        <div class="feedback-body">
+          ${ctx.feedback ? ctx.feedback.replaceAll('\n','<br>') : '<span class="feedback-muted">No feedback yet.</span>'}
+        </div>
+      </div>
+      ${ctx.updated_at ? `<footer class="substatus-meta">Last updated: ${ctx.updated_at}</footer>` : ''}
+    </section>`;
+  document.getElementById("submission-status").innerHTML = html;
+}
+</script>
+
+<script>
+let _statusSig = null;
+
+async function fetchMyStatusAndRender(){
+  const res = await fetch(`/api/lecture/${slug}/my_status`, {headers:{'Accept':'application/json'}});
+  if (!res.ok) return;
+  const j = await res.json();
+
+  // Normalize → ctx for renderer
+  const ctx = {
+    status: (j.status || 'pending').toLowerCase(),
+    points: j.points ?? null,
+    feedback: j.feedback || "",
+    updated_at: (j.updated_at || j.submitted_at || "").replace('T',' ').replace('Z','')
+  };
+
+  // Build a compact signature so we avoid unnecessary DOM updates
+  const sig = `${ctx.status}|${ctx.points}|${ctx.feedback}|${ctx.updated_at}`;
+  if (sig !== _statusSig){
+    _statusSig = sig;
+    renderStatusCard(ctx);
+  }
+}
+
+function startStatusAutoRefresh(){
+  let failures = 0;
+  const base = 5000;          // 5s when visible
+  const maxDelay = 60000;     // cap backoff at 60s
+
+  async function tick(){
+    try{
+      await fetchMyStatusAndRender();
+      failures = 0;
+    }catch(e){
+      failures++;
+    }
+    const backoff = Math.min(base * Math.pow(1.5, failures), maxDelay);
+    const delay = document.hidden ? backoff * 2 : backoff;
+    setTimeout(tick, delay);
+  }
+
+  // Keep things fresh when the tab becomes visible again
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) fetchMyStatusAndRender();
+  });
+
+  // First render immediately, then loop
+  fetchMyStatusAndRender().finally(tick);
+}
+</script>
+
+<script>
+function startPolling(){
+  // refresh leaderboard every 10s
+  setInterval(refreshLeaderboard, 10000);
+}
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  refreshLeaderboard();
+  fetchMyStatusAndRender();
+  startPolling();
+  startStatusAutoRefresh();
+});
+</script>
+
 
 {% endblock %}
 
