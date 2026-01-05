@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Admin – Autograde{% endblock %}
+
+{% block content %}
+<h1>Autograde</h1>
+
+<form method="post" class="mb-3">
+  <label for="assignment">Assignment:</label>
+  <select name="assignment" id="assignment">
+    {% for key, cfg in assignments.items() %}
+      <option value="{{ key }}" {% if key == selected_assignment %}selected{% endif %}>
+        {{ key|upper }}
+      </option>
+    {% endfor %}
+  </select>
+  <button type="submit">Run autograde</button>
+</form>
+
+{% if error %}
+  <pre style="color:red;">{{ error }}</pre>
+{% endif %}
+
+{% if results %}
+  <h2>Results for {{ selected_assignment|upper }}</h2>
+  <p>Total repos graded: {{ results|length }}</p>
+
+  <table class="table table-sm table-striped">
+    <thead>
+      <tr>
+        <th>Repo</th>
+        <th>Student</th>
+        <th>Status</th>
+        <th>Passed</th>
+        <th>Total</th>
+        <th>%</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in results %}
+      <tr>
+        <td>{{ r.repo or r["repo"] }}</td>
+        <td>{{ r.student or r["student"] }}</td>
+        <td>{{ r.status or r["status"] }}</td>
+        <td>{{ r.passed or r["passed"] }}</td>
+        <td>{{ r.total or r["total"] }}</td>
+        <td>{{ r.percent or r["percent"] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if csv_path %}
+    <p>CSV written on server at: <code>{{ csv_path }}</code></p>
+  {% endif %}
+{% endif %}
+{% endblock %}
+

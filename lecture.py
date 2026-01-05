@@ -322,60 +322,91 @@ def view_lecture(slug):
 def browse_challenges_page():
     return render_template('lecture_browse.html')  # small page with a list; see below
 
+#def available_time(ch):
+#    # pick best available timestamp for ordering
+#    for attr in ('opened_at', 'open_start', 'created_at'):
+#        val = getattr(ch, attr, None)
+#        if val:
+#            return val
+#    # fallback – make it sortable
+#    try:
+#        return datetime.fromtimestamp(0)
+#    except Exception:
+#        return datetime.min
 def available_time(ch):
-    # pick best available timestamp for ordering
-    for attr in ('opened_at', 'open_start', 'created_at'):
-        val = getattr(ch, attr, None)
-        if val:
-            return val
-    # fallback – make it sortable
-    try:
-        return datetime.fromtimestamp(0)
-    except Exception:
-        return datetime.min
+    # prefer explicit open time, fall back to created_at
+    return ch.open_at or ch.created_at
 
 @lecture_bp.get('/api/lecture/browse')
 @require_login
 def browse_challenges_api():
+    """Return open + past challenges for the logged-in user."""
     netid = session['netid']
     sec = student_section()
 
-    # open + allowed
-    # open_q = LectureChallenge.query.filter_by(is_open=True).all()
-    qs = LectureChallenge.query.filter_by(is_open=True).all()
-    # history-enabled (closed but viewable)
-    past_q = LectureChallenge.query.filter_by(is_open=False, history_enabled=True).all()
+    # All challenges (we'll bucket them in Python)
+    challenges = (
+        LectureChallenge.query
+        .order_by(LectureChallenge.created_at.desc())
+        .all()
+    )
 
-    # participation set
-    sub_cids = {cid for (cid,) in
-        db.session.query(LectureSubmission.challenge_id)
-                  .filter_by(netid=netid).distinct().all()
+    # Which challenges this user has ever submitted to
+    sub_cids = {
+        cid for (cid,) in (
+            db.session.query(LectureSubmission.challenge_id)
+            .filter_by(netid=netid)
+            .distinct()
+            .all()
+        )
     }
 
-    def allowed(ch): return ch.is_visible_to_section(sec)
+    open_allowed = []
+    past_participated = []
+    past_global = []
 
-    # Build typed lists (keep the objects for sorting)
-    # open_allowed = [ch for ch in open_q if allowed(ch)]
-    open_allowed = [ch for ch in qs if is_open_now(ch) and allowed(ch)]
-    past_participated = [ch for ch in past_q if ch.id in sub_cids]
-    past_global = [ch for ch in past_q if allowed(ch) and ch.id not in sub_cids]
+    for ch in challenges:
+        # Skip sections the user should never see
+        if not ch.is_visible_to_section(sec):
+            continue
 
-    # Sort by when they were made available (desc = newest first)
-    open_allowed.sort(key=available_time, reverse=True)
-    past_participated.sort(key=available_time, reverse=True)
-    past_global.sort(key=available_time, reverse=True)
+        open_now = is_open_now(ch)
+        has_sub = ch.id in sub_cids
+
+        if open_now:
+            open_allowed.append(ch)
+            continue
+
+        # Closed / outside window – only show if history is enabled
+        if not ch.history_enabled:
+            continue
+
+        if has_sub:
+            past_participated.append(ch)
+        else:
+            past_global.append(ch)
+
+    # Newest first in each bucket
+    def key(c): return available_time(c)
+    open_allowed.sort(key=key, reverse=True)
+    past_participated.sort(key=key, reverse=True)
+    past_global.sort(key=key, reverse=True)
 
     def entry(ch):
-        return {"slug": ch.slug, "title": ch.title, "open": bool(ch.is_open),
-                "available_at": (getattr(ch, 'opened_at', None) or
-                                 getattr(ch, 'open_start', None) or
-                                 getattr(ch, 'created_at', None))}
+        return {
+            "slug": ch.slug,
+            "title": ch.title,
+            "open": bool(is_open_now(ch)),
+            "available_at": available_time(ch),
+        }
+
     return jsonify({
         "ok": True,
         "open": [entry(c) for c in open_allowed],
         "past_participated": [entry(c) for c in past_participated],
         "past_global": [entry(c) for c in past_global],
     })
+
 
 @lecture_bp.post('/api/lecture/<slug>/submit')
 @require_login
@@ -710,7 +741,7 @@ def admin_lecture(slug):
             .order_by(LectureSubmission.created_at.desc()).all())
     if request.args.get('partial') == '1':
         return render_template('admin_lecture_rows.html', subs=subs)
-    return render_template('admin_lecture.html', ch=ch, subs=subs, sections=all_sections())
+    return render_template('admin_lecture.html', ch=ch, replays_scope=_get_replays_scope(ch), subs=subs, sections=all_sections())
 
 @lecture_bp.get('/api/admin/lecture/<slug>/submissions')
 def admin_list_submissions(slug):
@@ -801,8 +832,8 @@ def admin_patch_submission(sid):
                 sub.approved = False
 
         # optional: auto toggle public_replay on approve
-        if s == 'approved' and hasattr(sub, 'public_replay'):
-            sub.public_replay = True
+        # if s == 'approved' and hasattr(sub, 'public_replay'):
+        #    sub.public_replay = True
 
     if 'public_replay' in data and hasattr(sub, 'public_replay'):
         sub.public_replay = bool(data['public_replay'])

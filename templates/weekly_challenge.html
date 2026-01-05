@@ -1,807 +1,250 @@
 {% extends "base.html" %}
-{% block content %}
-<!-- Login Modal (always at top, blocking overlay if not logged in) -->
-<div id="loginModal" class="admin-password-modal" style="display: none; z-index: 2000;">
-  <div class="modal-content">
-    <h3>Login</h3>
-    <p>Enter your NetID to submit solutions:</p>
-    <input type="text" id="loginNetID" placeholder="NetID">
-    <div id="adminPasswordSection" style="display: none; margin-top: 10px;">
-      <p>Admin password required:</p>
-      <input type="password" id="loginAdminPassword" placeholder="Admin password">
-    </div>
-    <div style="margin-top: 15px;">
-      <button onclick="submitLogin()">Login</button>
-      <button onclick="cancelLogin()">Cancel</button>
-    </div>
-  </div>
-</div>
-<h2>Weekly Challenge</h2>
-<div style="margin-bottom: 1em; display: flex; align-items: center; gap: 1em;">
-  <label for="challengeSelect"><b>Select Challenge:</b></label>
-  <div id="adminDropdown" style="display:none; position:relative; min-width:220px;"></div>
-  <select id="challengeSelect" style="margin-left: 0.5em;"></select>
-  <button id="editChallengeBtn" style="display:none; font-size:1.1em; margin-left: 1em;" title="Edit Challenge">✏️ Edit</button>
-  <button id="toggleLayoutBtn" class="btn btn-sm btn-secondary" style="margin-left: 1em;">Switch to Top-Bottom</button>
-</div>
-<!-- Reorder Modal -->
-<div id="reorderModal" class="admin-password-modal" style="display:none; z-index:3200;">
-  <div class="modal-content" style="max-width:500px;">
-    <h3>Reorder Challenges</h3>
-    <ul id="reorderList" style="list-style:none; padding:0; margin:0;"></ul>
-    <div style="margin-top:10px; text-align:right;">
-      <button onclick="closeReorderModal()">Cancel</button>
-      <button id="saveReorderBtn" class="btn btn-primary">Save Order</button>
-    </div>
-    <div id="reorderError" style="color:red; margin-top:8px;"></div>
-  </div>
-</div>
+{% block title %}Weekly Challenge{% endblock %}
 
-<div id="challengeBox" style="display:none;">
-  <div class="challenge-main-row">
-    <div class="challenge-left" id="problemPane" style="position:relative;">
-      <button id="collapseProblemBtn" title="Collapse/Expand" style="position:absolute; top:12px; right:0; z-index:30; font-size:1.2em;">⮜</button>
-      <div class="challenge-box">
-        <div style="display: flex; align-items: center; justify-content: space-between; position: relative;">
-          <h3 id="challengeTitle" style="margin-bottom: 0;"></h3>
-          <div style="display: flex; gap: 0.5em; align-items: center;"></div>
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<style>
+  .wc-wrap { display:grid; grid-template-columns: 1fr 1fr; gap:1rem; align-items:start; }
+  @media (max-width: 980px){ .wc-wrap { grid-template-columns: 1fr; } }
+  .wc-col { min-width: 260px; }
+  .CodeMirror { border:1px solid #ccc; border-radius:8px; min-height: 40vh; }
+  .panel { border:1px solid #ccc; border-radius:8px; padding:12px; background:var(--bg); color:var(--text); }
+  .row { display:flex; gap:.5rem; align-items:center; margin:.75rem 0; flex-wrap:wrap; }
+  .muted { color: gray; }
+  .btn { padding:.45rem .9rem; border:0; border-radius:7px; cursor:pointer; }
+  .btn-primary { background:#2151ff; color:#fff; }
+  .btn-ghost { background:#eee; }
+  .list { list-style:none; padding-left:1rem; }
+  #results .case { border-bottom:1px solid #ddd; padding:.5rem 0; }
+  #results .ok { color: #19733b; }
+  #results .bad { color: #b00020; }
+  pre { background: rgba(0,0,0,0.04); padding:.6rem .8rem; border-radius:8px; overflow:auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  .error { border:1px solid #e57373; background:#fdecea; color:#b71c1c; padding:.6rem .8rem; border-radius:8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>Weekly Challenge</h2>
+
+{% if not session.get("netid") %}
+  <div class="error">You’re not logged in. Please log in to view the challenge.</div>
+{% else %}
+  <div id="loadError" class="error" style="display:none;"></div>
+
+  <div class="row">
+    <label for="challengeSelect"><b>Select Challenge:</b></label>
+    <select id="challengeSelect"></select>
+    <span id="pubBadge" class="muted"></span>
+  </div>
+
+  <div id="noChallenge" class="panel" style="display:none;">
+    No challenge available for your view. (Admins see unpublished challenges; students only see published/active ones.)
+  </div>
+
+  <div id="challengeUI" style="display:none;">
+    <div class="wc-wrap">
+      <div class="wc-col">
+        <div class="panel">
+          <h3 id="cTitle" style="margin-top:0;"></h3>
+          <div id="cProblem"></div>
+          <div id="cExamples" style="margin-top:.5rem;"></div>
         </div>
-        <div id="challengeProblemMd"></div>
-        <div id="challengeExamples" style="margin-top:1em;"></div>
-      </div>
-    </div>
-    <div class="challenge-divider" id="challengeDivider"></div>
-    <div class="challenge-divider-horizontal"></div>
-    <div class="challenge-right">
-      <div class="editor-wrap">
-        <div class="editor-toolbar">
-          <div class="left">
-            <button id="run-btn" class="btn btn-sm">Run ▷</button>
-            <button id="clear-output-btn" class="btn btn-sm">Clear Output</button>
-          </div>
-          <div class="right">
-            <span class="hint">Ctrl+Enter = Run · Ctrl+Shift+Enter = Submit</span>
-            <button id="submit-btn" class="btn btn-primary">Submit</button>
-          </div>
+
+        <div class="row">
+          <button id="runBtn" class="btn btn-ghost" title="Run locally (no submit)">▶ Run</button>
+          <button id="submitBtn" class="btn btn-primary" title="Run tests and submit">Submit</button>
+          <span id="runStatus" class="muted"></span>
         </div>
-        <textarea id="editor" style="width:100%;height:320px;">def solution():
-    pass
+
+        <textarea id="editor">def solution(x):
+    # write your solution
+    return x
 </textarea>
       </div>
 
-      <div id="consoleOutput" class="console-box" aria-live="polite">(no output)</div>
+      <div class="wc-col">
+        <div class="panel">
+          <h3 style="margin-top:0;">Results</h3>
+          <div id="results" class="muted">Run or submit to see per-test results.</div>
+        </div>
 
+        <div class="panel" style="margin-top:1rem;">
+          <h3 style="margin-top:0;">Leaderboard</h3>
+          <ol id="leaderboard" class="list"></ol>
+          <div id="solDate" class="muted"></div>
+        </div>
+      </div>
     </div>
   </div>
-
-  <div id="result" class="mt-3"></div>
-  <div id="testOutput" class="mt-3"></div>
-
-  <h4 class="mt-4">Leaderboard</h4>
-  <ul id="leaderboard"></ul>
-
-  <!-- Admin: Submissions List -->
-  <div id="adminSubmissions" style="margin-top:2em; display:none;">
-    <h4>All Submissions (Admin Only)</h4>
-    <table class="table table-sm table-bordered" style="width:auto;">
-      <thead><tr><th>NetID</th><th>Timestamp</th><th>Passed</th><th>Replay</th></tr></thead>
-      <tbody id="submissionsTable"></tbody>
-    </table>
-  </div>
-</div>
-
-<div id="noChallengeMsg" style="display:none;"><p>No challenge is currently set.</p></div>
-
-<!-- Edit Challenge Modal -->
-<div id="editChallengeModal" class="admin-password-modal" style="display:none; z-index:3000;">
-  <div class="modal-content" style="max-width:600px;">
-    <h3>Edit Challenge</h3>
-    <label>Title:<br><input type="text" id="editTitle" style="width:100%"></label><br><br>
-    <label>Description (Markdown):<br><textarea id="editProblem" style="width:100%;height:100px;"></textarea></label><br><br>
-    <label>Examples (Markdown, optional):<br><textarea id="editExamples" style="width:100%;height:60px;"></textarea></label><br><br>
-    <label>Test Cases (JSON):<br><textarea id="editTestCases" style="width:100%;height:80px;"></textarea></label><br><br>
-    <label>Starter Code (Python, optional):<br><textarea id="editStarterCode" style="width:100%;height:60px;"></textarea></label><br><br>
-    <label>Solutions Available Date (YYYY-MM-DD):<br><input type="date" id="editSolutionsDate" style="width:100%"></label><br><br>
-    <label><input type="checkbox" id="editActive"> Active</label><br><br>
-    <div style="margin-top:10px; text-align:right;">
-      <button onclick="closeEditModal()">Cancel</button>
-      <button id="saveEditBtn" class="btn btn-primary">Save</button>
-    </div>
-    <div id="editError" style="color:red; margin-top:8px;"></div>
-  </div>
-</div>
-
-<!-- Add Challenge Modal -->
-<div id="addChallengeModal" class="admin-password-modal" style="display:none; z-index:3000;">
-  <div class="modal-content" style="max-width:600px;">
-    <h3>Add New Challenge</h3>
-    <label>Title:<br><input type="text" id="addTitle" style="width:100%"></label><br><br>
-    <label>Description (Markdown):<br><textarea id="addProblem" style="width:100%;height:100px;"></textarea></label><br><br>
-    <label>Examples (Markdown, optional):<br><textarea id="addExamples" style="width:100%;height:60px;"></textarea></label><br><br>
-    <label>Test Cases (JSON):<br><textarea id="addTestCases" style="width:100%;height:80px;"></textarea></label><br><br>
-    <label>Starter Code (Python, optional):<br><textarea id="addStarterCode" style="width:100%;height:60px;"></textarea></label><br><br>
-    <label>Solutions Available Date (YYYY-MM-DD):<br><input type="date" id="addSolutionsDate" style="width:100%"></label><br><br>
-    <label><input type="checkbox" id="addActive"> Active (students can see/solve)</label><br><br>
-    <div style="margin-top:10px; text-align:right;">
-      <button onclick="closeAddModal()">Cancel</button>
-      <button id="validateAddBtn" class="btn btn-primary">Next</button>
-    </div>
-    <div id="addError" style="color:red; margin-top:8px;"></div>
-  </div>
-</div>
-
-<!-- Add Challenge Confirmation Modal -->
-<div id="addConfirmModal" class="admin-password-modal" style="display:none; z-index:3100;">
-  <div class="modal-content" style="max-width:600px;">
-    <h3>Confirm New Challenge</h3>
-    <div id="addConfirmSummary" style="max-height:300px; overflow:auto; margin-bottom:1em;"></div>
-    <div style="margin-top:10px; text-align:right;">
-      <button onclick="closeAddConfirmModal()">Cancel</button>
-      <button id="saveAddBtn" class="btn btn-success">Add Challenge</button>
-    </div>
-    <div id="addConfirmError" style="color:red; margin-top:8px;"></div>
-  </div>
-</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- CodeMirror 5 -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/monokai.min.css">
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<style>
-  :root {
-    --console-bg:#f7f7f9; --console-fg:#111; --console-border:#d0d7de;
-    --success-bg:#e9fbe9; --success-fg:#084c2e; --success-border:#92d19b;
-    --danger-bg:#fdecec; --danger-fg:#6b0d0d; --danger-border:#e1a4a4;
-  }
-  [data-theme="dark"] {
-    --console-bg:#0b1020; --console-fg:#e6edf3; --console-border:#30363d;
-    --success-bg:#10391b; --success-fg:#c6f6d5; --success-border:#1f6f3a;
-    --danger-bg:#3a1111; --danger-fg:#f8d7da; --danger-border:#7a1f1f;
-  }
-  .challenge-main-row { display: flex; gap: 0; align-items: stretch; margin-bottom: 1.5em; flex-wrap: nowrap; width: 100%; position: relative; min-height: 350px; }
-  #challengeBox { position: relative; }
-  .challenge-left { flex: 0 0 380px; min-width: 260px; max-width: 500px; resize: none; overflow: auto; transition: max-width 0.2s; position: relative; background: none; z-index: 1; display: flex; flex-direction: column; }
-  .challenge-left.collapsed { max-width: 40px !important; min-width: 40px !important; width: 40px !important; padding: 0; overflow: visible; }
-  .challenge-left.collapsed .challenge-box > *:not(#collapseProblemBtn) { display: none; }
-  .challenge-right { flex: 1 1 0%; min-width: 320px; max-width: 100%; position: relative; padding-left: 0; display: flex; flex-direction: column; background: none; z-index: 2; }
-  .challenge-divider { width: 6px; cursor: ew-resize; background: #ddd; min-height: 350px; z-index: 10; transition: background 0.2s; }
-  .challenge-divider:hover, .challenge-divider.dragging { background: #aaa; }
-  #collapseProblemBtn { position: absolute; top: 12px; right: 0; z-index: 30; font-size: 1.2em; background: #eee; border-radius: 50%; border: 1px solid #ccc; box-shadow: 0 1px 4px rgba(0,0,0,0.08); pointer-events: auto; }
-  .challenge-left.collapsed #collapseProblemBtn { left: 0; right: auto; }
-  .challenge-main-row.vertical { flex-direction: column; gap: 0; min-height: 0; }
-  .challenge-main-row.vertical .challenge-left, .challenge-main-row.vertical .challenge-right { flex: none !important; max-width: 100% !important; min-width: 0 !important; width: 100% !important; padding-left: 0 !important; }
-  .challenge-main-row.vertical .challenge-divider { display: none; }
-  .challenge-main-row.vertical .challenge-divider-horizontal { display: block; width: 100%; height: 6px; background: #ddd; margin: 0.2em 0 0.2em 0; cursor: default; border: none; }
-  .challenge-divider-horizontal { display: none; }
-  .challenge-main-row:not(.vertical) .challenge-divider-horizontal { display: none; }
-  @media (max-width: 900px) {
-    .challenge-main-row { flex-direction: column; gap: 0.3em; }
-    .challenge-left, .challenge-right { max-width: 100%; min-width: 0; }
-    .challenge-divider { display: none; }
-  }
-  .editor-wrap { position: relative; }
-  .editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-bottom: none; border-radius: 8px 8px 0 0; background: var(--bg, #fafafa); }
-  .editor-toolbar .left, .editor-toolbar .right { display:flex; gap: 0.5rem; align-items:center; }
-  .editor-toolbar .hint { font-size: 0.85em; color: #666; margin-right: 0.5rem; }
-  .CodeMirror { border: 1px solid #ddd; border-top: none; border-radius: 0 0 8px 8px; height: 320px; }
-  .console-box{
-  margin-top:10px; padding:12px 14px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  border:1px solid var(--console-border); border-radius:8px;
-  background:var(--console-bg); color:var(--console-fg);
-  white-space:pre-wrap; overflow:auto; max-height:260px;
-}
-
-/* Big, obvious banners */
-  .alert{
-    margin-top:12px; padding:12px 14px; border-radius:10px; font-weight:700;
-    border:1px solid transparent; display:flex; align-items:center; gap:8px;
-  }
-  .alert-success{ background:var(--success-bg); color:var(--success-fg); border-color:var(--success-border); }
-  .alert-danger{  background:var(--danger-bg);  color:var(--danger-fg);  border-color:var(--danger-border); }
-  .btn { cursor: pointer; }
-</style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
-let keystrokes = [];
-let editorTheme = (document.documentElement.getAttribute('data-theme') === 'dark') ? 'monokai' : 'default';
-let editor = null;
-let currentChallengeId = null;
+(function(){
+  {% if not session.get("netid") %} return; {% endif %}
 
-function setupEditor() {
-  if (editor) editor.toTextArea();
-  editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
-    lineNumbers: true,
-    mode: 'python',
-    theme: editorTheme,
-    indentUnit: 4,
-    tabSize: 4,
-    smartIndent: true,
-    matchBrackets: true,
-    autoCloseBrackets: true,
-    lineWrapping: false
+  const loadError = document.getElementById('loadError');
+  function showLoadError(msg){
+    loadError.textContent = msg;
+    loadError.style.display = 'block';
+  }
+
+  // CodeMirror theme follows site theme
+  function cmTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'material' : 'eclipse';
+  }
+  const editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+    mode:'python', theme: cmTheme(), lineNumbers:true, indentUnit:4
   });
-  keystrokes = [];
-  editor.on('change', function(instance, changeObj) {
-    keystrokes.push({ timestamp: Date.now(), change: changeObj, text: instance.getValue() });
-  });
-  // Keyboard shortcuts
-  editor.addKeyMap({
-    'Ctrl-Enter': () => document.getElementById('run-btn').click(),
-    'Shift-Ctrl-Enter': () => document.getElementById('submit-btn').click()
-  });
-}
+  new MutationObserver(muts => muts.forEach(m=>{
+    if (m.attributeName === 'data-theme') editor.setOption('theme', cmTheme());
+  })).observe(document.documentElement, {attributes:true});
 
-// Toggle/collapse/expand problem pane
-function toggleProblemPane() {
-  const pane = document.getElementById('problemPane');
-  const btn = document.getElementById('collapseProblemBtn');
-  if (!pane.classList.contains('collapsed')) { pane.classList.add('collapsed'); btn.textContent = '⮞'; btn.title = 'Expand'; }
-  else { pane.classList.remove('collapsed'); btn.textContent = '⮜'; btn.title = 'Collapse'; }
-}
+  const sel = document.getElementById('challengeSelect');
+  const pubBadge = document.getElementById('pubBadge');
+  const noUI = document.getElementById('noChallenge');
+  const ui = document.getElementById('challengeUI');
+  const cTitle = document.getElementById('cTitle');
+  const cProblem = document.getElementById('cProblem');
+  const cExamples = document.getElementById('cExamples');
+  const resultsDiv = document.getElementById('results');
+  const runBtn = document.getElementById('runBtn');
+  const submitBtn = document.getElementById('submitBtn');
+  const runStatus = document.getElementById('runStatus');
+  const leaderboard = document.getElementById('leaderboard');
+  const solDate = document.getElementById('solDate');
 
-document.addEventListener('DOMContentLoaded', function() {
-  const btn = document.getElementById('collapseProblemBtn');
-  if (btn) btn.onclick = toggleProblemPane;
+  function renderProblem(md){
+    if (!md) return '';
+    const esc = (s)=>s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    md = md.replace(/```(python)?\n([\s\S]*?)```/g, (_,lang,code)=>`<pre><code class="language-${lang||'python'}">${esc(code)}</code></pre>`);
+    md = md.replace(/`([^`]+)`/g, (_,code)=>`<code>${esc(code)}</code>`);
+    return md.split(/\n\n+/).map(p => p.startsWith('<pre>') ? p : `<p>${p.replace(/\n/g,'<br>')}</p>`).join('\n');
+  }
+  function hl(){ try{ document.querySelectorAll('pre code').forEach(el => window.hljs && hljs.highlightElement(el)); }catch(e){} }
 
-  // Drag-to-resize divider
-  const divider = document.getElementById('challengeDivider');
-  const left = document.getElementById('problemPane');
-  let dragging = false, startX = 0, startWidth = 0;
-  if (divider && left) {
-    divider.addEventListener('mousedown', function(e) { dragging = true; startX = e.clientX; startWidth = left.offsetWidth; divider.classList.add('dragging'); document.body.style.cursor = 'ew-resize'; if (left.classList.contains('collapsed')) left.classList.remove('collapsed'); });
-    document.addEventListener('mousemove', function(e) { if (!dragging) return; let dx = e.clientX - startX; let newWidth = Math.max(40, startWidth + dx); left.style.maxWidth = newWidth + 'px'; left.style.minWidth = newWidth + 'px'; });
-    document.addEventListener('mouseup', function() { if (dragging) { dragging = false; divider.classList.remove('dragging'); document.body.style.cursor = ''; } });
+  async function fetchJSON(url, opts){
+    const r = await fetch(url, opts);
+    const txt = await r.text();
+    if (!r.ok) throw new Error(`HTTP ${r.status}: ${txt.slice(0,300)}`);
+    try { return JSON.parse(txt); } catch { throw new Error(`Bad JSON: ${txt.slice(0,300)}`); }
   }
 
-  const layoutBtn = document.getElementById('toggleLayoutBtn');
-  const mainRow = document.querySelector('.challenge-main-row');
-  let layoutVertical = localStorage.getItem('challengeLayout') === 'vertical';
-  function updateLayout() {
-    if (layoutVertical) { mainRow.classList.add('vertical'); layoutBtn.textContent = 'Switch to Side-by-Side'; }
-    else { mainRow.classList.remove('vertical'); layoutBtn.textContent = 'Switch to Top-Bottom'; }
-    localStorage.setItem('challengeLayout', layoutVertical ? 'vertical' : 'horizontal');
-  }
-  layoutBtn.onclick = function() { layoutVertical = !layoutVertical; updateLayout(); };
-  updateLayout();
-});
-
-// Dynamically update CodeMirror theme on theme toggle
-function updateEditorTheme() {
-  let theme = (document.documentElement.getAttribute('data-theme') === 'dark') ? 'monokai' : 'default';
-  if (editor) editor.setOption('theme', theme);
-}
-const observer = new MutationObserver(updateEditorTheme);
-observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-
-function showLoginModal() {
-  document.getElementById('loginModal').style.display = 'flex';
-  document.getElementById('loginNetID').focus();
-}
-function cancelLogin() {
-  document.getElementById('loginModal').style.display = 'none';
-  document.getElementById('loginNetID').value = '';
-  document.getElementById('loginAdminPassword').value = '';
-  document.getElementById('adminPasswordSection').style.display = 'none';
-}
-function submitLogin() {
-  const netid = document.getElementById('loginNetID').value.trim();
-  const adminPassword = document.getElementById('loginAdminPassword').value;
-  if (!netid) { alert('Please enter your NetID'); return; }
-  if (netid === 'nh385') {
-    if (!adminPassword) { document.getElementById('adminPasswordSection').style.display = 'block'; document.getElementById('loginAdminPassword').focus(); return; }
-    if (adminPassword !== 'foundationsP4ss;') { alert('Invalid admin password'); document.getElementById('loginAdminPassword').value = ''; return; }
-    localStorage.setItem("netid", netid);
-    localStorage.setItem("adminAuthenticated", "true");
-    localStorage.setItem("netidDate", new Date().toISOString().slice(0, 10));
-  } else {
-    localStorage.setItem("netid", netid);
-    localStorage.removeItem("adminAuthenticated");
-    localStorage.setItem("netidDate", new Date().toISOString().slice(0, 10));
-  }
-  cancelLogin();
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-  // Check for netid in localStorage
-  let netid = localStorage.getItem("netid");
-  if (!netid) { showLoginModal(); }
-  // Enter key submits login
-  const loginNetID = document.getElementById('loginNetID');
-  const loginAdminPassword = document.getElementById('loginAdminPassword');
-  if (loginNetID) loginNetID.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitLogin(); });
-  if (loginAdminPassword) loginAdminPassword.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitLogin(); });
-  loadChallengeList();
-  let reorderBtn = document.getElementById('reorderBtn');
-  if (isAdmin()) { if (reorderBtn) { reorderBtn.style.display = ''; reorderBtn.onclick = showReorderModal; } }
-  else { if (reorderBtn) reorderBtn.style.display = 'none'; }
-});
-
-function isAdmin() { return localStorage.getItem("netid") === "nh385" && localStorage.getItem("adminAuthenticated") === "true"; }
-
-async function loadChallengeList() {
-  let is_admin = isAdmin();
-  let url = '/weekly_challenge/challenges';
-  if (is_admin) {
-    let admin_netid = localStorage.getItem('netid');
-    let admin_password = 'foundationsP4ss;';
-    url += `?admin_netid=${encodeURIComponent(admin_netid)}&admin_password=${encodeURIComponent(admin_password)}`;
-  }
-  let resp = await fetch(url);
-  if (!resp.ok) { document.getElementById('challengeBox').style.display = 'none'; document.getElementById('noChallengeMsg').style.display = 'block'; return; }
-  let data = await resp.json();
-  if (!data.length) { document.getElementById('challengeBox').style.display = 'none'; document.getElementById('noChallengeMsg').style.display = 'block'; return; }
-  let adminDropdown = document.getElementById('adminDropdown');
-  let select = document.getElementById('challengeSelect');
-  if (is_admin) {
-    select.style.display = 'none'; adminDropdown.style.display = ''; adminDropdown.innerHTML = '';
-    // Custom dropdown
-    let dropdownBtn = document.createElement('div');
-    dropdownBtn.id = 'adminDropdownBtn'; dropdownBtn.tabIndex = 0;
-    Object.assign(dropdownBtn.style, { border: '1px solid #ccc', borderRadius: '4px', padding: '6px 16px', background: '#fff', cursor: 'pointer', userSelect: 'none', minWidth: '200px' });
-    dropdownBtn.textContent = data[0].title + (data[0].active ? ' (active)' : ' (inactive)');
-    adminDropdown.appendChild(dropdownBtn);
-    let dropdownList = document.createElement('ul');
-    dropdownList.id = 'adminDropdownList';
-    Object.assign(dropdownList.style, { listStyle: 'none', padding: '0', margin: '0', position: 'absolute', left: '0', top: '110%', zIndex: '1000', background: '#fff', border: '1px solid #ccc', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'none' });
-    data.forEach((chal) => {
-      let li = document.createElement('li'); li.textContent = chal.title + (chal.active ? ' (active)' : ' (inactive)'); li.dataset.id = chal.id;
-      Object.assign(li.style, { padding: '6px 16px', cursor: 'pointer', background: '#fff' });
-      li.onmouseenter = () => li.style.background = '#e6f7ff';
-      li.onmouseleave = () => li.style.background = '#fff';
-      li.onclick = function() { dropdownBtn.textContent = li.textContent; dropdownList.style.display = 'none'; loadChallenge(chal.id); };
-      dropdownList.appendChild(li);
-    });
-    // Add '+ Add New Challenge'
-    let addLi = document.createElement('li'); addLi.textContent = '+ Add New Challenge';
-    Object.assign(addLi.style, { fontWeight: 'bold', background: '#f7f7f7', cursor: 'pointer', padding: '6px 16px' });
-    addLi.onclick = function() { dropdownList.style.display = 'none'; showAddModal(); };
-    dropdownList.appendChild(addLi);
-    adminDropdown.appendChild(dropdownList);
-    dropdownBtn.onclick = function() { dropdownList.style.display = dropdownList.style.display === 'none' ? '' : 'none'; };
-    document.addEventListener('click', function(e) { if (!adminDropdown.contains(e.target)) dropdownList.style.display = 'none'; });
-    new Sortable(dropdownList, { animation: 150, filter: 'li:last-child', onEnd: async function(evt) {
-      if (evt.item === addLi) return; let ids = Array.from(dropdownList.children).slice(0, -1).map(li => li.dataset.id);
-      let admin_netid = localStorage.getItem('netid'); let admin_password = 'foundationsP4ss;';
-      let resp = await fetch('/weekly_challenge/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_netid, admin_password, ids }) });
-      if (!resp.ok) alert('Failed to reorder challenges.');
-    }});
-    loadChallenge(data[0].id);
-  } else {
-    adminDropdown.style.display = 'none'; select.style.display = ''; select.innerHTML = '';
-    data.forEach(chal => { let opt = document.createElement('option'); opt.value = chal.id; opt.textContent = chal.title; select.appendChild(opt); });
-    select.onchange = function() { loadChallenge(select.value); };
-    loadChallenge(select.value);
-  }
-}
-
-function highlightProblemText(text) { return text; }
-
-async function loadChallenge(cid) {
-  currentChallengeId = cid;
-  let resp = await fetch(`/weekly_challenge/challenge/${cid}`);
-  if (!resp.ok) { document.getElementById('challengeBox').style.display = 'none'; document.getElementById('noChallengeMsg').style.display = 'block'; return; }
-  let data = await resp.json();
-  document.getElementById('challengeTitle').textContent = data.title;
-  document.getElementById('challengeProblemMd').innerHTML = marked.parse(data.problem || '');
-  if (data.examples) document.getElementById('challengeExamples').innerHTML = `<b>Examples:</b><br>${marked.parse(data.examples)}`; else document.getElementById('challengeExamples').innerHTML = '';
-  document.getElementById('challengeBox').style.display = 'block';
-  document.getElementById('noChallengeMsg').style.display = 'none';
-  document.getElementById('editor').value = data.starter_code || 'def solution():\n    pass\n';
-  setupEditor();
-  loadLeaderboard();
-  if (isAdmin()) loadSubmissions();
-  const _resDiv = document.getElementById('result');
-  _resDiv.className = '';
-  _resDiv.innerHTML = '';
-  setConsole('');
-  document.getElementById('testOutput').innerHTML = '';
-
-  const editBtn = document.getElementById('editChallengeBtn');
-  if (isAdmin()) { editBtn.style.display = ''; editBtn.onclick = function() { openEditModal(data); }; }
-  else { editBtn.style.display = 'none'; }
-}
-
-// Leaderboard and replay
-async function loadLeaderboard() {
-  if (!currentChallengeId) return;
-  let resp = await fetch(`/weekly_challenge/leaderboard/${currentChallengeId}`);
-  if (!resp.ok) return;
-  let data = await resp.json();
-  let ul = document.getElementById("leaderboard");
-  let prevDateMsg = document.getElementById('solutionsDateMsg'); if (prevDateMsg) prevDateMsg.remove();
-  let prevReplayMsg = document.getElementById('replayMsg'); if (prevReplayMsg) prevReplayMsg.remove();
-  ul.innerHTML = '';
-  let now = new Date();
-  let solDate = data.solutions_available_date ? new Date(data.solutions_available_date) : null;
-  let canReplay = solDate && now >= solDate;
-  if (solDate) { let dateMsg = `<div id='solutionsDateMsg' style='margin-bottom:0.5em;'><b>Solutions available:</b> ${solDate.toLocaleDateString()}</div>`; ul.insertAdjacentHTML('beforebegin', dateMsg); }
-  data.leaderboard.forEach(entry => {
-    let li = document.createElement('li');
-    li.textContent = `${entry.display_name} (${entry.timestamp})`;
-    if (isAdmin()) {
-      let btn = document.createElement('button'); btn.innerHTML = '🗑️'; btn.title = 'Remove from leaderboard'; btn.style.marginLeft = '10px';
-      btn.onclick = async function() {
-        if (!confirm(`Remove ${entry.netid} from leaderboard?`)) return;
-        let admin_netid = localStorage.getItem("netid"); let admin_password = 'foundationsP4ss;';
-        let resp = await fetch(`/weekly_challenge/remove_leaderboard/${currentChallengeId}`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ netid: entry.netid, admin_netid, admin_password }) });
-        if (resp.ok) loadLeaderboard(); else { let data = await resp.json(); alert('Error: ' + (data.error || 'Failed to remove from leaderboard')); }
-      };
-      li.appendChild(btn);
-    }
-    if (canReplay) {
-      let replayBtn = document.createElement('button'); replayBtn.textContent = 'Replay'; replayBtn.style.marginLeft = '10px';
-      replayBtn.onclick = async function() {
-        if (isAdmin()) {
-          let admin_netid = localStorage.getItem("netid"); let admin_password = 'foundationsP4ss;';
-          let resp = await fetch(`/weekly_challenge/submissions/${currentChallengeId}?admin_netid=${encodeURIComponent(admin_netid)}&admin_password=${encodeURIComponent(admin_password)}`);
-          if (!resp.ok) return; let subs = await resp.json();
-          let sub = subs.slice().reverse().find(s => s.netid === entry.netid && s.passed);
-          if (sub) replayKeystrokes(sub.keystrokes);
-        } else {
-          let url = `/weekly_challenge/solution_replay/${currentChallengeId}/${encodeURIComponent(entry.netid)}`;
-          let resp = await fetch(url); if (!resp.ok) return; let data = await resp.json(); if (data.keystrokes) replayKeystrokes(data.keystrokes);
-        }
-      };
-      li.appendChild(replayBtn);
-    }
-    ul.appendChild(li);
-  });
-  if (!canReplay) { let msg = document.createElement('div'); msg.id = 'replayMsg'; msg.style.marginTop = '0.5em'; msg.style.color = '#888'; msg.textContent = 'Replays will be available after the solutions date.'; ul.parentNode.insertBefore(msg, ul.nextSibling); }
-}
-
-async function loadSubmissions() {
-  if (!isAdmin() || !currentChallengeId) return;
-  let admin_netid = localStorage.getItem("netid"); let admin_password = 'foundationsP4ss;';
-  let resp = await fetch(`/weekly_challenge/submissions/${currentChallengeId}?admin_netid=${encodeURIComponent(admin_netid)}&admin_password=${encodeURIComponent(admin_password)}`);
-  if (!resp.ok) return; let data = await resp.json();
-  let table = document.getElementById("submissionsTable"); table.innerHTML = '';
-  data.forEach((sub) => {
-    let tr = document.createElement('tr'); tr.innerHTML = `<td>${sub.netid}</td><td>${sub.timestamp}</td><td>${sub.passed ? '✅' : '❌'}</td>`;
-    let replayTd = document.createElement('td'); let btn = document.createElement('button'); btn.textContent = 'Replay'; btn.onclick = function() { replayKeystrokes(sub.keystrokes); }; replayTd.appendChild(btn); tr.appendChild(replayTd); table.appendChild(tr);
-  });
-  document.getElementById("adminSubmissions").style.display = 'block';
-}
-
-function replayKeystrokes(keystrokes) {
-  if (!Array.isArray(keystrokes) || keystrokes.length === 0) return;
-  editor.setValue('');
-  let i = 0; (function step(){ if (i >= keystrokes.length) return; editor.setValue(keystrokes[i].text); i++; setTimeout(step, 40); })();
-}
-
-// -------- Sandboxed local run (Pyodide in a Web Worker) --------
-let pyWorker = null;
-let pyWorkerReady = false;
-let pyWorkerReadyPromise = null;
-
-function ensurePyWorker() {
-  if (pyWorker) return;
-
-  const workerCode = `
-    // Worker scope
-    let readyPromise = (async () => {
-      try {
-        importScripts('https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js');
-        self.pyodide = await loadPyodide();
-        postMessage({ type: 'ready' });
-      } catch (e) {
-        postMessage({ type: 'ready', error: (e && e.message) ? e.message : String(e) });
-      }
-    })();
-
-    onmessage = async (e) => {
-      const msg = e.data || {};
-      if (msg.type === 'run') {
-        await readyPromise;
-        let out = '', err = '';
-        try {
-          pyodide.setStdout({ batched: s => { out += s; } });
-          pyodide.setStderr({ batched: s => { err += s; } });
-          await pyodide.runPythonAsync(msg.code);
-          postMessage({ type: 'result', ok: true, output: out, error: err });
-        } catch (ex) {
-          err += (ex && ex.message) ? ('\\n' + ex.message) : ('\\n' + String(ex));
-          postMessage({ type: 'result', ok: false, output: out, error: err });
-        }
-      }
-    };
-  `;
-
-  try {
-    pyWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
-  } catch (err) {
-    // Blob workers blocked by CSP
-    showRunOutput('', `Worker creation failed (CSP?): ${String(err)}\nAdd to CSP: worker-src 'self' blob:;`, false);
-    return;
-  }
-
-  // Surface worker errors (e.g., CSP blocking importScripts to jsdelivr)
-  pyWorker.onerror = (e) => {
-    showRunOutput('', `Worker error: ${e.message || e.filename || 'unknown'}\nLikely CSP or network block to cdn.jsdelivr.net.`, false);
-  };
-
-  // One-time ready handshake
-  pyWorkerReadyPromise = new Promise((resolve) => {
-    const onReady = (e) => {
-      const d = e.data || {};
-      if (d.type !== 'ready') return;
-      pyWorker.removeEventListener('message', onReady);
-      if (d.error) {
-        showRunOutput('', `Pyodide failed to load: ${d.error}\nCheck CSP (script-src / connect-src to cdn.jsdelivr.net) or host Pyodide locally.`, false);
-        resolve(false);
+  async function loadChallenges() {
+    try {
+      const data = await fetchJSON('/weekly_challenge/challenges');
+      const list = (data && data.challenges) || [];
+      sel.innerHTML = '';
+      if (!list.length) {
+        ui.style.display = 'none'; noUI.style.display = 'block';
         return;
       }
-      pyWorkerReady = true;
-      resolve(true);
-    };
-    pyWorker.addEventListener('message', onReady);
-  });
-}
-
-async function runSandboxed(code, msIfReady = 2500, msFirst = 30000) {
-  ensurePyWorker();
-  if (!pyWorker) {
-    // Worker never created (CSP)
-    return { ok: false, output: '', error: 'Worker unavailable (CSP blocked blob:). See console/CSP notes.' };
-  }
-
-  // Wait for ready on first use
-  if (!pyWorkerReady) {
-    const ok = await Promise.race([
-      pyWorkerReadyPromise,
-      new Promise(res => setTimeout(() => res(false), msFirst)) // hard cap on cold start
-    ]);
-    if (!ok) {
-      // Kill and reset to avoid a wedged worker
-      try { pyWorker.terminate(); } catch {}
-      pyWorker = null; pyWorkerReady = false; pyWorkerReadyPromise = null;
-      return { ok: false, output: '', error: `Time limit exceeded (${msFirst/1000}s) while loading Pyodide. Likely CSP or blocked CDN.` };
-    }
-  }
-
-  return new Promise((resolve) => {
-    let finished = false;
-    const timer = setTimeout(() => {
-      if (finished) return;
-      try { pyWorker.terminate(); } catch {}
-      pyWorker = null; pyWorkerReady = false; pyWorkerReadyPromise = null;
-      finished = true;
-      resolve({ ok: false, output: '', error: `Time limit exceeded (${msIfReady/1000}s). Possible infinite loop.` });
-    }, msIfReady);
-
-    const onResult = (e) => {
-      const d = e.data || {};
-      if (d.type !== 'result') return;
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      pyWorker.removeEventListener('message', onResult);
-      resolve({ ok: d.ok, output: d.output, error: d.error });
-    };
-    pyWorker.addEventListener('message', onResult);
-    pyWorker.postMessage({ type: 'run', code });
-  });
-}
-
-function setConsole(text){
-  const box = document.getElementById('consoleOutput');
-  if(!box) return;
-  const t = (text || '').toString();
-  box.textContent = t.trim().length ? t : '(no output)';
-}
-
-// Pre-warm right after DOM ready so the download starts before the user clicks Run
-window.addEventListener('DOMContentLoaded', ensurePyWorker);
-
-function showRunOutput(output, error, ok) {
-  const box = document.getElementById('runOutput');
-  box.style.display = '';
-  box.textContent = '';
-  if (output) box.textContent += output;
-  if (error) box.textContent += (output ? '\n' : '') + error;
-  if (!output && !error) box.textContent = '(no output)';
-}
-
-ensurePyWorker();  // kick off the worker so Pyodide starts loading ASAP
-
-// Hook up Run/Clear/Submit
-window.addEventListener('DOMContentLoaded', () => {
-  const runBtn = document.getElementById('run-btn');
-  const clearBtn = document.getElementById('clear-output-btn');
-  const submitBtn = document.getElementById('submit-btn');
-  const runBox = document.getElementById('runOutput');
-
-  // show the console immediately
-  setConsole('');
-
-  runBtn.addEventListener('click', async () => {
-    const code = editor.getValue();
-    runBtn.disabled = true; runBtn.textContent = 'Running…';
-    setConsole('Running…');
-    const result = await runSandboxed(code);
-    const combined = (result.output || '') + (result.error ? ((result.output ? '\n' : '') + result.error) : '');
-    setConsole(combined);
-    runBtn.disabled = false; runBtn.textContent = 'Run ▷';
-  });
-
-  clearBtn.addEventListener('click', () => setConsole(''));
-});
-
-// -------- Submit to server (tests + leaderboard) --------
-document.addEventListener('DOMContentLoaded', () => {
-	document.getElementById("submit-btn").onclick = async function() {
-  if (!currentChallengeId) return;
-  let code = editor.getValue();
-  let netid = localStorage.getItem("netid");
-  if (!netid) { showLoginModal(); return; }
-
-  let resp = await fetch(`/weekly_challenge/submit/${currentChallengeId}`, {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ netid, code, keystrokes })
-  });
-
-  let resultDiv = document.getElementById("result");
-  let testOutputDiv = document.getElementById("testOutput");
-  testOutputDiv.innerHTML = '';
-
-  if (resp.ok) {
-    let data = await resp.json();
-    let printed = (data.results && data.results.length > 0) ? (data.results[0].printed || '') : '';
-    if (printed) setConsole(printed);
-
-    if (data.passed) {
-      resultDiv.className = 'alert alert-success';
-      resultDiv.innerHTML = '✅ Correct! All tests passed.';
-      testOutputDiv.innerHTML = '';
-    } else {
-      resultDiv.className = 'alert alert-danger';
-      resultDiv.innerHTML = '❌ Some tests failed.';
-      testOutputDiv.innerHTML = `<pre>${JSON.stringify(data.results, null, 2)}</pre>`;
-    }
-    await loadLeaderboard();
-  } else {
-    let data = await resp.json();
-    resultDiv.className = 'alert alert-danger';
-    resultDiv.innerHTML = `⚠️ Error: ${data.error}`;
-    testOutputDiv.innerHTML = '';
-    await loadLeaderboard();
-  }
-};
-
-  });
-
-// Modal logic (Edit/Add)
-function openEditModal() {
-  let admin_netid = localStorage.getItem('netid');
-  let admin_password = 'foundationsP4ss;';
-  fetch(`/weekly_challenge/challenge/${currentChallengeId}?admin_netid=${encodeURIComponent(admin_netid)}&admin_password=${encodeURIComponent(admin_password)}`)
-    .then(resp => resp.json())
-    .then(fullChal => {
-      document.getElementById('editChallengeModal').style.display = 'flex';
-      document.getElementById('editTitle').value = fullChal.title || '';
-      document.getElementById('editProblem').value = fullChal.problem || '';
-      document.getElementById('editExamples').value = fullChal.examples || '';
-      document.getElementById('editTestCases').value = JSON.stringify(fullChal.test_cases || [], null, 2);
-      document.getElementById('editSolutionsDate').value = (fullChal.solutions_available_date || '').slice(0,10);
-      document.getElementById('editStarterCode').value = fullChal.starter_code || '';
-      document.getElementById('editActive').checked = !!fullChal.active;
-      document.getElementById('editError').textContent = '';
-      document.getElementById('saveEditBtn').onclick = async function() {
-        let title = document.getElementById('editTitle').value.trim();
-        let problem = document.getElementById('editProblem').value;
-        let examples = document.getElementById('editExamples').value;
-        let testCasesRaw = document.getElementById('editTestCases').value;
-        let solutions_available_date = document.getElementById('editSolutionsDate').value;
-        let starter_code = document.getElementById('editStarterCode').value;
-        let active = document.getElementById('editActive').checked;
-        let test_cases;
-        try { test_cases = JSON.parse(testCasesRaw); }
-        catch (e) { document.getElementById('editError').textContent = 'Test cases must be valid JSON.'; return; }
-        let resp = await fetch(`/weekly_challenge/edit/${currentChallengeId}?netid=${encodeURIComponent(admin_netid)}&password=${encodeURIComponent(admin_password)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, problem, examples, test_cases, solutions_available_date, starter_code, active }) });
-        if (resp.ok) { closeEditModal(); loadChallenge(currentChallengeId); }
-        else { let data = await resp.json(); document.getElementById('editError').textContent = data.error || 'Failed to save.'; }
-      };
-    });
-}
-function closeEditModal() { document.getElementById('editChallengeModal').style.display = 'none'; }
-function showAddModal() {
-  document.getElementById('addTitle').value = '';
-  document.getElementById('addProblem').value = '';
-  document.getElementById('addExamples').value = '';
-  document.getElementById('addTestCases').value = '';
-  let d = new Date(); d.setDate(d.getDate() + 7);
-  document.getElementById('addSolutionsDate').value = d.toISOString().slice(0,10);
-  document.getElementById('addActive').checked = false;
-  document.getElementById('addStarterCode').value = '';
-  document.getElementById('addError').textContent = '';
-  document.getElementById('addChallengeModal').style.display = 'flex';
-}
-function closeAddModal() { document.getElementById('addChallengeModal').style.display = 'none'; }
-function closeAddConfirmModal() { document.getElementById('addConfirmModal').style.display = 'none'; }
-
-document.getElementById('validateAddBtn').onclick = function() {
-  let title = document.getElementById('addTitle').value.trim();
-  let problem = document.getElementById('addProblem').value;
-  let testCasesRaw = document.getElementById('addTestCases').value;
-  let solutions_available_date = document.getElementById('addSolutionsDate').value;
-  let starter_code = document.getElementById('addStarterCode').value;
-  let test_cases; let error = '';
-  if (!title) error = 'Title is required.';
-  else if (!problem) error = 'Description is required.';
-  else if (!testCasesRaw) error = 'Test cases are required.';
-  else if (!solutions_available_date) error = 'Solutions date is required.';
-  else {
-    try {
-      test_cases = JSON.parse(testCasesRaw);
-      if (!Array.isArray(test_cases) || test_cases.length === 0) error = 'Test cases must be a non-empty array.';
-      else if (!test_cases.every(tc => tc.input !== undefined && tc.output !== undefined)) error = 'Each test case must have input and output.';
-    } catch (e) { error = 'Test cases must be valid JSON.'; }
-  }
-  if (error) { document.getElementById('addError').textContent = error; return; }
-  document.getElementById('addError').textContent = '';
-  let summary = `<b>Title:</b> ${title}<br>`;
-  summary += `<b>Description:</b><br><div style='background:#f7f7f7; padding:0.5em; border-radius:4px;'>${marked.parse(problem)}</div>`;
-  let examples = document.getElementById('addExamples').value;
-  if (examples) summary += `<b>Examples:</b><br><div style='background:#f7f7f7; padding:0.5em; border-radius:4px;'>${marked.parse(examples)}</div>`;
-  summary += `<b>Test Cases:</b><pre style='background:#f7f7f7; border-radius:4px;'>${JSON.stringify(test_cases, null, 2)}</pre>`;
-  if (starter_code) summary += `<b>Starter Code:</b><pre style='background:#f7f7f7; border-radius:4px;'>${starter_code}</pre>`;
-  summary += `<b>Solutions Available Date:</b> ${solutions_available_date}<br>`;
-  summary += `<b>Active:</b> ${document.getElementById('addActive').checked ? 'Yes' : 'No'}<br>`;
-  document.getElementById('addConfirmSummary').innerHTML = summary;
-  document.getElementById('addConfirmError').textContent = '';
-  document.getElementById('addChallengeModal').style.display = 'none';
-  document.getElementById('addConfirmModal').style.display = 'flex';
-};
-
-document.getElementById('saveAddBtn').onclick = async function() {
-  let title = document.getElementById('addTitle').value.trim();
-  let problem = document.getElementById('addProblem').value;
-  let examples = document.getElementById('addExamples').value;
-  let testCasesRaw = document.getElementById('addTestCases').value;
-  let solutions_available_date = document.getElementById('addSolutionsDate').value;
-  let active = document.getElementById('addActive').checked;
-  let starter_code = document.getElementById('addStarterCode').value;
-  let test_cases;
-  try { test_cases = JSON.parse(testCasesRaw); }
-  catch (e) { document.getElementById('addConfirmError').textContent = 'Test cases must be valid JSON.'; return; }
-  let admin_netid = localStorage.getItem('netid');
-  let admin_password = 'foundationsP4ss;';
-  let resp = await fetch(`/weekly_challenge/add?netid=${encodeURIComponent(admin_netid)}&password=${encodeURIComponent(admin_password)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, problem, examples, test_cases, solutions_available_date, active, starter_code }) });
-  if (resp.ok) { closeAddConfirmModal(); await loadChallengeList(); }
-  else { let data = await resp.json(); document.getElementById('addConfirmError').textContent = data.error || 'Failed to add.'; }
-};
-
-let reorderChallengesData = [];
-function showReorderModal() {
-  let ul = document.getElementById('reorderList'); ul.innerHTML = '';
-  fetch('/weekly_challenge/challenges?admin_netid=' + encodeURIComponent(localStorage.getItem('netid')) + '&admin_password=foundationsP4ss;')
-    .then(resp => resp.json())
-    .then(data => {
-      reorderChallengesData = data;
-      data.forEach(chal => {
-        let li = document.createElement('li'); li.textContent = chal.title + (chal.active ? ' (active)' : ' (inactive)'); li.dataset.id = chal.id;
-        Object.assign(li.style, { padding: '8px 12px', border: '1px solid #ccc', marginBottom: '4px', background: '#f7f7f7', borderRadius: '4px', cursor: 'move' });
-        ul.appendChild(li);
+      list.forEach(ch => {
+        const opt = document.createElement('option');
+        opt.value = ch.id;
+        opt.textContent = ch.title || (ch.problem ? ch.problem.slice(0,40) : ch.id);
+        sel.appendChild(opt);
       });
-      document.getElementById('reorderModal').style.display = 'flex';
-      new Sortable(ul, { animation: 150 });
-    });
-}
-function closeReorderModal() { document.getElementById('reorderModal').style.display = 'none'; }
+      sel.selectedIndex = 0;
+      await loadOne(sel.value);
+    } catch (e) {
+      showLoadError('Failed to load challenges: ' + e.message);
+      ui.style.display = 'none'; noUI.style.display = 'block';
+    }
+  }
 
-document.getElementById('saveReorderBtn').onclick = async function() {
-  let ul = document.getElementById('reorderList');
-  let ids = Array.from(ul.children).map(li => li.dataset.id);
-  let admin_netid = localStorage.getItem('netid');
-  let admin_password = 'foundationsP4ss;';
-  let resp = await fetch('/weekly_challenge/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_netid, admin_password, ids }) });
-  if (resp.ok) { closeReorderModal(); await loadChallengeList(); }
-  else { let data = await resp.json(); document.getElementById('reorderError').textContent = data.error || 'Failed to reorder.'; }
-};
+  async function loadOne(cid) {
+    try{
+      const ch = await fetchJSON(`/weekly_challenge/challenge/${cid}`);
+      cTitle.textContent = ch.title || 'Challenge';
+      cProblem.innerHTML = renderProblem(ch.problem || '');
+      cExamples.innerHTML = ch.examples ? `<h4>Examples</h4>${renderProblem(ch.examples)}` : '';
+      pubBadge.textContent = (ch.published === false) ? '(unpublished)' : '';
+      ui.style.display = 'block'; noUI.style.display = 'none';
+      resultsDiv.innerHTML = '<span class="muted">Run or submit to see per-test results.</span>';
+      runStatus.textContent = '';
+      await loadLeaderboard(cid);
+      hl();
+      currentId = cid;
+    } catch(e){
+      showLoadError('Failed to load challenge: ' + e.message);
+      ui.style.display = 'none'; noUI.style.display = 'block';
+    }
+  }
+
+  async function loadLeaderboard(cid) {
+    leaderboard.innerHTML = '';
+    try {
+      const data = await fetchJSON(`/weekly_challenge/leaderboard/${cid}`);
+      (data.leaderboard || []).forEach(row => {
+        const li = document.createElement('li');
+        li.textContent = `${row.display_name || row.netid} — ${row.timestamp}`;
+        leaderboard.appendChild(li);
+      });
+      solDate.textContent = data.solutions_available_date ? `Solutions available: ${data.solutions_available_date}` : '';
+    } catch (e) {
+      solDate.textContent = '';
+    }
+  }
+
+  function showResults(results){
+    if (!results || !results.length){ resultsDiv.innerHTML = '<span class="muted">No results.</span>'; return; }
+    const esc = (s)=>String(s??'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    resultsDiv.innerHTML = results.map((r,i)=>`
+      <div class="case">
+        <div><b>Case ${i+1}:</b> <span class="${r.passed?'ok':'bad'}">${r.passed?'✓ passed':'✗ failed'}</span></div>
+        <div><b>input</b>: <code>${esc(JSON.stringify(r.input))}</code></div>
+        <div><b>printed</b>: <pre>${esc(r.printed||'')}</pre></div>
+        <div><b>return</b>: <code>${esc(r.output)}</code></div>
+        <div><b>expected</b>: <code>${esc(r.expected)}</code></div>
+      </div>
+    `).join('');
+  }
+
+  let currentId = null;
+  document.getElementById('runBtn').addEventListener('click', async () => {
+    if (!currentId) return;
+    resultsDiv.innerHTML = '';
+    runStatus.textContent = 'Running...';
+    try {
+      const data = await fetchJSON(`/weekly_challenge/submit/${currentId}`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code: editor.getValue(), keystrokes: [] })
+      });
+      showResults(data.results);
+      runStatus.textContent = data.passed ? 'All tests passed.' : 'Some tests failed.';
+      await loadLeaderboard(currentId); hl();
+    } catch (e) {
+      runStatus.textContent = 'Error: ' + e.message;
+    }
+  });
+
+  document.getElementById('submitBtn').addEventListener('click', async () => {
+    if (!currentId) return;
+    runStatus.textContent = 'Submitting...';
+    try {
+      const data = await fetchJSON(`/weekly_challenge/submit/${currentId}`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code: editor.getValue(), keystrokes: [] })
+      });
+      showResults(data.results);
+      runStatus.textContent = data.passed ? 'Submitted (passed)!' : 'Submitted (with failures).';
+      await loadLeaderboard(currentId); hl();
+    } catch (e) {
+      runStatus.textContent = 'Error: ' + e.message;
+    }
+  });
+
+  document.getElementById('challengeSelect').addEventListener('change', () => loadOne(sel.value));
+  loadChallenges();
+})();
 </script>
 {% endblock %}
 

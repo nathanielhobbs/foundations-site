@@ -59,7 +59,7 @@
 		    -->
 		    <label style="display:inline-flex; gap:.5rem; align-items:center">
 		  <input id="limitReplaysSameSection" type="checkbox"
-			 checked="{{ (ch.replays_same_section_only is not defined) or ch.replays_same_section_only }}">
+			 checked="{{ 'checked' if replays_scope else '' }}">
 		  Limit public replays to the same section
 		</label>
 

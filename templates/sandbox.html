@@ -51,7 +51,19 @@ print("Hello, sandbox!")</textarea>
   function cmTheme(){ return document.documentElement.getAttribute('data-theme') === 'dark' ? 'material' : 'eclipse'; }
 
   const ta = document.getElementById('editor');
-  const editor = CodeMirror.fromTextArea(ta, { mode:'python', theme: cmTheme(), lineNumbers:true, indentUnit:4 });
+  const editor = CodeMirror.fromTextArea(ta, {
+	  mode: 'python',
+	  theme: cmTheme(),
+	  lineNumbers: true,
+	  indentUnit: 4,        // indentation = 4 spaces
+	  tabSize: 4,           // visual width of a tab
+	  indentWithTabs: false,
+	  extraKeys: {
+	    Tab: cm => cm.execCommand("insertSoftTab"),   // insert 4 spaces
+	    "Shift-Tab": cm => cm.execCommand("indentLess")
+	  }
+	});
+
   new MutationObserver(m=>editor.setOption('theme', cmTheme()))
     .observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
 

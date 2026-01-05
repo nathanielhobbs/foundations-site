@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Replay · {{ sub.netid }}{% endblock %}
+{% block content %}
+<h1 class="page-title">Published Replay</h1>
+<div class="text-sm text-muted mb-2">NetID: <strong>{{ sub.netid }}</strong> ·
+  Submitted: {{ sub.created_at.strftime('%Y-%m-%d %H:%M') if sub.created_at else '' }}</div>
+
+<label class="block text-sm font-semibold mb-1">Code</label>
+<pre class="border rounded p-2" style="white-space: pre; overflow:auto; max-height: 60vh;">{{ sub.code }}</pre>
+
+<label class="block text-sm font-semibold mb-1 mt-3">Last run output</label>
+<pre class="border rounded p-2" style="white-space: pre-wrap; overflow:auto; max-height: 30vh;">{{ sub.run_output or '' }}</pre>
+{% endblock %}
+

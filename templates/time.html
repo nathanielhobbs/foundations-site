@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Current EST Time</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #00ff88;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #clock {
+            font-size: 5rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="clock">Loading...</div>
+
+    <script>
+        function updateClock() {
+            const now = new Date();
+            
+            // Format options to force New York (EST/EDT) time
+            const options = {
+                timeZone: 'America/New_York',
+                hour: '2-digit',
+                minute: '2-digit',
+//                second: '2-digit',
+                hour12: true
+            };
+
+            const estTime = new Intl.DateTimeFormat('en-US', options).format(now);
+            document.getElementById('clock').textContent = estTime;
+        }
+
+        // Update every second
+        setInterval(updateClock, 1000);
+        updateClock(); // Initial call
+    </script>
+</body>
+</html>

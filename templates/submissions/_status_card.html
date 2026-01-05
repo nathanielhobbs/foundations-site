@@ -1,0 +1,24 @@
+{% set s = (status or 'pending')|lower %}
+<section class="substatus-card" aria-labelledby="substatus-title">
+  <header class="substatus-header">
+    <span id="substatus-title" class="substatus-title">Submission Status</span>
+    <span class="status-badge status-{{ s }}" role="status" aria-live="polite">
+      {% if s == 'approved' %}✓ APPROVED{% elif s == 'rejected' %}✕ REJECTED{% else %}• PENDING{% endif %}
+    </span>
+    <span class="substatus-points">{{ points if points is not none else '—' }} pts</span>
+  </header>
+
+  <div class="feedback-card {% if not feedback %}feedback-empty{% endif %}">
+    <div class="feedback-label">Feedback</div>
+    {% if feedback %}
+      <div class="feedback-body">{{ feedback | e | replace('\n','<br>') | safe }}</div>
+    {% else %}
+      <div class="feedback-body feedback-muted">No feedback yet.</div>
+    {% endif %}
+  </div>
+
+  {% if updated_at %}
+    <footer class="substatus-meta">Last updated: {{ updated_at }}</footer>
+  {% endif %}
+</section>
+

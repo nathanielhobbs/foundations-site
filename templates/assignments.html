@@ -186,9 +186,10 @@ user_repos={{ user_repos }}
 				</script>
                                 -->
 				<button type="button"
-				  onclick="checkRepo('{{ a.slug }}','hobbs-foundations-f25','hw2-loops-comprehensions-and-dictionaries','{{ username }}')">
+				  onclick="checkRepo('{{ a.slug }}','{{ a.org }}','{{ a.repo_prefix }}','{{ username }}')">
 				  I’ve accepted — refresh
 				</button>
+
 				{% endif %}
 		      </td>
 		    </tr>
@@ -224,18 +225,16 @@ user_repos={{ user_repos }}
 
 	-->
     <li>
-	    <p class="mb-2">After you accept, GitHub Classroom creates <strong><a href={{ repo_url}}>your personal repository</a></strong> for the assignment.</p>
-      <p class="text-sm opacity-80 mt-2">This is where you will push your work. The code lives on GitHub (remote), not on your computer (local).</p>
-    </li>
+    <p class="mb-2">
+      After you accept, GitHub Classroom creates
+      <strong>your personal repository</strong> for the assignment on GitHub.
+    </p>
+    <p class="text-sm opacity-80 mt-2">
+      You can find it from the “Assignments” table above (the
+      <strong>View on GitHub</strong> button).
+    </p>
+  </li>
 
-    <li>
-	    <p class="mb-2">Open the repository on GitHub and download it to your computer (you can copy the <code>git clone ...</code> command from this page by clicking the button next to the assignment. You paste this in the terminal where you want to download the assignment.)      <!--
-      <figure class="rounded-xl overflow-hidden border border-slate-700">
-        <img src="{{ url_for('static', filename='img/hw_step_3.png') }}" alt="Step 3: Clone the repository from GitHub" class="w-full">
-      </figure>
-      -->
-    </li>
-    <li>
        Work locally (probably editing in VSCode).
 
     </li>
@@ -260,6 +259,51 @@ user_repos={{ user_repos }}
     </ul>
   </div>
 </div>
+
+<div class="mt-6 bg-amber-900/20 border border-amber-700 rounded-xl p-4">
+  <h2 class="text-lg font-semibold mb-2">
+    HW4: Updating your repo to match the latest starter code
+  </h2>
+  <p class="text-sm mb-3">
+    If you accepted HW4 before the latest update, run these commands
+    <strong>inside your HW4 folder</strong> in a terminal:
+  </p>
+  <ol class="list-decimal ml-5 space-y-3 text-sm">
+    <li>
+      <p>See what kinds of remotes you already have (note you are missing one called "upstream"):</p>
+      <pre class="mt-1 text-xs bg-slate-900/60 rounded-md px-2 py-1 overflow-x-auto"><code>git remote -v</code></pre>
+    </li>
+    <li>
+    <li>
+      <p>Add the template repo as an upstream remote:</p>
+      <pre class="mt-1 text-xs bg-slate-900/60 rounded-md px-2 py-1 overflow-x-auto"><code>git remote add upstream git@github.com:hobbs-foundations-f25/foundations-2025-fall-hw4-lanugagemodelbeta-hw4-language-model.git</code></pre>
+    </li>
+    <li>
+      <p>Fetch the latest changes from the template:</p>
+      <pre class="mt-1 text-xs bg-slate-900/60 rounded-md px-2 py-1 overflow-x-auto"><code>git fetch upstream</code></pre>
+    </li>
+    <li>
+      <p>Make sure you are on your <code>main</code> branch:</p>
+      <pre class="mt-1 text-xs bg-slate-900/60 rounded-md px-2 py-1 overflow-x-auto"><code>git checkout main</code></pre>
+    </li>
+    <li>
+      <p>Merge the template changes into your code:</p>
+      <pre class="mt-1 text-xs bg-slate-900/60 rounded-md px-2 py-1 overflow-x-auto"><code>git merge upstream/main</code></pre>
+      <p class="text-xs opacity-80 mt-1">
+        If you see “Already up to date.” you’re done with this step.<br>
+        If Git reports conflicts, raise your hand and let the professor know.
+        If you're comfortable, you can also fix the marked files, then run:
+      </p>
+      <pre class="mt-1 text-xs bg-slate-900/60 rounded-md px-2 py-1 overflow-x-auto"><code>git add &lt;files you fixed&gt;
+git commit</code></pre>
+    </li>
+    <li>
+      <p>Push the updated code back to GitHub:</p>
+      <pre class="mt-1 text-xs bg-slate-900/60 rounded-md px-2 py-1 overflow-x-auto"><code>git push origin main</code></pre>
+    </li>
+  </ol>
+</div>
+
 
 {# ---------- THEME-AWARE STYLES (uses your CSS vars with fallbacks) ---------- #}
 <style>

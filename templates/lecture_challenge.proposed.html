@@ -1,0 +1,299 @@
+{% extends 'base.html' %}
+{% block title %}Lecture Challenge – {{ ch.title }}{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
+
+<style>
+  /* --- Layout + visuals --- */
+  #workArea.lc-grid{
+    display:grid; grid-template-columns:minmax(0,1fr) 420px; gap:16px; align-items:start;
+  }
+  .lc-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .lc-toolbar-right{display:flex;gap:8px;align-items:center;white-space:nowrap}
+  #replaysMenu{position:absolute;right:0;top:100%;z-index:1000;width:22rem;max-height:60vh;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+
+  /* Editor + preview sizing */
+  .CodeMirror{height:360px !important;border:1px solid #d0d7de;border-radius:10px;background:#f6f8fa}
+  #rv-editor .CodeMirror{height:260px !important}
+
+  /* Output pane */
+  #output{height:160px;overflow:auto;white-space:pre-wrap;border:1px solid #d0d7de;border-radius:10px;padding:.75rem}
+
+  @media (max-width:900px){#workArea.lc-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>{{ ch.title }}</h1>
+  <article class="prompt markdown-body">{{ ch.prompt_md|safe }}</article>
+
+  <!-- Toolbar -->
+  <div class="lc-toolbar mb-2">
+    <!-- Left: Run / Submit -->
+    <div class="flex items-center gap-2">
+      <button id="runBtn" class="btn btn-primary">Run</button>
+      <button id="submitBtn" class="btn btn-success" {% if not ch.is_open %}disabled{% endif %}>Submit</button>
+      <span id="status" class="text-sm text-muted"></span>
+    </div>
+
+    <!-- Right: Accepted Solutions dropdown + Restore (same line) -->
+    <div class="lc-toolbar-right">
+      <div style="position:relative">
+        <button id="replaysToggle" class="btn btn-secondary">See Accepted Solutions ▾</button>
+        <div id="replaysMenu" style="display:none">
+          <div class="text-sm text-muted p-2">Loading…</div>
+        </div>
+      </div>
+      <button id="restoreBtn" class="btn btn-warning" style="display:none;">Restore my Code</button>
+    </div>
+  </div>
+
+  <!-- Work area: left editor/output, right preview -->
+  <div id="workArea" class="lc-grid">
+    <!-- LEFT -->
+    <div>
+      <label class="block text-sm font-semibold mb-1">Editor</label>
+      <div id="editor" class="border rounded"></div>
+
+      <label class="block text-sm font-semibold mt-3 mb-1">Output</label>
+      <pre id="output" class="border rounded"></pre>
+    </div>
+
+    <!-- RIGHT -->
+    <aside id="replayPanel" class="border rounded p-2" style="display:none;">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-sm text-muted">
+          <strong>Previewing accepted solution</strong><span id="rv-meta"></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="rv-load" class="btn btn-primary btn-sm">Load into Editor</button>
+          <button id="rv-close" class="btn btn-secondary btn-sm">Close</button>
+        </div>
+      </div>
+
+      <label class="block text-sm font-semibold mb-1">Code (read-only)</label>
+      <div id="rv-editor" class="border rounded"></div>
+
+      <label class="block text-sm font-semibold mt-3 mb-1">Last run output</label>
+      <pre id="rv-output" class="border rounded p-2" style="max-height:160px;overflow:auto;white-space:pre-wrap;"></pre>
+    </aside>
+  </div>
+
+  <!-- Hidden source seed (first load) -->
+  <textarea id="code" style="display:none;"># Start here…</textarea>
+
+  <!-- (Optional) Student status panel -->
+  <div id="studentStatus" class="panel" style="margin-top:.5rem;display:none;">
+    <div class="panel-title">Submission Status</div>
+    <div id="studentStatusBody" style="padding:.6rem;"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+
+<script>
+/* ---------- Main editor + run/submit ---------- */
+const slug = {{ ch.slug|tojson }};
+let keystrokes = [];
+let startTime = null;
+
+const outEl = document.getElementById('output');
+const statusEl = document.getElementById('status');
+
+/* Theme sync */
+function cmThemeFromPage(){
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'material' : 'eclipse';
+}
+const cm = CodeMirror(document.getElementById('editor'), {
+  value: document.getElementById('code').value,
+  mode: 'python',
+  theme: cmThemeFromPage(),
+  lineNumbers: true,
+  indentUnit: 4,
+  viewportMargin: Infinity,
+});
+new MutationObserver((muts)=>{
+  for (const m of muts) if (m.attributeName === 'data-theme') cm.setOption('theme', cmThemeFromPage());
+}).observe(document.documentElement, {attributes:true});
+
+/* Keystroke recording */
+function recordEvent(type, data){
+  const t = Date.now() - (startTime ?? (startTime = Date.now()));
+  keystrokes.push({ t, type, data });
+}
+cm.on('change', ()=>recordEvent('input', { value: cm.getValue() }));
+cm.on('keydown', (_, e)=>recordEvent('keydown', { key: e.key }));
+
+/* Py runner (web worker expected at /static/js/py_runner_worker.js) */
+let PY_WORKER=null, REQ_ID=0;
+function spawnWorker(){ if(PY_WORKER){try{PY_WORKER.terminate()}catch{}} PY_WORKER=new Worker('/static/js/py_runner_worker.js'); return PY_WORKER; }
+spawnWorker();
+
+async function runPython(code){
+  const id=++REQ_ID, w=PY_WORKER||spawnWorker();
+  const reply=new Promise((resolve)=>{ const h=(e)=>{ if(e.data&&e.data.id===id){ w.removeEventListener('message',h); resolve(e.data);} }; w.addEventListener('message',h); w.postMessage({id,code});});
+  const TIMEOUT=12000, timeout=new Promise((resolve)=>{ setTimeout(()=>{try{w.terminate()}catch{} spawnWorker(); resolve({ok:false,timeout:true,error:'Time limit exceeded (12s).'});}, TIMEOUT);});
+  const res=await Promise.race([reply, timeout]);
+  let stdout="", runtime=0;
+  if(res.ok){ stdout=(res.stdout||"").replace(/\r\n/g,"\n"); runtime=res.runtime_ms||0; outEl.textContent=[stdout,res.stderr].filter(Boolean).join("\n"); }
+  else { outEl.textContent = res.timeout ? res.error : ("Error: " + (res.error||"Unknown error")); }
+  return { stdout, runtime_ms: runtime };
+}
+
+/* Leaderboard + status (optional UI already in template if you show it) */
+async function refreshLeaderboard(){
+  const lb=document.getElementById('leaderboard'); if(!lb) return;
+  lb.innerHTML='';
+  const r=await fetch(`/api/lecture/${slug}/leaderboard`); const j=await r.json(); if(!j.ok) return;
+  j.entries.forEach((e,i)=>{ const li=document.createElement('li'); const name=e.netid || e.display_name || ''; li.textContent=`${i+1}. ${name}`; lb.appendChild(li); });
+}
+async function fetchMyStatus(){
+  const r=await fetch(`/api/lecture/${slug}/my_status`); const j=await r.json();
+  const box=document.getElementById('studentStatus'), body=document.getElementById('studentStatusBody');
+  if(!j.ok||!j.status){ box.style.display='none'; return; }
+  box.style.display='block';
+  body.innerHTML = `<b>Status:</b> ${j.status.toUpperCase()}${j.points!=null?` — <b>${j.points} pts</b>`:''}<br>${j.feedback?`<b>Feedback:</b> ${j.feedback.replaceAll('\\n','<br>')}: ''}<div style="opacity:.8;margin-top:.25rem;">Last updated: ${new Date(j.updated_at||j.submitted_at).toLocaleString()}</div>`;
+}
+function startPolling(){ setInterval(()=>{ refreshLeaderboard(); fetchMyStatus(); }, 10000); }
+
+/* Buttons */
+document.getElementById('runBtn').addEventListener('click', async ()=>{
+  const { runtime_ms } = await runPython(cm.getValue());
+  statusEl.textContent = `Ran in ${runtime_ms} ms`;
+});
+function fetchWithTimeout(url, opts={}, ms=12000){ const c=new AbortController(); const id=setTimeout(()=>c.abort(),ms); return fetch(url,{...opts,signal:c.signal}).finally(()=>clearTimeout(id)); }
+document.getElementById('submitBtn').addEventListener('click', async ()=>{
+  statusEl.textContent='Submitting…';
+  try{
+    const { stdout, runtime_ms } = await runPython(cm.getValue());
+    const payload={ code:cm.getValue(), keystrokes:JSON.stringify(keystrokes), run_output:stdout, runtime_ms};
+    const r=await fetchWithTimeout(`/api/lecture/${slug}/submit`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}, 12000);
+    const text=await r.text(); let j={}; try{ j=JSON.parse(text);}catch{}
+    if(!r.ok || j.ok===false){ statusEl.textContent=`Submit failed: ${j.error||text||r.status}`; }
+    else{ statusEl.textContent='Submitted! Waiting for instructor review.'; refreshLeaderboard(); fetchMyStatus(); }
+  }catch{ statusEl.textContent='Network/timeout during submit'; }
+});
+
+/* Initial tickers */
+refreshLeaderboard(); fetchMyStatus(); startPolling();
+</script>
+
+<script>
+/* ---------- Accepted Solutions dropdown + right-side preview + restore ---------- */
+(function(){
+  const slug   = {{ ch.slug|tojson }};
+  const netid  = {{ netid|default('', true)|tojson }};
+  const listReplaysURL = `/api/lecture/${slug}/replays`;
+  const replayJSONURL  = (sid)=>`/api/lecture/submission/${sid}/replay`;
+
+  const replaysToggle=document.getElementById('replaysToggle');
+  const replaysMenu  =document.getElementById('replaysMenu');
+  const restoreBtn   =document.getElementById('restoreBtn');
+  const replayPanel  =document.getElementById('replayPanel');
+  const rvMeta       =document.getElementById('rv-meta');
+  const rvOutput     =document.getElementById('rv-output');
+  const rvEditorHost =document.getElementById('rv-editor');
+  const rvLoadBtn    =document.getElementById('rv-load');
+  const rvCloseBtn   =document.getElementById('rv-close');
+
+  /* Main editor helpers */
+  function getCM(){ if(window.cm&&cm.getValue) return window.cm; if(window.editor&&editor.getValue) return window.editor;
+    const el=document.querySelector('.CodeMirror'); return el && el.CodeMirror ? el.CodeMirror : null; }
+  function setCurrentCode(txt){ const m=getCM(); if(m) m.setValue(txt||''); }
+  function setMainOutput(txt){ const out=document.getElementById('output'); if(out) out.textContent=txt||''; }
+
+  /* Backup/restore */
+  const LS_KEY=`replayBackup:${slug}:${netid}`;
+  function backup(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({code:getCM()?.getValue()||'', ts:Date.now()})); restoreBtn.style.display=''; }catch{} }
+  function hasBackup(){ try{ return !!localStorage.getItem(LS_KEY);}catch{return false} }
+  function restore(){ try{ const j=JSON.parse(localStorage.getItem(LS_KEY)||'null'); if(j) setCurrentCode(j.code||''); }catch{} }
+  if(hasBackup()) restoreBtn.style.display='';
+  restoreBtn.addEventListener('click', restore);
+
+  /* Dropdown behavior */
+  function hideMenu(){ replaysMenu.style.display='none'; }
+  function toggleMenu(){ replaysMenu.style.display = (replaysMenu.style.display==='block')?'none':'block'; }
+  replaysToggle.addEventListener('click', async ()=>{ if(replaysMenu.style.display!=='block') await populateMenu(); toggleMenu(); });
+  document.addEventListener('click', (e)=>{ if(!replaysMenu.contains(e.target) && !replaysToggle.contains(e.target)) hideMenu(); });
+
+  async function populateMenu(){
+    replaysMenu.innerHTML='<div class="text-sm text-muted p-2">Loading…</div>';
+    try{
+      const res=await fetch(listReplaysURL,{headers:{'Accept':'application/json'}});
+      if(!res.ok){ replaysMenu.innerHTML=`<div class="text-sm text-danger p-2">Failed (${res.status}).</div>`; return; }
+      const data=await res.json(); const items=data.items||[];
+      if(!items.length){ replaysMenu.innerHTML='<div class="text-sm text-muted p-2">No accepted solutions yet.</div>'; return; }
+      replaysMenu.innerHTML = `
+        <ul class="divide-y">
+          ${items.map(i=>{
+            const when=new Date(i.submitted_at).toLocaleString();
+            return `<li class="p-2 flex items-center justify-between gap-2">
+              <div class="truncate"><span class="font-mono text-sm">${i.netid}</span>
+              <span class="text-xs text-muted">· ${when}</span></div>
+              <div class="flex gap-1">
+                <button class="btn btn-secondary btn-sm" data-prev="${i.submission_id}">Preview</button>
+                <button class="btn btn-primary btn-sm" data-load="${i.submission_id}">Load</button>
+              </div>
+            </li>`;
+          }).join('')}
+        </ul>`;
+      replaysMenu.querySelectorAll('[data-prev]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{ previewReplay(btn.getAttribute('data-prev')); hideMenu(); });
+      });
+      replaysMenu.querySelectorAll('[data-load]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const sid=btn.getAttribute('data-load');
+          const ok=await ensureReplayLoaded(sid);
+          if(ok){ backup(); setCurrentCode(_rv.data.code||''); setMainOutput(_rv.data.run_output||''); }
+          hideMenu();
+          const m=getCM(); if(m&&m.focus){ m.focus(); setTimeout(()=>m.refresh&&m.refresh(),0); }
+        });
+      });
+    }catch{ replaysMenu.innerHTML='<div class="text-sm text-danger p-2">Failed to load.</div>'; }
+  }
+
+  /* Right-side preview */
+  let _rv={ cm:null, data:null, sid:null };
+  function ensureRvCM(){
+    if(_rv.cm) return _rv.cm;
+    _rv.cm = CodeMirror(rvEditorHost, { value:'', mode:'python', lineNumbers:true, readOnly:'nocursor', indentUnit:4 });
+    _rv.cm.setSize(null, '100%');
+    return _rv.cm;
+  }
+  async function ensureReplayLoaded(sid){
+    try{
+      const res=await fetch(replayJSONURL(sid), {headers:{'Accept':'application/json'}});
+      const data=await res.json();
+      if(!data.ok) throw new Error('replay load failed');
+      _rv.sid=sid; _rv.data=data; return true;
+    }catch(e){ console.error(e); return false; }
+  }
+  async function previewReplay(sid){
+    /* Show panel first so CM sizes correctly */
+    replayPanel.style.display='';
+    const ok=await ensureReplayLoaded(sid); if(!ok) return;
+    const cmPrev=ensureRvCM();
+    cmPrev.setValue(_rv.data.code||'');
+    rvOutput.textContent=_rv.data.run_output||'';
+    rvMeta.textContent=` · id ${sid}`;
+    setTimeout(()=>cmPrev.refresh&&cmPrev.refresh(),0); /* first-click fix */
+  }
+  rvLoadBtn.addEventListener('click', ()=>{
+    if(!_rv.data) return;
+    backup(); setCurrentCode(_rv.data.code||''); setMainOutput(_rv.data.run_output||'');
+    const m=getCM(); if(m&&m.focus){ m.focus(); setTimeout(()=>m.refresh&&m.refresh(),0); }
+  });
+  rvCloseBtn.addEventListener('click', ()=>{ replayPanel.style.display='none'; _rv.data=null; _rv.sid=null; });
+})();
+</script>
+{% endblock %}
+

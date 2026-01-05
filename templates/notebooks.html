@@ -9,19 +9,33 @@
 
 {% block extra_scripts %}
 <script>
-(async function(){
+(async function () {
   try {
     // Admin can pass ?section=5 etc.; students ignore
-    const res = await fetch(window.location.search ? '/api/notebooks' + window.location.search : '/api/notebooks');
+    const res = await fetch(
+      window.location.search
+        ? '/api/notebooks' + window.location.search
+        : '/api/notebooks'
+    );
     const data = await res.json();
     const wrap = document.getElementById('nbContainer');
     const empty = document.getElementById('nbEmpty');
 
     if (!data.success || !data.items || !data.items.length) {
-      wrap.style.display = 'none'; empty.style.display = 'block'; return;
+      wrap.style.display = 'none';
+      empty.style.display = 'block';
+      return;
     }
+
     wrap.innerHTML = '';
-    data.items.forEach(it => {
+
+    const items = [...data.items].sort((a, b) => {
+      const da = a.date ? new Date(a.date).getTime() : 0;
+      const db = b.date ? new Date(b.date).getTime() : 0;
+      return db - da; // newest first
+    });
+
+    items.forEach(it => {
       const card = document.createElement('div');
       card.style.border = '1px solid #ccc';
       card.style.borderRadius = '10px';
@@ -30,38 +44,46 @@
       card.style.color = 'var(--text)';
       card.innerHTML = `
         <div style="font-weight:600; margin-bottom:.25rem;">${it.title}</div>
-        <div class="muted" style="font-size:.9rem; margin-bottom:.5rem;">Updated: ${it.date ? new Date(it.date).toLocaleString() : '—'}</div>
+        <div class="muted" style="font-size:.9rem; margin-bottom:.5rem;">
+          Updated: ${it.date ? new Date(it.date).toLocaleString() : '—'}
+        </div>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-          <a class="btn" style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none;" href="https://github.com/${it.github_path}" target="_blank" rel="noopener">View on GitHub</a>
-	<!-- inside each card -->
-	<a class="btn nb-dl"
-	   style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none; cursor:pointer;"
-	   href="#"
-	   data-url="${it.download_url}"
-	   data-name="${(it.title || 'notebook').replace(/[^A-Za-z0-9._-]+/g,'_')}.ipynb">
-	  Download .ipynb
-	</a>
-
+          <a class="btn"
+             style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none;"
+             href="https://github.com/${it.github_path}" target="_blank" rel="noopener">
+            View on GitHub
+          </a>
+          <a class="btn nb-dl"
+             style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none; cursor:pointer;"
+             href="#"
+             data-url="${it.download_url}"
+             data-name="${it.filename}">
+            Download ${it.ext}
+          </a>
         </div>`;
       wrap.appendChild(card);
     });
-  } catch (e) {
-    document.getElementById('nbContainer').innerHTML = `<div class="muted">Error loading notebooks.</div>`;
+  } catch (err) {
+    console.error('Error loading notebooks', err);
+    const wrap = document.getElementById('nbContainer');
+    const empty = document.getElementById('nbEmpty');
+    wrap.style.display = 'none';
+    empty.textContent = 'Error loading notebooks.';
+    empty.style.display = 'block';
   }
 })();
 </script>
+
 <script>
 function nbSafeName(s) {
   return (s || 'notebook').replace(/[^A-Za-z0-9._-]+/g, '_');
 }
 
-async function downloadIpynb(url, filename) {
-  // Try to fetch and force a download via Blob
+async function downloadFile(url, filename) {
   const res = await fetch(url, { credentials: 'omit' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const blob = await res.blob();
 
-  // Prefer the server-provided filename if available
   const disp = res.headers.get('Content-Disposition') || '';
   const m = /filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i.exec(disp);
   const name = m ? decodeURIComponent(m[1]) : filename;
@@ -69,7 +91,7 @@ async function downloadIpynb(url, filename) {
   const a = document.createElement('a');
   const objectUrl = URL.createObjectURL(blob);
   a.href = objectUrl;
-  a.download = name || nbSafeName('notebook') + '.ipynb';
+  a.download = name || nbSafeName('download');
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -81,16 +103,14 @@ document.addEventListener('click', async (e) => {
   if (!a) return;
   e.preventDefault();
   const url = a.getAttribute('data-url');
-  const name = a.getAttribute('data-name') || 'notebook.ipynb';
+  const name = a.getAttribute('data-name') || 'download';
   try {
-    await downloadIpynb(url, name);
+    await downloadFile(url, name);
   } catch (err) {
-    // Fallback: if fetch fails (CORS, etc.), navigate normally
     console.warn('Blob download failed, falling back:', err);
     window.location.href = url;
   }
 });
 </script>
-
 {% endblock %}
 

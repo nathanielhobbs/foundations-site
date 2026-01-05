@@ -3,4 +3,10 @@ __pycache__/
 *.pyc
 venv/
 *.sqlite3
-data/github_roster.csv
+templates/*.bak
+templates/*_old.*
+templates/*_orig.*
+data/
+*.csv
+auto*
+static/

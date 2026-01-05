@@ -22,6 +22,9 @@ from extensions import db
 import base64
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
+from flask import flash  
+from autograde_lib import run_autograde, ASSIGNMENTS
+
 
 TZ_NAME = "America/New_York"  # or "UTC" if you prefer comparing in UTC
 
@@ -364,6 +367,14 @@ def clear_active_lecture():
         pass
     return redirect("/admin/lecture/new")
 
+#@app.get("/time/")
+#def get_time():
+#    return render_template("time.html")
+@app.route("/time")
+def time_page():
+    now = datetime.now(ZoneInfo("America/New_York"))
+    return render_template("time.html", now=now)
+
 # --- Admin: list all lecture challenges ---
 @app.get("/admin/lecture/")
 def admin_lecture_index():
@@ -414,41 +425,46 @@ def toggle_open_lecture(slug):
         pass
     return redirect("/admin/lecture/")
 
-def list_notebooks_from_github(repo, folder="notebooks"):
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json"
-    }
 
-    url = f"https://api.github.com/repos/{GITHUB_NOTES_ORG}/{repo}/contents/{folder}"
+def list_notebooks_from_github(repo, folder="notebooks"):
+    headers = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Accept": "application/vnd.github+json"}
+
+    # contents endpoint (avoid trailing slash when folder == "")
+    url = f"https://api.github.com/repos/{GITHUB_NOTES_ORG}/{repo}/contents" + (f"/{folder}" if folder else "")
     resp = requests.get(url, headers=headers)
     if resp.status_code != 200:
         return []
 
     items = []
+    allowed = {".ipynb", ".py", ".zip"}
     for file in resp.json():
-        if not file["name"].endswith(".ipynb"):
+        name = file["name"]
+        ext = next((e for e in allowed if name.lower().endswith(e)), None)
+        if not ext:
             continue
 
-        # Get last commit date for this file
-        commits_url = f"https://api.github.com/repos/{GITHUB_NOTES_ORG}/{repo}/commits"
-        params = {"path": f"{folder}/{file['name']}", "per_page": 1}
-        c_resp = requests.get(commits_url, headers=headers, params=params)
-        commit_date = None
-        if c_resp.status_code == 200 and c_resp.json():
-            commit_date = c_resp.json()[0]["commit"]["committer"]["date"]
+        # unified path
+        path = f"{folder + '/' if folder else ''}{name}"
 
-        # Build direct raw URL for download
-        raw_url = f"https://raw.githubusercontent.com/{GITHUB_NOTES_ORG}/{repo}/main/{folder}/{file['name']}"
+        # last-commit time for this file
+        commits_url = f"https://api.github.com/repos/{GITHUB_NOTES_ORG}/{repo}/commits"
+        params = {"path": path, "per_page": 1}
+        c_resp = requests.get(commits_url, headers=headers, params=params)
+        commit_date = c_resp.json()[0]["commit"]["committer"]["date"] if (c_resp.status_code == 200 and c_resp.json()) else None
+
+        raw_url = f"https://raw.githubusercontent.com/{GITHUB_NOTES_ORG}/{repo}/main/{path}"
+        base = name[: -len(ext)] if ext != ".zip" else name
 
         items.append({
-            "title": file["name"].replace(".ipynb", ""),
-            "github_path": f"{GITHUB_NOTES_ORG}/{repo}/blob/main/{folder}/{file['name']}",
+            "title": base,
+            "filename": name,
+            "ext": ext,
+            "kind": {".ipynb": "Notebook", ".py": "Python file", ".zip": "Zip"}[ext],
+            "github_path": f"{GITHUB_NOTES_ORG}/{repo}/blob/main/{path}",
             "download_url": raw_url,
             "date": commit_date
         })
 
-    # Sort newest first
     items.sort(key=lambda x: x["date"] or "", reverse=True)
     return items
 
@@ -1515,6 +1531,34 @@ def assignments():
               "repo_prefix": "hw2-loops-comprehensions-and-dictionaries",
               #"repo_prefix": "hw2-loops-comprehensions-dicts"
             },
+            {
+              "slug": "hw3-text-prep",
+              "name": "Assignment 3 – Text Prep Utilities",
+              "due_utc": "2025-11-18T23:59:00-05:00",   # <-- update as needed
+              "sections": ["all"],
+              "released": True,
+              "template_repo": "https://github.com/hobbs-foundations-f25/hw3-template",  # <-- your repo
+              "invite_by_section": {
+                  "all": "https://classroom.github.com/a/WmCyI4x3"               # <-- paste invite
+              },
+              # used by the “I’ve accepted—refresh” button to detect the student repo
+              "org": "hobbs-foundations-f25",                # <-- your org
+              "repo_prefix": "hw3"                  # <-- prefix Classroom uses for student repos
+            },
+            {
+              "slug": "hw4-language-model-beta",
+              "name": "Assignment 4 – Language Model Beta",
+              "due_utc": "2025-12-10T23:59:00-05:00",
+              "sections": ["all"],
+              "released": True,
+              "template_repo": "https://github.com/hobbs-foundations-f25/foundations-2025-fall-hw4-languagemodelbeta-hw4-language-model",
+              "invite_by_section": {
+                "all": "https://classroom.github.com/a/6HOgjwvS"
+              },
+              "org": "hobbs-foundations-f25",
+              "repo_prefix": "hw4-lanugagemodelbeta"
+            },
+
 
         ]
 
@@ -1587,6 +1631,51 @@ def admin_act_as_section():
     sec = request.args.get("sec", type=int)
     session["admin_view_section"] = sec  # None clears override
     return redirect(request.referrer or url_for("index"))
+
+@app.route("/admin/autograde", methods=["GET", "POST"])
+def admin_autograde():
+    # Only admin can access
+    if not session.get("is_admin"):
+        abort(403)
+
+    # Use env if set, fallback to your usual org
+    org_name = GITHUB_ORG or "hobbs-foundations-f25"
+
+    results = None
+    csv_path = None
+    selected_assignment = None
+    error = None
+
+    if request.method == "POST":
+        selected_assignment = (request.form.get("assignment") or "").strip()
+        if selected_assignment not in ASSIGNMENTS:
+            error = "Invalid assignment selected."
+            flash(error, "danger")
+        else:
+            try:
+                # base_dir is where student repos will be cloned/pulled on the server
+                results, csv_path = run_autograde(
+                    org=org_name,
+                    assignment=selected_assignment,
+                    base_dir="student_repos",
+                )
+                if not results:
+                    flash("No repos found for that assignment/prefix.", "warning")
+                else:
+                    flash(f"Graded {len(results)} repos for {selected_assignment}.", "success")
+            except Exception as e:
+                error = str(e)
+                flash(f"Autograde error: {error}", "danger")
+
+    return render_template(
+        "admin_autograde.html",
+        assignments=ASSIGNMENTS,          # dict: {"hw2": {...}, "hw3": {...}, ...}
+        selected_assignment=selected_assignment,
+        results=results,
+        csv_path=csv_path,
+        error=error,
+    )
+
 
 def current_view_section():
     # prefer admin override if present
@@ -2214,7 +2303,16 @@ def api_notebooks():
     if not repo:
         return jsonify(success=False, error="Invalid section"), 400
 
-    items = list_notebooks_from_github(repo, folder="notebooks")
+    items_nb   = list_notebooks_from_github(repo, folder="notebooks")
+    items_root = list_notebooks_from_github(repo, folder="")  # repo root
+    # de-dupe by filename
+    seen = set()
+    items = []
+    for it in items_nb + items_root:
+        if it["filename"] in seen: 
+            continue
+        seen.add(it["filename"])
+        items.append(it)
     return jsonify(success=True, items=items, section=int(section_str))
 
 
