@@ -20,10 +20,7 @@ ADMIN_NETIDS = { 'nh385' }
 import csv, os, time
 from functools import lru_cache
 
-ROSTER_CSV = os.environ.get(
-    "ROSTER_CSV",
-    os.path.join(os.path.dirname(__file__), "data", "github_roster.csv")
-)
+ROSTER_CSV = os.environ.get('ROSTER_FILE')
 
 # ---------- Feedback pickers (student-visible & per-submission) ----------
 def _pick_feedback(sub):

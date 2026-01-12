@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ hw.title }}{% endblock %}
+{% block content %}
+<h1>{{ hw.title }}</h1>
+
+<div style="display:flex; gap:16px; align-items:flex-start;">
+  <div style="flex:1;">
+    <textarea id="code" style="width:100%; height:420px; font-family:monospace;">{{ hw.starter }}</textarea>
+    <div style="margin-top:10px;">
+      <button id="btnSubmit">Submit</button>
+    </div>
+  </div>
+
+  <div style="width:420px;">
+    <h3>Result</h3>
+    <pre id="out" style="white-space:pre-wrap; background:#111; color:#eee; padding:10px; border-radius:8px; min-height:180px;"></pre>
+  </div>
+</div>
+
+<script>
+document.getElementById("btnSubmit").addEventListener("click", async () => {
+  const code = document.getElementById("code").value;
+  const out = document.getElementById("out");
+  out.textContent = "Running tests...";
+
+  const res = await fetch("/api/hw/{{ slug }}/submit", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({code})
+  });
+
+  const txt = await res.text();
+  if(!res.ok){
+    out.textContent = "Error (" + res.status + "):\n" + txt;
+    return;
+  }
+  const j = JSON.parse(txt);
+  out.textContent =
+    `Passed: ${j.passed}\nFailed: ${j.failed}\n\n` +
+    (j.output || "");
+});
+</script>
+{% endblock %}
+

@@ -52,7 +52,8 @@
 	{% elif session.get("netid") %}
 	{% set sect = session.get('section') %}
 	  <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">
-		  Hello, {{ session.get('netid')|default('—') }} (Section {{ sect|default('—') }})
+		  Hello, {{ session.get('netid')|default('—') }}
+		  <!-- Hello, {{ session.get('netid')|default('—') }} (Section {{ sect|default('—') }}) -->
           <span id="active-lecture-cta">
 		  {% if active_lecture %}
 		    <a href="{{ url_for('lecture.view_lecture', slug=active_lecture.slug) }}"

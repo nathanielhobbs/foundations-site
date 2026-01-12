@@ -1,0 +1,30 @@
+1. Put new roster in data and update .env with path to new roster
+2. a) create the new DB
+sudo -u postgres createdb -p 5433 -O foundations foundations_site_s26
+
+
+   b) (only if needed) grant your app user access
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE foundations_site_s26 TO foundations;"
+
+   c) update .env to point at the new DB name
+# SQLALCHEMY_DATABASE_URI=postgresql://foundations:YOURPASS@localhost/foundations_site_s26
+
+   d) restart your service (or just run the app)
+sudo systemctl restart foundations
+
+3. Redis save/reset
+    a) # force a background snapshot
+sudo redis-cli BGSAVE
+
+    b) # find where Redis stores dump.rdb
+sudo redis-cli CONFIG GET dir
+sudo redis-cli CONFIG GET dbfilename
+
+    c) clear redis
+redis-cli --scan --pattern 'weekly_challenge:*' | xargs -r redis-cli del
+redis-cli --scan --pattern 'chat:*'            | xargs -r redis-cli del
+redis-cli --scan --pattern 'participation:*'   | xargs -r redis-cli del
+redis-cli --scan --pattern 'poll:*'            | xargs -r redis-cli del
+redis-cli del lecture_challenge:active_slug
+redis-cli --scan --pattern 'lecture:*'         | xargs -r redis-cli del
+

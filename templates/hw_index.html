@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Homeworks{% endblock %}
+{% block content %}
+<h1>Homeworks</h1>
+
+<ul style="line-height:2;">
+  {% for it in items %}
+    <li>
+      <a href="/hw/{{ it.slug }}">{{ it.title }}</a>
+      {% if it.status %}
+        {% if it.status.ok %}
+          <span style="color:green; font-weight:600;">✓ Complete</span>
+        {% else %}
+          <span style="color:#b45309; font-weight:600;">⚠ Incomplete</span>
+        {% endif %}
+        <span style="color:#666;">(passed {{it.status.passed}}, failed {{it.status.failed}})</span>
+      {% else %}
+        <span style="color:#666;">(not submitted)</span>
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>
+{% endblock %}
+

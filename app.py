@@ -24,6 +24,11 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from flask import flash  
 from autograde_lib import run_autograde, ASSIGNMENTS
+from models_homework import HomeworkSubmission
+from docker_grader import run_pytest_in_docker
+from homework_defs import HOMEWORKS
+from models_homework import HomeworkSubmission
+
 
 
 TZ_NAME = "America/New_York"  # or "UTC" if you prefer comparing in UTC
@@ -49,7 +54,8 @@ app.config['ADMIN_NETID'] = os.environ.get('ADMIN_NETID')
 app.config['ADMIN_PASSWORD'] = os.environ.get('ADMIN_PASSWORD') 
 app.config['ROSTER_FILE'] = os.environ.get('ROSTER_FILE') 
 
-CURRENT_LOGIN_VERSION = "2025-09-24-username-reset"
+#CURRENT_LOGIN_VERSION = "2025-09-24-username-reset"
+CURRENT_LOGIN_VERSION = "2026-spring"
 
 
 #app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://foundations:foundation$P4ss;@localhost/foundations_site"
@@ -703,6 +709,84 @@ def login():
         return redirect(url_for("index"))
 
     return render_template("index.html", login_error="NetID not found in roster")
+
+@app.get("/hw")
+def hw_index():
+    if not session.get("netid"):
+        return redirect(url_for("login"))
+
+    netid = session["netid"]
+    items = []
+    for slug, hw in HOMEWORKS.items():
+        latest = (HomeworkSubmission.query
+                  .filter_by(slug=slug, netid=netid)
+                  .order_by(HomeworkSubmission.created_at.desc())
+                  .first())
+        status = None
+        if latest:
+            try:
+                r = json.loads(latest.result_json or "{}")
+                ok = (r.get("exit_code") == 0) and (r.get("failed", 0) == 0)
+                status = {
+                    "ok": bool(ok),
+                    "passed": r.get("passed", 0),
+                    "failed": r.get("failed", 0),
+                    "submitted_at": latest.created_at,
+                }
+            except Exception:
+                status = {"ok": False, "passed": 0, "failed": 0, "submitted_at": latest.created_at}
+
+        items.append({"slug": slug, "title": hw["title"], "status": status})
+
+    return render_template("hw_index.html", items=items)
+
+@app.get("/hw/<slug>")
+def hw_page(slug):
+    if not session.get("netid"):
+        return redirect(url_for("login"))
+    hw = HOMEWORKS.get(slug)
+    if not hw:
+        abort(404)
+    return render_template("homework.html", hw=hw, slug=slug)
+
+
+@app.post("/api/hw/<slug>/submit")
+def hw_submit(slug):
+    if not session.get("netid"):
+        return jsonify({"error": "not_logged_in"}), 401
+    if slug not in HOMEWORKS:
+        return jsonify({"error": "unknown_homework"}), 404
+
+    data = request.get_json(force=True) or {}
+    code = (data.get("code") or "")
+    if not isinstance(code, str) or len(code) > 100_000:
+        return jsonify({"error": "bad_code"}), 400
+
+    hw = HOMEWORKS[slug]
+    files = {
+        "student.py": code,
+        "test_hw.py": hw["tests"],
+    }
+
+    result = run_pytest_in_docker(files, timeout_s=10)
+
+    sub = HomeworkSubmission(
+        slug=slug,
+        netid=session.get("netid"),
+        section=session.get("section"),
+        code=code,
+        result_json=json.dumps(result),
+    )
+    db.session.add(sub)
+    db.session.commit()
+
+    return jsonify({
+        "title": hw["title"],
+        "passed": result["passed"],
+        "failed": result["failed"],
+        "output": result["output"],
+        "submission_id": sub.id,
+    })
 
 
 @app.route("/notebooks")
