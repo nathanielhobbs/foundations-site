@@ -1,0 +1,14 @@
+{
+  "title": "Variables",
+  "is_open": true,
+  "steps": [
+    { "id": 1, "title": "1. Variable definition",      "kind": "info", "prompt_file": "01_variable_definition.md", "starter_file": "01_starter.py", "cmd_hint": "python main.py" },
+    { "id": 2, "title": "2. Undefined variable",       "kind": "info", "prompt_file": "02_undefined_variable.md",  "starter_file": "02_starter.py", "cmd_hint": "python main.py" },
+    { "id": 3, "title": "3. Variable types",           "kind": "info", "prompt_file": "03_variable_types.md",      "starter_file": "03_starter.py", "cmd_hint": "python main.py" },
+    { "id": 4, "title": "4. Type conversion",          "kind": "info", "prompt_file": "04_type_conversion.md",     "starter_file": "04_starter.py", "cmd_hint": "python main.py" },
+    { "id": 5, "title": "5. Arithmetic operators",     "kind": "info", "prompt_file": "05_arithmetic_ops.md",      "starter_file": "05_starter.py", "cmd_hint": "python main.py" },
+    { "id": 6, "title": "6. Assignments",              "kind": "info", "prompt_file": "06_assignments.md",         "starter_file": "06_starter.py", "cmd_hint": "python main.py" },
+    { "id": 7, "title": "7. Boolean operators",        "kind": "info", "prompt_file": "07_boolean_ops.md",         "starter_file": "07_starter.py", "cmd_hint": "python main.py" },
+    { "id": 8, "title": "8. Comparison operators",     "kind": "info", "prompt_file": "08_comparison_ops.md",      "starter_file": "08_starter.py", "cmd_hint": "python main.py" }
+  ]
+}

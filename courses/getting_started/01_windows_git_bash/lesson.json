@@ -1,0 +1,30 @@
+{
+  "title": "Windows: Git Bash setup",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. Install Git for Windows",
+      "kind": "info",
+      "prompt_file": "01_install_git_for_windows.md",
+      "starter_file": "01_install_git_for_windows.py",
+      "cmd_hint": "git --version"
+    },
+    {
+      "id": 2,
+      "title": "2. Find your home folder",
+      "kind": "info",
+      "prompt_file": "02_find_your_home_folder.md",
+      "starter_file": "02_find_your_home_folder.py",
+      "cmd_hint": "pwd"
+    },
+    {
+      "id": 3,
+      "title": "3. Copy/paste + gotchas",
+      "kind": "info",
+      "prompt_file": "03_copypaste_gotchas.md",
+      "starter_file": "03_copypaste_gotchas.py",
+      "cmd_hint": "ls"
+    }
+  ]
+}

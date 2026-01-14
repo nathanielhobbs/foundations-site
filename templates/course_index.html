@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Course: {{ course }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .lesson-card{ border:1px solid var(--panel-border,#ddd); border-radius:12px; padding:12px; margin:.6rem 0; background:var(--panel-bg,#fff); }
+  .locked{ opacity:.55; }
+  .row{ display:flex; justify-content:space-between; gap:12px; align-items:center; }
+  .tag{ font-size:.85rem; padding:.15rem .55rem; border-radius:999px; border:1px solid #e5e7eb; background:rgba(0,0,0,.03); color:#374151; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>Course: {{ course }}</h2>
+
+{% for l in lessons %}
+  <div class="lesson-card {% if not l.is_open %}locked{% endif %}">
+    <div class="row">
+      <div>
+        <div style="font-weight:700;">{{ l.title }}</div>
+        <div style="color:#6b7280; font-size:.95rem;">/{{ course }}/{{ l.slug }}</div>
+      </div>
+
+      {% if l.is_open %}
+        <a class="tag" href="/course/{{ course }}/{{ l.slug }}">Open</a>
+      {% else %}
+        <span class="tag">Locked</span>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}
+{% endblock %}

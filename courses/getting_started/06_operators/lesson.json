@@ -1,0 +1,30 @@
+{
+  "title": "Operators (math + comparisons + boolean)",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. Arithmetic operators",
+      "kind": "info",
+      "prompt_file": "01_arithmetic_operators.md",
+      "starter_file": "01_arithmetic_operators.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 2,
+      "title": "2. Precedence",
+      "kind": "info",
+      "prompt_file": "02_precedence.md",
+      "starter_file": "02_precedence.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 3,
+      "title": "3. Comparisons + boolean logic",
+      "kind": "info",
+      "prompt_file": "03_comparisons_boolean_logic.md",
+      "starter_file": "03_comparisons_boolean_logic.py",
+      "cmd_hint": "python main.py"
+    }
+  ]
+}

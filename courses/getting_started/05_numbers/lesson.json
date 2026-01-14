@@ -1,0 +1,22 @@
+{
+  "title": "Numbers (int, float)",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. int vs float",
+      "kind": "info",
+      "prompt_file": "01_int_vs_float.md",
+      "starter_file": "01_int_vs_float.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 2,
+      "title": "2. Rounding (practical)",
+      "kind": "info",
+      "prompt_file": "02_rounding_practical.md",
+      "starter_file": "02_rounding_practical.py",
+      "cmd_hint": "python main.py"
+    }
+  ]
+}

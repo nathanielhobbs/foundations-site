@@ -1,4 +1,7 @@
 import os
+from pathlib import Path
+import glob
+import shlex
 import requests
 import traceback
 from dotenv import load_dotenv
@@ -25,11 +28,11 @@ from urllib.error import URLError, HTTPError
 from flask import flash  
 from autograde_lib import run_autograde, ASSIGNMENTS
 from models_homework import HomeworkSubmission
-from docker_grader import run_pytest_in_docker
+from docker_grader import run_pytest_in_docker,run_python_in_docker
 from homework_defs import HOMEWORKS
 from models_homework import HomeworkSubmission
 
-
+BASE_DIR = Path(__file__).resolve().parent
 
 TZ_NAME = "America/New_York"  # or "UTC" if you prefer comparing in UTC
 
@@ -84,7 +87,19 @@ app.register_blueprint(lecture_bp)
 
 # Make sure models are imported before create_all()
 from models_lecture import LectureChallenge, LectureSubmission
-# ... import any other models you want in the same metadata
+
+class TutorialState(db.Model):
+    __tablename__ = "tutorial_state"
+    id = db.Column(db.Integer, primary_key=True)
+    netid = db.Column(db.String(64), nullable=False, index=True)
+    course = db.Column(db.String(64), nullable=False)
+    lesson = db.Column(db.String(128), nullable=False)
+    code = db.Column(db.Text, nullable=False, default="")
+    progress_json = db.Column(db.Text, nullable=False, default="{}")
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint("netid", "course", "lesson", name="uq_tutorial_state"),)
+
 
 def _aware_local(dt):
     if dt is None: return None
@@ -710,10 +725,201 @@ def login():
 
     return render_template("index.html", login_error="NetID not found in roster")
 
+@app.get("/course/<course>/<lesson>")
+def course_lesson(course, lesson):
+    if not session.get("netid"):
+        return redirect(url_for("index"))
+
+    root = (BASE_DIR / "courses" / course / lesson).resolve()
+    meta = json.loads((root / "lesson.json").read_text(encoding="utf-8"))
+    if not meta.get("is_open", True) and not session.get("is_admin"):
+        abort(404)
+    steps = meta.get("steps", [])
+    for s in steps:
+        pf = s.get("prompt_file")
+        if pf:
+            try:
+                s["prompt_md"] = (root / pf).read_text(encoding="utf-8")
+            except FileNotFoundError:
+                s["prompt_md"] = f"# Missing file\n\nCould not find `{pf}`."
+        sc = s.get("starter_file")
+        if sc:
+            try:
+                s["starter_code"] = (root / sc).read_text(encoding="utf-8")
+            except FileNotFoundError:
+                s["starter_code"] = ""
+    prompt_md = (root / "prompt.md").read_text(encoding="utf-8")
+    starter = (root / "starter.py").read_text(encoding="utf-8")
+
+    st = TutorialState.query.filter_by(netid=session["netid"], course=course, lesson=lesson).first()
+    if not st:
+        st = TutorialState(netid=session["netid"], course=course, lesson=lesson, code=starter, progress_json="{}")
+        db.session.add(st)
+        db.session.commit()
+
+    progress = json.loads(st.progress_json or "{}")
+
+    return render_template(
+        "course_lesson.html",
+        course=course,
+        lesson=lesson,
+        meta=meta,
+        steps=steps,
+        prompt_md=prompt_md,
+        initial_code=st.code,
+        progress=progress,
+    )
+
+@app.post("/api/course/<course>/<lesson>/check")
+def api_course_check(course, lesson):
+    if not session.get("netid"):
+        return jsonify({"error":"not_logged_in"}), 401
+
+    root = (BASE_DIR / "courses" / course / lesson).resolve()
+    meta = json.loads((root / "lesson.json").read_text(encoding="utf-8"))
+
+    data = request.get_json(force=True) or {}
+    step_id = int(data.get("step_id"))
+    code = data.get("code") or ""
+
+    step = next((s for s in meta["steps"] if int(s["id"]) == step_id), None)
+    if not step:
+        return jsonify({"error":"bad_step"}), 400
+
+    # build docker file map
+    files = {"student.py": code}
+    test_glob = step.get("test_glob")
+    if test_glob:
+        for p in sorted(glob.glob(str(root / test_glob))):
+            files[Path(p).name] = Path(p).read_text(encoding="utf-8")
+        res = run_pytest_in_docker(files, timeout_s=10)
+        passed = (res["failed"] == 0)
+    else:
+        # info-only step: "checking" just marks complete
+        res = {"passed": 1, "failed": 0, "output": "Marked complete."}
+        passed = True
+
+    st = TutorialState.query.filter_by(netid=session["netid"], course=course, lesson=lesson).first()
+    progress = json.loads(st.progress_json or "{}")
+    progress[str(step_id)] = passed 
+    st.code = code
+    st.progress_json = json.dumps(progress)
+    st.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify(res | {"progress": progress})
+
+@app.post("/api/course/<course>/<lesson>/progress")
+def api_course_progress(course, lesson):
+    if not session.get("netid"):
+        return jsonify({"error":"not_logged_in"}), 401
+
+    data = request.get_json(force=True) or {}
+    step_id = int(data.get("step_id"))
+    done = bool(data.get("done"))
+
+    st = TutorialState.query.filter_by(netid=session["netid"], course=course, lesson=lesson).first()
+    if not st:
+        return jsonify({"error":"no_state"}), 404
+
+    progress = json.loads(st.progress_json or "{}")
+    progress[str(step_id)] = done
+    st.progress_json = json.dumps(progress)
+    st.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({"progress": progress})
+
+
+@app.post("/api/course/<course>/<lesson>/run")
+def api_course_run(course, lesson):
+    if not session.get("netid"):
+        return jsonify({"error":"not_logged_in"}), 401
+
+    data = request.get_json(force=True) or {}
+    code = data.get("code") or ""
+    args = data.get("args") or ""
+
+    # reuse your docker python runner (it already works)
+    res = run_python_in_docker(code, timeout_s=3, args=shlex.split(args)[:20])
+
+    # save code draft
+    st = TutorialState.query.filter_by(netid=session["netid"], course=course, lesson=lesson).first()
+    if st:
+        st.code = code
+        st.updated_at = datetime.now(datetime.UTC)
+        db.session.commit()
+
+    return jsonify(res)
+
+def list_lessons(course: str):
+    course_dir = (BASE_DIR / "courses" / course).resolve()
+    lessons = []
+    if not course_dir.exists():
+        return lessons
+
+    for p in sorted(course_dir.iterdir()):
+        if not (p.is_dir() and (p / "lesson.json").exists()):
+            continue
+        try:
+            meta = json.loads((p / "lesson.json").read_text(encoding="utf-8"))
+        except Exception:
+            try:
+                app.logger.exception("Bad lesson.json in %s", p)
+            except Exception:
+                pass
+            continue
+
+        lessons.append({
+            "slug": p.name,
+            "title": meta.get("title", p.name),
+            "is_open": bool(meta.get("is_open", True)),
+        })
+
+    return lessons
+
+
+@app.get("/course")
+@app.get("/course/")   # allow trailing slash
+def course_root():
+    if not session.get("netid"):
+        return redirect(url_for("index"))
+
+    courses_dir = (BASE_DIR / "courses").resolve()
+    if not courses_dir.exists():
+        abort(404)
+
+    try:
+        course_dirs = sorted(courses_dir.iterdir())
+    except Exception:
+        app.logger.exception("Cannot list courses dir: %s", courses_dir)
+        abort(404)
+
+    for p in course_dirs:
+        if not p.is_dir():
+            continue
+        lessons = list_lessons(p.name)
+        if lessons:
+            return redirect(url_for("course_index", course=p.name))
+
+    abort(404)
+
+
+
+@app.get("/course/<course>")
+def course_index(course):
+    if not session.get("netid"):
+        return redirect(url_for("index"))
+    lessons = list_lessons(course)
+    if not lessons:
+        abort(404)
+    return render_template("course_index.html", course=course, lessons=lessons)
+
+
 @app.get("/hw")
 def hw_index():
     if not session.get("netid"):
-        return redirect(url_for("login"))
+        return redirect(url_for("index"))
 
     netid = session["netid"]
     items = []
@@ -740,54 +946,164 @@ def hw_index():
 
     return render_template("hw_index.html", items=items)
 
+
 @app.get("/hw/<slug>")
 def hw_page(slug):
     if not session.get("netid"):
-        return redirect(url_for("login"))
+        return redirect(url_for("index"))
+
     hw = HOMEWORKS.get(slug)
     if not hw:
         abort(404)
-    return render_template("homework.html", hw=hw, slug=slug)
 
+    latest = (HomeworkSubmission.query
+              .filter_by(slug=slug, netid=session["netid"])
+              .order_by(HomeworkSubmission.created_at.desc())
+              .first())
 
-@app.post("/api/hw/<slug>/submit")
-def hw_submit(slug):
+    root = (BASE_DIR / hw["root"]).resolve()
+    starter_path = root / "starter.py"
+    prompt_path  = root / "prompt.md"
+    starter = starter_path.read_text(encoding="utf-8") if starter_path.exists() else ""
+    prompt_md = prompt_path.read_text(encoding="utf-8") if prompt_path.exists() else ""
+
+    initial_code = latest.code if latest else starter
+    submitted_at = latest.created_at.isoformat() if latest else None
+
+    return render_template(
+        "homework.html",
+        hw=hw,
+        slug=slug,
+        initial_code=initial_code,
+        submitted_at=submitted_at,
+        prompt_md=prompt_md,
+    )
+
+@app.post("/api/hw/<slug>/run")
+def hw_run(slug):
     if not session.get("netid"):
         return jsonify({"error": "not_logged_in"}), 401
-    if slug not in HOMEWORKS:
+    hw = HOMEWORKS.get(slug)
+    if not hw:
         return jsonify({"error": "unknown_homework"}), 404
 
     data = request.get_json(force=True) or {}
     code = (data.get("code") or "")
-    if not isinstance(code, str) or len(code) > 100_000:
-        return jsonify({"error": "bad_code"}), 400
+    args_str = (data.get("args") or "")
 
+    # basic safety limits
+    if len(code) > 100_000 or len(args_str) > 500:
+        return jsonify({"error": "too_large"}), 400
+
+    args = shlex.split(args_str)[:20]   # cap number of args
+    res = run_python_in_docker(code, timeout_s=3, args=args)
+    return jsonify(res)
+
+@app.post("/api/hw/<slug>/submit")
+def hw_submit(slug):
+    def load_test_files(root: Path, include_hidden: bool) -> dict:
+        files = {}
+        for p in sorted((root / "tests_public").glob("*.py")):
+            files[p.name] = p.read_text(encoding="utf-8")
+        if include_hidden and (root / "tests_hidden").exists():
+            for p in sorted((root / "tests_hidden").glob("*.py")):
+                files[p.name] = p.read_text(encoding="utf-8")
+        return files
+    
+    def load_tests(root: Path, include_hidden: bool, qid: int | None):
+        files = {}
+
+        pub = root / "tests_public"
+        if qid is None:
+            paths = sorted(pub.glob("*.py"))
+        else:
+            paths = sorted(pub.glob(f"test_q{qid}_*.py")) or sorted(pub.glob(f"test_q{qid}.py"))
+            if not paths:
+                raise FileNotFoundError(f"no public test for qid={qid}")
+
+        for p in paths:
+            files[p.name] = p.read_text(encoding="utf-8")
+
+        if include_hidden and (root / "tests_hidden").exists():
+            for p in sorted((root / "tests_hidden").glob("*.py")):
+                files[p.name] = p.read_text(encoding="utf-8")
+
+        return files
+
+    if not session.get("netid"):
+        return jsonify({"error": "not_logged_in"}), 401
+    if slug not in HOMEWORKS:
+        return jsonify({"error": "unknown_homework"}), 404
     hw = HOMEWORKS[slug]
-    files = {
-        "student.py": code,
-        "test_hw.py": hw["tests"],
-    }
 
+
+    data = request.get_json(force=True) or {}
+    code = (data.get("code") or "")
+    action = (data.get("action") or "check").lower()
+    if action not in ("check", "submit"):
+        action = "check"
+
+    netid = session["netid"]
+
+    # enforce one submit
+    if action == "submit":
+        existing = (HomeworkSubmission.query
+                    .filter_by(slug=slug, netid=netid)
+                    .order_by(HomeworkSubmission.created_at.desc())
+                    .first())
+        if existing:
+            return jsonify({
+                "error": "already_submitted",
+                "submitted_at": existing.created_at.isoformat(),
+            }), 409
+
+    #hw = HOMEWORKS[slug]
+    #root = Path(HOMEWORKS[slug]["root"])
+    #include_hidden = (action == "submit")
+    #tests = load_test_files(root, include_hidden)
+    #files = {"student.py": code, **tests}
+    #result = run_pytest_in_docker(files, timeout_s=10)
+
+    qid = data.get("qid")
+    qid = int(qid) if (action == "check" and qid is not None) else None
+
+    root = (BASE_DIR / HOMEWORKS[slug]["root"]).resolve()
+    include_hidden = (action == "submit")
+
+    try:
+        tests = load_tests(root, include_hidden, qid)
+    except FileNotFoundError as e:
+        return jsonify({"error": "bad_qid", "detail": str(e)}), 400
+
+    files = {"student.py": code, **tests}
     result = run_pytest_in_docker(files, timeout_s=10)
+    result["cmd_display"] = "$ pytest -q"
 
-    sub = HomeworkSubmission(
-        slug=slug,
-        netid=session.get("netid"),
-        section=session.get("section"),
-        code=code,
-        result_json=json.dumps(result),
-    )
-    db.session.add(sub)
-    db.session.commit()
+
+    submitted_at = None
+    submission_id = None
+
+    if action == "submit":
+        sub = HomeworkSubmission(
+            slug=slug,
+            netid=netid,
+            section=session.get("section"),
+            code=code,
+            result_json=json.dumps(result),
+        )
+        db.session.add(sub)
+        db.session.commit()
+        submitted_at = sub.created_at.isoformat()
+        submission_id = sub.id
 
     return jsonify({
         "title": hw["title"],
         "passed": result["passed"],
         "failed": result["failed"],
         "output": result["output"],
-        "submission_id": sub.id,
+        "submission_id": submission_id,
+        "submitted_at": submitted_at,
     })
-
 
 @app.route("/notebooks")
 def notebooks():
@@ -796,7 +1112,6 @@ def notebooks():
 
     netid = session.get("netid")
     if not netid:
-        # was: redirect(url_for("login")) which is POST-only
         return redirect(url_for("index"))  # open modal on home
 
     roster = load_roster()  # missing before
@@ -1441,7 +1756,16 @@ def search_netid():
 
 @app.route("/sandbox")
 def sandbox():
-    return render_template("sandbox.html")
+    return render_template(
+        "sandbox.html",
+        body_class="sandbox",
+        course="sandbox",
+        lesson="sandbox",
+        prompt_md="",
+        initial_code="print(2+2)\n",
+        default_args="",
+    )
+
 
 @app.route("/tutorials")
 def tutorials():
@@ -2200,23 +2524,11 @@ def reorder_challenges():
 # --- Code execution sandbox (updated for print output) ---
 @app.post("/api/sandbox/run")
 def api_sandbox_run():
-    """Very small code runner for the sandbox."""
-    from io import StringIO
-    import contextlib, traceback as tb
-
     data = request.get_json(silent=True) or {}
     code = data.get("code", "")
 
-    out_buf, err_buf = StringIO(), StringIO()
-    try:
-        g = {}  # no builtins injected; you can allow a few safe ones if needed
-        l = {}
-        with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
-            exec(code, g, l)
-        return jsonify(stdout=out_buf.getvalue(), stderr=err_buf.getvalue())
-    except Exception:
-        return jsonify(stdout=out_buf.getvalue(),
-                       stderr=err_buf.getvalue() + tb.format_exc()), 200
+    res = run_python_in_docker(code, timeout_s=3)
+    return jsonify(stdout=res.get("stdout",""), stderr=res.get("stderr",""), exit_code=res.get("exit_code", 0))
 
 # ----- Weekly Challenge helpers (Redis-backed) -----
 

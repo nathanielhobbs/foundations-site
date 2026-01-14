@@ -1,0 +1,30 @@
+{
+  "title": "The Python interpreter",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. Interpreter vs script",
+      "kind": "info",
+      "prompt_file": "01_interpreter_vs_script.md",
+      "starter_file": "01_interpreter_vs_script.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 2,
+      "title": "2. Prompts: $ / % / >>>",
+      "kind": "info",
+      "prompt_file": "02_prompts.md",
+      "starter_file": "02_prompts.py",
+      "cmd_hint": "python"
+    },
+    {
+      "id": 3,
+      "title": "3. Try it buttons",
+      "kind": "info",
+      "prompt_file": "03_try_it_buttons.md",
+      "starter_file": "03_try_it_buttons.py",
+      "cmd_hint": "python main.py"
+    }
+  ]
+}

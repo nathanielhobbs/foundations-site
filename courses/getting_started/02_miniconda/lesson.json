@@ -1,0 +1,38 @@
+{
+  "title": "Miniconda install (Mac + Windows)",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. Why conda (short version)",
+      "kind": "info",
+      "prompt_file": "01_why_conda_short_version.md",
+      "starter_file": "01_why_conda_short_version.py",
+      "cmd_hint": "conda --version"
+    },
+    {
+      "id": 2,
+      "title": "2. Windows install (easy path)",
+      "kind": "info",
+      "prompt_file": "02_windows_install_easy_path.md",
+      "starter_file": "02_windows_install_easy_path.py",
+      "cmd_hint": "python --version"
+    },
+    {
+      "id": 3,
+      "title": "3. Mac install (easy path)",
+      "kind": "info",
+      "prompt_file": "03_mac_install_easy_path.md",
+      "starter_file": "03_mac_install_easy_path.py",
+      "cmd_hint": "python --version"
+    },
+    {
+      "id": 4,
+      "title": "4. Create + activate the course environment",
+      "kind": "info",
+      "prompt_file": "04_create_activate_the_course_environment.md",
+      "starter_file": "04_create_activate_the_course_environment.py",
+      "cmd_hint": "conda create -n foundations python=3.12 -y"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "title": "Functions basics",
+  "is_open": true,
+  "file": "student.py",
+  "steps": [
+    {"id": 1, "title": "Q1: add(a, b)",      "test_glob": "tests_public/test_q1_*.py"},
+    {"id": 2, "title": "Q2: multiply(a, b)", "test_glob": "tests_public/test_q2_*.py"},
+    {"id": 3, "title": "Q3: subtract(a, b)", "test_glob": "tests_public/test_q3_*.py"},
+    {"id": 4, "title": "Q4: divide(a, b)",   "test_glob": "tests_public/test_q4_*.py"},
+    {"id": 5, "title": "Q5: mean(*args)",    "test_glob": "tests_public/test_q5_*.py"}
+  ],
+  "final_hidden_glob": "tests_hidden/*.py"
+}

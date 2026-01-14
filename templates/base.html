@@ -35,7 +35,7 @@
   </style>
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body class="{{body_class or '' }}>
   <div id="siteHeader">
     <div style="display: flex; align-items: center;">
       <span>Foundations of Business Programming</span>
@@ -87,13 +87,15 @@
     <button class="hamburger" aria-label="Toggle menu" aria-expanded="false">☰</button>
     <div class="nav-links">
       <a href="/"><i data-lucide="home"></i>Home</a>
-      <a href="/assignments"><i data-lucide="book-open"></i>Assignments</a>
       {% if session.get("netid") %}
-      <!--
+        <a href="/course"><i data-lucide="book-open"></i>Lessons</a>
+        <a href="/hw"><i data-lucide="book-open"></i>Homeworks</a>
+        <!--
+        <a href="/assignments"><i data-lucide="book-open"></i>Assignments</a>
         <a href="/weekly_challenge"><i data-lucide="target"></i>Weekly Challenge</a>
         <a href="/chat{% if session.get('is_admin') %}{% else %}/{{ session['section'] }}{% endif %}"><i data-lucide="message-circle"></i>Live Chat</a>
-      -->
         <a href="/notebooks"><i data-lucide="file-text"></i>Notebooks</a>
+        -->
         <a href="/lecture/browse"><i data-lucide="swords"></i>Lecture Challenges</a>
       {% endif %}
       <a href="/tutorials"><i data-lucide="graduation-cap"></i>Tutorials</a>

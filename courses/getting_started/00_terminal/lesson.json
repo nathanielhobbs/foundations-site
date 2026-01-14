@@ -1,0 +1,38 @@
+{
+  "title": "Terminal basics",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. What a terminal is",
+      "kind": "info",
+      "prompt_file": "01_what_a_terminal_is.md",
+      "starter_file": "01_what_a_terminal_is.py",
+      "cmd_hint": "pwd"
+    },
+    {
+      "id": 2,
+      "title": "2. Shells: bash vs zsh vs PowerShell",
+      "kind": "info",
+      "prompt_file": "02_shells_bash_vs_zsh_vs_powershell.md",
+      "starter_file": "02_shells_bash_vs_zsh_vs_powershell.py",
+      "cmd_hint": "echo hello"
+    },
+    {
+      "id": 3,
+      "title": "3. Prompt symbols ($ vs % vs > vs >>>)",
+      "kind": "info",
+      "prompt_file": "03_prompt_symbols_vs_vs_vs.md",
+      "starter_file": "03_prompt_symbols_vs_vs_vs.py",
+      "cmd_hint": "python"
+    },
+    {
+      "id": 4,
+      "title": "4. Commands you\u2019ll actually use",
+      "kind": "info",
+      "prompt_file": "04_commands_youll_actually_use.md",
+      "starter_file": "04_commands_youll_actually_use.py",
+      "cmd_hint": "mkdir demo && cd demo && pwd"
+    }
+  ]
+}

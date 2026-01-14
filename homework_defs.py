@@ -1,5 +1,10 @@
 # homework_defs.py
 HOMEWORKS = {
+            "hw1": {"title": "HW1: Functions Basics (5 questions)", "root": "homeworks/hw1"},
+            }
+
+'''
+HOMEWORKS = {
     "hw1": {
         "title": "HW1: Basics",
         "starter": "def add(a, b):\n    return a + b\n",
@@ -11,4 +16,4 @@ HOMEWORKS = {
         "tests": "from student import mul\n\ndef test_mul():\n    assert mul(3,4) == 12\n",
     },
 }
-
+'''

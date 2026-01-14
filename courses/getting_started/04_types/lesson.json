@@ -1,0 +1,30 @@
+{
+  "title": "Types, classes, objects",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. Everything is an object",
+      "kind": "info",
+      "prompt_file": "01_everything_is_an_object.md",
+      "starter_file": "01_everything_is_an_object.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 2,
+      "title": "2. Classes are like factories",
+      "kind": "info",
+      "prompt_file": "02_classes_are_like_factories.md",
+      "starter_file": "02_classes_are_like_factories.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 3,
+      "title": "3. Methods live on objects",
+      "kind": "info",
+      "prompt_file": "03_methods_live_on_objects.md",
+      "starter_file": "03_methods_live_on_objects.py",
+      "cmd_hint": "python main.py"
+    }
+  ]
+}

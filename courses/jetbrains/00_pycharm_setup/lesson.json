@@ -1,0 +1,17 @@
+{
+  "title": "PyCharm setup",
+  "is_open": true,
+  "steps": [
+    { "id": 1, "title": "Install PyCharm", "kind": "info", "prompt_file": "01_install.md" , "starter_file": "01_starter.py"},
+    { "id": 2, "title": "Open the repo folder", "kind": "info", "prompt_file": "02_open_repo.md" },
+    { "id": 3, "title": "Select conda interpreter", "kind": "info", "prompt_file": "03_interpreter.md" },
+    {
+	  "id": 4,
+	  "title": "Run pytest",
+	  "kind": "info",
+	  "prompt_file": "04_pytest.md",
+	  "cmd_hint": "$ pytest -q"
+    }
+  ]
+}
+

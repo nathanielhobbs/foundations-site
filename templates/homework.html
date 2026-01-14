@@ -1,44 +1,518 @@
+{# templates/homework.html #}
 {% extends "base.html" %}
 {% block title %}{{ hw.title }}{% endblock %}
+
 {% block content %}
-<h1>{{ hw.title }}</h1>
+<style>
+  /* ---- IDE layout (self-contained) ---- */
+  .ide-root{
+    display:flex;
+    gap:10px;
+    height: calc(100vh - 170px);
+    min-height: 680px;
+    overflow:hidden;
+  }
+  .ide-pane{
+    background: var(--panel-bg, #fff);
+    border: 1px solid var(--panel-border, #d0d7de);
+    border-radius: 14px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  }
+  .ide-left{
+    flex: 0 0 420px;
+    min-width: 280px;
+    max-width: 55vw;
+    overflow:auto;
+    padding:14px 14px 8px;
+  }
+  .ide-divider{
+    flex: 0 0 7px;
+    cursor: col-resize;
+    border-radius: 10px;
+    background: transparent;
+    position: relative;
+  }
+  .ide-divider::after{
+    content:"";
+    position:absolute; inset: 6px 2px;
+    border-radius: 10px;
+    background: var(--panel-border, #d0d7de);
+    opacity: .75;
+  }
 
-<div style="display:flex; gap:16px; align-items:flex-start;">
-  <div style="flex:1;">
-    <textarea id="code" style="width:100%; height:420px; font-family:monospace;">{{ hw.starter }}</textarea>
-    <div style="margin-top:10px;">
-      <button id="btnSubmit">Submit</button>
-    </div>
-  </div>
+  .ide-right{
+	  flex: 1 1 auto;
+	  min-width: 520px;
+	  overflow:hidden;          /* was auto */
+	  display:flex;
+	  flex-direction:column;
+	  gap:10px;
+	  padding-bottom: 12px;   /* helps avoid “last panel clipped” feeling */
+	  overscroll-behavior: contain;
+	}
 
-  <div style="width:420px;">
-    <h3>Result</h3>
-    <pre id="out" style="white-space:pre-wrap; background:#111; color:#eee; padding:10px; border-radius:8px; min-height:180px;"></pre>
+  .ide-topbar{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 12px;
+    border-bottom: 1px solid var(--panel-border, #d0d7de);
+  }
+  .ide-btn{
+    padding:6px 12px;
+    border:1px solid var(--panel-border, #d0d7de);
+    border-radius: 10px;
+    background: var(--panel-bg, #fff);
+    cursor:pointer;
+    font-weight: 700;
+  }
+  .ide-btn:disabled{ opacity:.55; cursor:not-allowed; }
+
+  .ide-input{
+    height: 34px;
+    padding: 0 10px;
+    border:1px solid var(--panel-border, #d0d7de);
+    border-radius: 10px;
+    background: var(--panel-bg, #fff);
+    min-width: 220px;
+  }
+  .ide-hint{
+    color: rgba(120,120,120,.95);
+    font-size: 0.92rem;
+  }
+  .spacer{ flex:1; }
+
+  .ide-editorwrap{
+    flex: 1 1 auto;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+  .ide-editorhost{
+    flex: 1 1 auto;
+    overflow:hidden;
+    padding: 0 12px 12px;
+  }
+
+  .ide-hdivider{
+    flex: 0 0 7px;
+    cursor: row-resize;
+    border-radius: 10px;
+    background: transparent;
+    position: relative;
+    margin: 0 2px;
+  }
+  .ide-hdivider::after{
+    content:"";
+    position:absolute; inset: 2px 6px;
+    border-radius: 10px;
+    background: var(--panel-border, #d0d7de);
+    opacity: .75;
+  }
+
+  .ide-output{
+    flex: 1 1 280px;
+    min-height: 180px;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+  .ide-outputhead{
+    padding:10px 12px;
+    border-bottom: 1px solid var(--panel-border, #d0d7de);
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .ide-outputhead code{
+    background: rgba(127,127,127,.12);
+    padding: 3px 7px;
+    border-radius: 8px;
+  }
+  .ide-outputbody{
+    padding:10px 12px;
+    overflow:auto;
+    min-height:0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+  }
+
+  .submit-box{
+    padding:12px;
+    border: 1px solid rgba(255,140,0,.45);
+    border-radius: 14px;
+    background: rgba(255,165,0,.06);
+  }
+  .submit-title{ font-weight: 800; margin-bottom: 6px; }
+  .submit-sub{ color: rgba(120,120,120,.95); margin-bottom: 10px; }
+  .submitted-at{ margin-top: 8px; font-weight: 700; }
+
+  /* prompt rendering */
+  .doc p{ margin: 8px 0; }
+  .doc pre{
+    background: rgba(127,127,127,.08);
+    padding: 10px 12px;
+    border-radius: 12px;
+    overflow:auto;
+    border: 1px solid var(--panel-border, #d0d7de);
+  }
+  .doc code{
+    background: rgba(127,127,127,.12);
+    padding: 2px 6px;
+    border-radius: 8px;
+  }
+
+  /* CodeMirror sizing */
+  .CodeMirror{
+    height: 100% !important;
+    border: 1px solid var(--panel-border, #d0d7de);
+    border-radius: 12px;
+  }
+
+  @media (max-width: 1100px){
+    .ide-root{ flex-direction:column; height:auto; }
+    .ide-left{ max-width: 100%; }
+    .ide-divider, .ide-hdivider{ display:none; }
+    .ide-right{ min-width: 0; }
+    .ide-output{overflow:hidden; display:flex; flex-direction:column;}
+  }
+  #submitPane{
+    margin-top:auto /*pushes to the bottom*/
+    align-self: flex-end; /* bottom right feel */
+    width:min(420px,100%); /* don't stretch full width */
+    flex: 0 0 auto;
+  }  
+</style>
+
+{% set HW_SLUG = slug %}
+{% set NETID = (session.get('netid') or '') %}
+<script>
+  // keep Jinja out of template literals
+  window.__HW = {
+    slug: {{ HW_SLUG|tojson }},
+    netid: {{ NETID|tojson }},
+    title: {{ hw.title|tojson }},
+    initialCode: {{ initial_code|tojson }},
+    submittedAt: {{ submitted_at|tojson }},
+  };
+</script>
+
+<div style="margin-bottom:10px;">
+  <div style="color: rgba(120,120,120,.95); font-size:0.95rem;">
+    Home &nbsp;›&nbsp; hw &nbsp;›&nbsp; {{ slug }}
   </div>
 </div>
 
-<script>
-document.getElementById("btnSubmit").addEventListener("click", async () => {
-  const code = document.getElementById("code").value;
-  const out = document.getElementById("out");
-  out.textContent = "Running tests...";
+<h1 style="margin: 0 0 12px;">{{ hw.title }}</h1>
 
-  const res = await fetch("/api/hw/{{ slug }}/submit", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({code})
+<div class="ide-root" id="ideRoot">
+  <div class="ide-pane ide-left" id="leftPane">
+    <div class="ide-hint" style="margin-bottom:10px;">
+      Use <b>Run</b> to see <code>print()</code> output. Use <b>Check</b> to run tests.
+    </div>
+
+    <div class="doc">
+      {% for b in (prompt_md|default('')|split_code_blocks) %}
+        {% if b.type == 'code' %}
+          <pre><code>{{ b.content|e }}</code></pre>
+        {% elif b.type == 'inline_code' %}
+          <code>{{ b.content|e }}</code>
+        {% else %}
+          <p>{{ b.content|replace('\n','<br>')|safe }}</p>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="ide-divider" id="vDivider" title="Drag to resize"></div>
+
+  <div class="ide-right">
+    <div class="ide-pane ide-editorwrap" id="editorPane">
+      <div class="ide-topbar">
+        <button class="ide-btn" id="btnRun">Run</button>
+        <input class="ide-input" id="args" placeholder="args (optional), e.g. 10 20">
+        <button class="ide-btn" id="btnCheck">Check</button>
+        <button class="ide-btn" id="btnReset">Reset</button>
+        <div class="spacer"></div>
+        <div class="ide-hint">Check runs tests. Submit is one-time.</div>
+      </div>
+
+      <div class="ide-editorhost">
+        <textarea id="ta"></textarea>
+      </div>
+    </div>
+ 
+    <div class="ide-hdivider" id="hDivider" title="Drag to resize"></div>
+
+    <div class="ide-pane ide-output" id="outPane">
+      <div class="ide-outputhead">
+        <strong>Output</strong>
+        <span class="spacer"></span>
+        <code id="cmdBox">$ python student.py</code>
+      </div>
+      <div class="ide-outputbody" id="outBody">Run or Check to see output.</div>
+    </div>
+
+
+    <div class="ide-pane submit-box" id="submitPane">
+      <div class="submit-title">Submit is one-time only.</div>
+      <div class="submit-sub">Use <b>Check</b> as many times as you want. When you submit, it becomes final.</div>
+      <button class="ide-btn" id="btnSubmit">Submit (final)</button>
+      <div class="submitted-at" id="submittedAt" style="display:none;"></div>
+    </div>
+
+
+ </div>
+</div>
+
+<!-- CodeMirror 5 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+
+<script>
+(function(){
+  const HW = window.__HW;
+  const LS_KEY = `hw:${HW.slug}:netid:${HW.netid}:code`;
+
+  const ta = document.getElementById("ta");
+  const outBody = document.getElementById("outBody");
+  const cmdBox = document.getElementById("cmdBox");
+
+  const btnRun = document.getElementById("btnRun");
+  const btnCheck = document.getElementById("btnCheck");
+  const btnReset = document.getElementById("btnReset");
+  const btnSubmit = document.getElementById("btnSubmit");
+
+  const argsEl = document.getElementById("args");
+  const submittedAtEl = document.getElementById("submittedAt");
+
+  function currentTheme(){
+    const t = document.documentElement.getAttribute("data-theme");
+    return (t === "dark") ? "material" : "default";
+  }
+
+  const saved = localStorage.getItem(LS_KEY);
+  ta.value = saved ?? HW.initialCode ?? "";
+
+  const cm = CodeMirror.fromTextArea(ta, {
+    mode: "python",
+    lineNumbers: true,
+    indentUnit: 4,
+    theme: currentTheme(),
+    viewportMargin: Infinity,
   });
 
-  const txt = await res.text();
-  if(!res.ok){
-    out.textContent = "Error (" + res.status + "):\n" + txt;
-    return;
+  const mo = new MutationObserver(()=> cm.setOption("theme", currentTheme()));
+  mo.observe(document.documentElement, { attributes:true, attributeFilter:["data-theme"] });
+
+  function refreshCM(){ setTimeout(()=>cm.refresh(), 0); }
+
+  function setBusy(b){
+    btnRun.disabled = b;
+    btnCheck.disabled = b;
+    btnReset.disabled = b;
+    btnSubmit.disabled = b || !!HW.submittedAt;
   }
-  const j = JSON.parse(txt);
-  out.textContent =
-    `Passed: ${j.passed}\nFailed: ${j.failed}\n\n` +
-    (j.output || "");
-});
+
+  function setSubmitted(ts){
+    HW.submittedAt = ts;
+    btnSubmit.disabled = true;
+    submittedAtEl.style.display = "block";
+    submittedAtEl.textContent = "Submitted: " + ts;
+  }
+
+  if (HW.submittedAt){
+    setSubmitted(HW.submittedAt);
+  } else {
+    btnSubmit.disabled = false;
+  }
+
+  function showText(txt){
+    outBody.textContent = txt || "(no output)";
+  }
+
+  async function apiPost(url, payload){
+    const r = await fetch(url, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(payload),
+    });
+    let j = null;
+    try { j = await r.json(); } catch(e) {}
+    return { r, j };
+  }
+
+  async function run(){
+    setBusy(true);
+    showText("Running...");
+    const code = cm.getValue();
+    localStorage.setItem(LS_KEY, code);
+    const args = (argsEl.value || "").trim();
+
+    cmdBox.textContent = args ? `$ python student.py ${args}` : "$ python student.py";
+
+    try{
+      const { r, j } = await apiPost(`/api/hw/${encodeURIComponent(HW.slug)}/run`, { code, args });
+      if (!r.ok){
+        showText(`Error (${r.status}): ` + (j && (j.error || j.stderr || j.message) ? (j.error||j.stderr||j.message) : "request failed"));
+        return;
+      }
+      const stdout = (j && j.stdout) ? j.stdout : "";
+      const stderr = (j && j.stderr) ? j.stderr : "";
+      let txt = "";
+      if (stdout) txt += stdout;
+      if (stderr) txt += (txt ? "\n" : "") + stderr;
+      showText(txt || "(no output)");
+    }catch(e){
+      showText("Error: " + (e?.message || e));
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  async function check(){
+    setBusy(true);
+    showText("Checking (tests)...");
+    const code = cm.getValue();
+    localStorage.setItem(LS_KEY, code);
+
+    cmdBox.textContent = "$ pytest -q";
+
+    try{
+      const { r, j } = await apiPost(`/api/hw/${encodeURIComponent(HW.slug)}/submit`, { action:"check", code });
+      if (!r.ok){
+        showText(`Error (${r.status}): ` + (j && (j.error || j.message) ? (j.error||j.message) : "request failed"));
+        return;
+      }
+      // j.output is pytest output in your current API
+      const passed = (j && typeof j.passed === "number") ? j.passed : null;
+      const failed = (j && typeof j.failed === "number") ? j.failed : null;
+      const header = (passed !== null && failed !== null) ? `Passed: ${passed}\nFailed: ${failed}\n\n` : "";
+      showText(header + ((j && j.output) ? j.output : ""));
+    }catch(e){
+      showText("Error: " + (e?.message || e));
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  async function submitFinal(){
+    if (HW.submittedAt){
+      return;
+    }
+    const ok = window.confirm("Final submit is one-time only. Submit now?");
+    if (!ok) return;
+
+    setBusy(true);
+    showText("Submitting (final)...");
+    const code = cm.getValue();
+    localStorage.setItem(LS_KEY, code);
+
+    cmdBox.textContent = "$ pytest -q (final)";
+
+    try{
+      const { r, j } = await apiPost(`/api/hw/${encodeURIComponent(HW.slug)}/submit`, { action:"submit", code });
+      if (!r.ok){
+        showText(`Error (${r.status}): ` + (j && (j.error || j.message) ? (j.error||j.message) : "request failed"));
+        return;
+      }
+      const passed = (j && typeof j.passed === "number") ? j.passed : null;
+      const failed = (j && typeof j.failed === "number") ? j.failed : null;
+      const header = (passed !== null && failed !== null) ? `Passed: ${passed}\nFailed: ${failed}\n\n` : "";
+      showText(header + ((j && j.output) ? j.output : ""));
+      if (j && j.submitted_at){
+        setSubmitted(j.submitted_at);
+      } else {
+        setSubmitted(new Date().toLocaleString());
+      }
+    }catch(e){
+      showText("Error: " + (e?.message || e));
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  btnRun.addEventListener("click", run);
+  btnCheck.addEventListener("click", check);
+  btnSubmit.addEventListener("click", submitFinal);
+
+  btnReset.addEventListener("click", ()=>{
+    cm.setValue(HW.initialCode ?? "");
+    localStorage.removeItem(LS_KEY);
+    showText("Reset. Run or Check to see output.");
+    refreshCM();
+  });
+
+  // --- Splitter (vertical) ---
+  const leftPane = document.getElementById("leftPane");
+  const vDivider = document.getElementById("vDivider");
+  const VKEY = `ide:hw:${HW.slug}:leftW`;
+
+  function applyLeftWidth(w){
+    leftPane.style.flexBasis = w + "px";
+    localStorage.setItem(VKEY, String(w));
+    refreshCM();
+  }
+  const savedW = parseInt(localStorage.getItem(VKEY) || "", 10);
+  if (Number.isFinite(savedW)) applyLeftWidth(savedW);
+
+  vDivider.addEventListener("mousedown", (ev)=>{
+    ev.preventDefault();
+    const startX = ev.clientX;
+    const startW = leftPane.getBoundingClientRect().width;
+    const minW = 280;
+    const maxW = Math.min(window.innerWidth * 0.55, 860);
+
+    function onMove(e){
+      const dx = e.clientX - startX;
+      const w = Math.max(minW, Math.min(maxW, startW + dx));
+      applyLeftWidth(Math.round(w));
+    }
+    function onUp(){
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
+
+  // --- Splitter (horizontal) ---
+  const outPane = document.getElementById("outPane");
+  const hDivider = document.getElementById("hDivider");
+  const HKEY = `ide:hw:${HW.slug}:outH`;
+
+  function applyOutHeight(h){
+    outPane.style.flexBasis = h + "px";
+    localStorage.setItem(HKEY, String(h));
+    refreshCM();
+  }
+  const savedH = parseInt(localStorage.getItem(HKEY) || "", 10);
+  if (Number.isFinite(savedH)) applyOutHeight(savedH);
+
+  hDivider.addEventListener("mousedown", (ev)=>{
+    ev.preventDefault();
+    const startY = ev.clientY;
+    const startH = outPane.getBoundingClientRect().height;
+    const minH = 180;
+    const maxH = Math.min(window.innerHeight * 0.7, 620);
+
+    function onMove(e){
+      const dy = startY - e.clientY; // dragging up increases output
+      const h = Math.max(minH, Math.min(maxH, startH + dy));
+      applyOutHeight(Math.round(h));
+    }
+    function onUp(){
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
+
+  refreshCM();
+})();
 </script>
 {% endblock %}
-
