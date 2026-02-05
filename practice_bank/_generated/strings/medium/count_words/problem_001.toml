@@ -1,0 +1,20 @@
+slug = "strings/medium/count_words/problem_001"
+title = "Count words"
+topic = "strings"
+difficulty = "medium"
+
+prompt = """
+Write `count_words(s)` that returns how many words are in `s`. Words are separated by whitespace.
+"""
+
+starter_code = """
+def count_words(s):
+    # TODO
+    pass
+"""
+
+tests = """
+assert count_words('one') == 1
+assert count_words("a  b   c") == 3
+assert count_words("") == 0
+"""

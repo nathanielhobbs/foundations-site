@@ -1,0 +1,18 @@
+slug = "exceptions/medium/safe_key/problem_001"
+title = "Safe dict access"
+topic = "exceptions"
+difficulty = "medium"
+
+prompt = """
+Write `safe_get(d, key)` that returns `d[key]` or `None` if the key is missing (use try/except).
+"""
+
+starter_code = """
+def safe_get(d, key):
+    # TODO
+    pass
+"""
+
+tests = """
+assert safe_get({'a': 1}, 'b') == None
+"""

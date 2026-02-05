@@ -1,0 +1,19 @@
+slug = "basics/easy/area_rect/problem_001"
+title = "Area of a rectangle"
+topic = "basics"
+difficulty = "easy"
+
+prompt = """
+Write `area_rect(w, h)` that returns the area (w*h).
+"""
+
+starter_code = """
+def area_rect(w, h):
+    # TODO
+    pass
+"""
+
+tests = """
+assert area_rect(3, 12) == 36
+assert area_rect(1, 1) == 1
+"""

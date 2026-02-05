@@ -1,0 +1,19 @@
+slug = "loops/easy/sum_to_n/problem_001"
+title = "Sum 1..n"
+topic = "loops"
+difficulty = "easy"
+
+prompt = """
+Write `sum_to_n(n)` that returns `1 + 2 + ... + n` using a loop. Assume `n >= 0`.
+"""
+
+starter_code = """
+def sum_to_n(n):
+    # TODO
+    pass
+"""
+
+tests = """
+assert sum_to_n(16) == 136
+assert sum_to_n(0) == 0
+"""

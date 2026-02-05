@@ -1,0 +1,19 @@
+slug = "nested_loops/easy/find_in_grid/problem_001"
+title = "Find a character in a grid"
+topic = "nested_loops"
+difficulty = "easy"
+
+prompt = """
+Given `grid` as a list of equal-length strings, write `find_char(grid, ch)` that returns `(row, col)` of the first match, or `None` if not found.
+"""
+
+starter_code = """
+def find_char(grid, ch):
+    # TODO
+    pass
+"""
+
+tests = """
+assert find_char(['axc', 'def', 'gxh'], 'a') == (0, 0)
+assert find_char(['axc', 'def', 'gxh'], "Z") is None
+"""

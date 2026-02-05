@@ -1,0 +1,20 @@
+slug = "basics/easy/format_money/problem_001"
+title = "Format money"
+topic = "basics"
+difficulty = "easy"
+
+prompt = """
+Write `format_money(x)` that returns a string like `$12.34` (always 2 decimals).
+"""
+
+starter_code = """
+def format_money(x):
+    # TODO
+    pass
+"""
+
+tests = """
+assert format_money(189.35) == '$189.35'
+assert format_money(0) == "$0.00"
+assert format_money(1.2) == "$1.20"
+"""

@@ -1,0 +1,459 @@
+{% extends "base.html" %}
+{% set body_class = "ide-page" %}
+{% block title %}Python Sandbox{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/py_panel.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ide_layout.css') }}">
+<style>
+  .muted{ color:#6b7280; font-size:.95rem; }
+
+  /* hide the unused left pane + horizontal gutter */
+  #paneLeft{ display:none; }
+  .gutter-h{ display:none; }
+
+  /* default 2/3 vs 1/3 */
+  #paneTop{ flex: 0 0 66%; }
+  #paneBottom{ flex: 1 1 34%; }
+
+  .out-panel{
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    overflow:hidden;
+  }
+  .out-panel .py-out{ flex:1 1 auto; min-height:0; overflow:auto; height:auto; }
+  .CodeMirror{ height: 100% !important; }
+
+  /* Mode tabs (top-level) */
+  .modebar{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    margin:.35rem 0 1rem 0;
+  }
+  .modebtn{
+    padding:.45rem .8rem;
+    border-radius: 12px;
+    border:1px solid var(--panel-border, #d0d7de);
+    background: transparent;
+    cursor:pointer;
+    font-weight:600;
+  }
+  .modebtn.active{ background: rgba(0,0,0,.06); }
+  :root[data-theme="dark"] .modebtn.active{ background: rgba(255,255,255,.10); }
+
+  /* REPL input row */
+  .repl-input-row{ display:flex; gap:8px; align-items:flex-start; }
+  .repl-prompt{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    padding: 8px 10px;
+    border: 1px solid var(--panel-border, #d0d7de);
+    border-radius: 10px;
+    background: var(--panel-bg, #fff);
+  }
+  .repl-in{
+    flex:1;
+    min-height: 40px;
+    max-height: 120px;
+    resize: vertical;
+    padding: 8px 10px;
+    border: 1px solid var(--panel-border, #d0d7de);
+    border-radius: 10px;
+    background: var(--input-bg, #fff);
+    color: var(--input-text, #111);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  .repl-status{ color: var(--muted-text, #6b7280); font-size:.95rem; }
+
+  /* Editor toggle row (REPL mode) */
+  .editor-toggle-row{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    margin-bottom:8px;
+  }
+  .editor-toggle{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:.35rem .55rem;
+    border:1px solid var(--panel-border, #d0d7de);
+    border-radius: 12px;
+    background: rgba(0,0,0,.03);
+    cursor:pointer;
+    user-select:none;
+  }
+  :root[data-theme="dark"] .editor-toggle{ background: rgba(255,255,255,.06); }
+  .editor-toggle .chev{
+    width: 1.1rem;
+    text-align:center;
+    font-weight:900;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  .editor-toggle .title{ font-weight:700; }
+  .editor-toggle .hint{ color: var(--muted-text, #6b7280); font-size:.95rem; }
+
+  #editorBody{ flex:1 1 auto; min-height:0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:.25rem;">Python Sandbox</h2>
+<div class="muted">Scratchpad in two modes: run a script or interact line-by-line with Read-Eval-Print Loop (REPL).</div>
+
+<div class="modebar">
+  <button id="modeSandboxBtn" class="modebtn active" type="button">Script</button>
+  <button id="modeReplBtn" class="modebtn" type="button">REPL</button>
+</div>
+
+<div id="ide" class="ide fit-viewport">
+  <div id="paneLeft" class="pane pane-left pad"></div>
+  <div class="gutter gutter-h"></div>
+
+  <div class="pane pane-right">
+    <div id="paneTop" class="pane" style="padding:12px;">
+      <div class="py-panel" style="height:100%; display:flex; flex-direction:column; min-height:0;">
+        <!-- SANDBOX toolbar -->
+        <div id="toolbarSandbox" class="toolbar-row">
+          <button id="runBtn" class="py-btn" type="button">Run</button>
+          <input id="argsBox" class="argsBox" placeholder="args (optional), e.g. 10 20">
+          <button id="resetBtn" class="py-btn" type="button">Reset</button>
+          <div class="spacer"></div>
+        </div>
+
+	<!-- REPL toolbar: toggle editor (no dragging) -->
+        <div id="toolbarRepl" class="editor-toggle-row" style="display:none;">
+          <div id="editorToggle" class="editor-toggle" role="button" tabindex="0" aria-expanded="false">
+            <div id="editorChev" class="chev">▸</div>
+            <div class="title">Editor</div>
+            <div class="hint">click to expand/collapse</div>
+          </div>
+          <button id="replLoadEditorBtn" class="py-btn" type="button">Load editor into session</button>
+          <div class="spacer"></div>
+        </div>
+
+        <div id="editorBody" style="flex:1 1 auto; min-height:0;">
+          <textarea id="editor"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="gutter gutter-v" title="Drag to resize"></div>
+
+    <div id="paneBottom" class="pane" style="padding:12px;">
+      <!-- SANDBOX OUTPUT -->
+      <div id="bottomSandbox" class="py-panel out-panel">
+        <h3 style="margin-top:0;">Output</h3>
+        <div class="cmdline-row">
+          <div id="cmd" class="cmdline">$</div>
+          <button id="copyCmdBtn" class="py-btn" type="button">Copy</button>
+        </div>
+        <div id="out" class="py-out" style="margin-top:.6rem;">
+          <div class="system">Use Run to execute your code.</div>
+        </div>
+      </div>
+
+      <!-- REPL -->
+      <div id="bottomRepl" class="py-panel out-panel" style="display:none;">
+        <div class="toolbar-row" style="margin-top:0;">
+          <button id="replResetBtn" class="py-btn" type="button">Reset session</button>
+          <button id="replClearBtn" class="py-btn" type="button">Clear output</button>
+          <div id="replStatus" class="repl-status">loading…</div>
+          <div class="spacer"></div>
+        </div>
+
+        <div class="repl-input-row" style="margin-top:.5rem;">
+          <div class="repl-prompt">&gt;&gt;&gt;</div>
+          <textarea id="replIn" class="repl-in"
+            placeholder="Enter to run. Shift+Enter for newline."></textarea>
+          <button id="replSendBtn" class="py-btn" type="button">Run</button>
+        </div>
+
+        <div id="replOut" class="py-out" style="margin-top:.6rem;">
+          <div class="system">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+
+<script src="{{ url_for('static', filename='js/py_panel.js') }}"></script>
+<script src="{{ url_for('static', filename='js/split_panes.js') }}"></script>
+<script src="{{ url_for('static', filename='js/repl_embed.js') }}"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const COURSE       = {{ course|default("sandbox")|tojson }};
+  const LESSON       = {{ lesson|default("sandbox")|tojson }};
+  const DEFAULT_ARGS = {{ default_args|default("")|tojson }};
+
+  const outId = "out";
+  const cmdEl = document.getElementById("cmd");
+  const argsBox = document.getElementById("argsBox");
+
+  SplitPanes.init("ide", "paneLeft", "paneTop", "paneBottom", "sandbox");
+
+  const editor = PyPanel.makeEditor("editor", {});
+  editor.setValue({{ initial_code|default("print(2+2)\n")|tojson }});
+
+  window.addEventListener("splitter:changed", ()=>{ try { editor.refresh(); } catch(e){} });
+
+  const starter = editor.getValue();
+  if (argsBox) argsBox.value = DEFAULT_ARGS || "";
+
+  function setCmd(s){ cmdEl.textContent = s || "$"; }
+
+  async function postJson(url, payload, timeoutMs=12000){
+    const ctl = new AbortController();
+    const t = setTimeout(()=>ctl.abort(), timeoutMs);
+    try{
+      const r = await fetch(url, {
+        method:"POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload),
+        signal: ctl.signal
+      });
+      const txt = await r.text();
+      if(!r.ok) throw new Error(`HTTP ${r.status}: ${txt}`);
+      return JSON.parse(txt);
+    } finally { clearTimeout(t); }
+  }
+
+
+	  const USE_LOCAL_PYODIDE = (COURSE === "crypto" && LESSON === "relay");
+  let pyRunner = null;
+  let pyRunnerReady = false;
+  const pending = new Map();
+
+  function ensurePyRunner(){
+    if (pyRunner) return;
+    pyRunner = new Worker("{{ url_for('static', filename='js/py_runner_worker.js') }}");
+    pyRunner.onmessage = (e)=>{
+      const m = e.data || {};
+      const cb = pending.get(m.id);
+      if (!cb) return;
+      pending.delete(m.id);
+      cb(m);
+    };
+    pyRunnerReady = true;
+  }
+
+  function runLocalPyodide(code){
+    ensurePyRunner();
+    return new Promise((resolve)=>{
+      const id = Math.random().toString(36).slice(2);
+      pending.set(id, resolve);
+      pyRunner.postMessage({ id, code });
+    });
+  }
+
+
+  async function runCode(){
+    try{
+      PyPanel.resetOut(outId, "Running…");
+      const args = (argsBox.value || "").trim();
+      setCmd(args ? `$ python main.py ${args}` : "$ python main.py");
+
+      if (USE_LOCAL_PYODIDE){
+        const res = await runLocalPyodide(editor.getValue());
+        PyPanel.resetOut(outId);
+        if (res.ok){
+          if (res.stdout) PyPanel.append(outId, "stdout", res.stdout);
+          if (res.stderr) PyPanel.append(outId, "stderr", res.stderr);
+          if (!res.stdout && !res.stderr) PyPanel.append(outId, "system", "No output.");
+        } else {
+          PyPanel.append(outId, "stderr", res.error || "Error");
+        }
+        return;
+      }
+
+      // default behavior (server-side docker)
+      const j = await postJson(`/api/course/${COURSE}/${LESSON}/run`, { code: editor.getValue(), args });
+      setCmd(j.cmd_display || "$ python main.py");
+
+      PyPanel.resetOut(outId);
+      if (j.stdout) PyPanel.append(outId, "stdout", j.stdout);
+      if (j.stderr) PyPanel.append(outId, "stderr", j.stderr);
+      if (!j.stdout && !j.stderr) PyPanel.append(outId, "system", "No output.");
+    } catch(e){
+      PyPanel.resetOut(outId);
+      PyPanel.append(outId, "stderr", String(e && e.message ? e.message : e));
+    }
+  }
+
+  document.getElementById("runBtn").onclick = runCode;
+  document.getElementById("resetBtn").onclick = () => {
+    editor.setValue(starter);
+    PyPanel.resetOut(outId, "Reset.");
+    setCmd("$");
+  };
+
+  // Copy cmd
+  const copyBtn = document.getElementById("copyCmdBtn");
+  copyBtn.onclick = async ()=>{
+    let text = (cmdEl.textContent || "").trim().replace(/^\$\s*/, "");
+    if (!text) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
+      else { window.prompt("Copy command:", text); return; }
+      const old = copyBtn.textContent;
+      copyBtn.textContent = "Copied";
+      setTimeout(()=> copyBtn.textContent = old, 800);
+    } catch(e){
+      window.prompt("Copy command:", text);
+    }
+  };
+
+  // ----- Mode switching: Sandbox <-> REPL -----
+  const modeSandboxBtn = document.getElementById("modeSandboxBtn");
+  const modeReplBtn    = document.getElementById("modeReplBtn");
+
+  const toolbarSandbox = document.getElementById("toolbarSandbox");
+  const toolbarRepl    = document.getElementById("toolbarRepl");
+
+  const bottomSandbox  = document.getElementById("bottomSandbox");
+  const bottomRepl     = document.getElementById("bottomRepl");
+
+  const ideEl = document.getElementById("ide");
+  const paneTop = document.getElementById("paneTop");
+  const editorBody = document.getElementById("editorBody");
+  const editorToggle = document.getElementById("editorToggle");
+  const editorChev = document.getElementById("editorChev");
+  const gutterV = ideEl ? ideEl.querySelector(".gutter-v") : null;
+
+  const KEY_MODE = "sandbox:mode"; // sandbox | repl
+  const KEY_REPL_EXP = "sandbox:repl:expanded"; // 1/0
+  const KEY_TOPH = "sandbox:topH"; // SplitPanes key
+  const KEY_REPL_TOPH = "sandbox:repl:topH"; // last expanded height in REPL
+
+  let replMounted = false;
+
+  function savedTopPx(){
+    const v = parseInt(localStorage.getItem(KEY_TOPH) || "", 10);
+    return Number.isNaN(v) ? null : v;
+  }
+  function savedReplTopPx(){
+    const v = parseInt(localStorage.getItem(KEY_REPL_TOPH) || "", 10);
+    return Number.isNaN(v) ? null : v;
+  }
+
+  function setTopPx(px){
+    paneTop.style.flex = "0 0 " + Math.round(px) + "px";
+  }
+
+  function replExpanded(){
+    return (localStorage.getItem(KEY_REPL_EXP) === "1");
+  }
+
+  function setReplExpanded(on){
+    localStorage.setItem(KEY_REPL_EXP, on ? "1" : "0");
+    editorToggle.setAttribute("aria-expanded", on ? "true" : "false");
+    editorChev.textContent = on ? "▾" : "▸";
+  }
+
+  function applyReplEditorState(){
+    const on = replExpanded();
+    if (on){
+      editorBody.style.display = "";
+      if (gutterV) gutterV.style.display = "none"; // no dragging needed in REPL mode
+      const h = savedReplTopPx() || savedTopPx() || Math.round((ideEl.getBoundingClientRect().height || 520) * 0.66);
+      setTopPx(h);
+      try{ editor.refresh(); }catch(_e){}
+    } else {
+      // remember expanded height before collapsing (if currently tall)
+      const curH = paneTop.getBoundingClientRect().height;
+      if (curH > 120){
+        try{ localStorage.setItem(KEY_REPL_TOPH, String(Math.round(curH))); }catch(_e){}
+      }
+      editorBody.style.display = "none";
+      if (gutterV) gutterV.style.display = "none";
+      setTopPx(64);
+    }
+  }
+
+  editorToggle.onclick = ()=>{
+    setReplExpanded(!replExpanded());
+    applyReplEditorState();
+  };
+  editorToggle.addEventListener("keydown", (e)=>{
+    if(e.key === "Enter" || e.key === " "){
+      e.preventDefault();
+      editorToggle.click();
+    }
+  });
+
+  function mountReplOnce(){
+    if (replMounted) return;
+    replMounted = true;
+    window.ReplEmbed.mount({
+      outId: "replOut",
+      inId: "replIn",
+      sendId: "replSendBtn",
+      clearId: "replClearBtn",
+      resetId: "replResetBtn",
+      loadId: "replLoadEditorBtn",
+      statusId: "replStatus",
+      getEditorCode: ()=> editor.getValue(),
+      workerUrl: "{{ url_for('static', filename='js/py_repl_worker.js') }}"
+    });
+  }
+
+  function setMode(mode){
+    const isRepl = (mode === "repl");
+    localStorage.setItem(KEY_MODE, isRepl ? "repl" : "sandbox");
+
+    modeSandboxBtn.classList.toggle("active", !isRepl);
+    modeReplBtn.classList.toggle("active", isRepl);
+
+    toolbarSandbox.style.display = isRepl ? "none" : "";
+    toolbarRepl.style.display = isRepl ? "" : "none";
+
+    bottomSandbox.style.display = isRepl ? "none" : "";
+    bottomRepl.style.display = isRepl ? "" : "none";
+
+    if (!isRepl){
+      // restore sandbox layout + splitter
+      editorBody.style.display = "";
+      if (gutterV) gutterV.style.display = "";
+      const h = savedTopPx();
+      if (h != null) setTopPx(h);
+      else {
+        const ideH = ideEl.getBoundingClientRect().height || 520;
+        setTopPx(Math.round(ideH * 0.66));
+      }
+      try{ editor.refresh(); }catch(_e){}
+      return;
+    }
+
+    // default: collapsed editor in REPL unless user expanded before
+    if (localStorage.getItem(KEY_REPL_EXP) == null){
+      setReplExpanded(false);
+    } else {
+      // sync chevron state
+      setReplExpanded(replExpanded());
+    }
+    applyReplEditorState();
+    mountReplOnce();
+
+    const inp = document.getElementById("replIn");
+    if (inp) inp.focus();
+  }
+
+  modeSandboxBtn.onclick = ()=> setMode("sandbox");
+  modeReplBtn.onclick    = ()=> setMode("repl");
+
+  // initial mode
+  const savedMode = localStorage.getItem(KEY_MODE) || "sandbox";
+  setMode(savedMode === "repl" ? "repl" : "sandbox");
+});
+</script>
+{% endblock %}

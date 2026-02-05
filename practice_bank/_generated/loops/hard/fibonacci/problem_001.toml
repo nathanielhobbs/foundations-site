@@ -1,0 +1,21 @@
+slug = "loops/hard/fibonacci/problem_001"
+title = "Fibonacci number"
+topic = "loops"
+difficulty = "hard"
+
+prompt = """
+Write `fib(n)` that returns the nth Fibonacci number with `fib(0)=0`, `fib(1)=1`. Use a loop.
+"""
+
+starter_code = """
+def fib(n):
+    # TODO
+    pass
+"""
+
+tests = """
+assert fib(18) == 2584
+assert fib(0) == 0
+assert fib(1) == 1
+assert fib(7) == 13
+"""

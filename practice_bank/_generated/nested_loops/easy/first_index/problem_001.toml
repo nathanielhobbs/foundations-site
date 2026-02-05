@@ -1,0 +1,19 @@
+slug = "nested_loops/easy/first_index/problem_001"
+title = "First index with enumerate()"
+topic = "nested_loops"
+difficulty = "easy"
+
+prompt = """
+Write `first_index(s, ch)` that returns the first index where `s[index] == ch`. Assume `ch` occurs at least once.
+"""
+
+starter_code = """
+def first_index(s, ch):
+    # TODO
+    pass
+"""
+
+tests = """
+assert first_index('mississippi', 'i') == 1
+assert first_index("abc", "a") == 0
+"""

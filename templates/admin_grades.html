@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Admin Grades{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:.35rem;">Admin Grades</h2>
+
+<div class="py-panel" style="padding:12px; margin-bottom:12px;">
+  <form method="get" style="display:flex; gap:.6rem; flex-wrap:wrap; align-items:end;">
+    <div>
+      <div class="muted" style="margin-bottom:4px;">Homework</div>
+      <select name="slug" class="argsBox" style="min-width:220px;">
+        <option value="">All</option>
+        {% for s, info in homeworks.items() %}
+          <option value="{{s}}" {% if s==slug %}selected{% endif %}>{{s}} — {{ info.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <div class="muted" style="margin-bottom:4px;">Section</div>
+      <input name="section" value="{{ section }}" class="argsBox" style="min-width:140px;" placeholder="e.g. 5">
+    </div>
+    <button class="py-btn" type="submit">Filter</button>
+  </form>
+</div>
+
+<div class="py-panel" style="padding:12px;">
+  <table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">HW</th>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">NetID</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Sec</th>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Submitted</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Late</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Raw</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Final</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Actions</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Diff</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Status</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Reopened at</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15);">{{ r.slug }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15);">{{ r.netid }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">{{ r.section or "" }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15);">{{ r.submitted_at|human_dt or "-" }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">{{ r.late_days }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">{{ r.score_raw if r.score_raw is not none else "-" }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right; font-weight:800;">
+          {{ r.score_effective if r.score_effective is not none else "-" }}
+        </td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">
+          <button class="py-btn" type="button"
+                  onclick="reopenHw('{{ r.slug }}','{{ r.netid }}')">Reopen</button>
+        </td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">
+		<a class="py-btn" href="/admin/hw/{{ r.slug }}/diff?netid={{ r.netid }}">Diff</a>
+
+	</td>
+	<td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">{{ r.status }}</td>
+	
+	<td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">{{ r.reopened_at|human_dt }}</td>
+      </tr>
+      {% endfor %}
+      {% if not rows %}
+      <tr><td colspan="8" class="muted" style="padding:10px;">No rows.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+async function reopenHw(slug, netid){
+  const penalty = prompt("Reopen penalty fraction (e.g. 0.10 for 10%)", "0.10");
+  if (penalty === null) return;
+
+  const r = await fetch(`/api/admin/hw/${encodeURIComponent(slug)}/reopen`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ netid, penalty: parseFloat(penalty) })
+  });
+
+  const txt = await r.text();
+  if (!r.ok){
+    alert("Error: " + txt);
+    return;
+  }
+  alert("Reopened.");
+  location.reload();
+}
+</script>
+{% endblock %}
+

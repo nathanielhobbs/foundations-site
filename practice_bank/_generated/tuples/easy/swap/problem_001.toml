@@ -1,0 +1,19 @@
+slug = "tuples/easy/swap/problem_001"
+title = "Swap a pair"
+topic = "tuples"
+difficulty = "easy"
+
+prompt = """
+Write `swap(pair)` where `pair` is a tuple `(a, b)` and you return `(b, a)`.
+"""
+
+starter_code = """
+def swap(pair):
+    # TODO
+    pass
+"""
+
+tests = """
+assert swap((7, 17)) == (17, 7)
+assert swap((1, 2)) == (2, 1)
+"""

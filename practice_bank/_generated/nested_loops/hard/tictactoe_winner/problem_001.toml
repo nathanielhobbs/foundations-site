@@ -1,0 +1,19 @@
+slug = "nested_loops/hard/tictactoe_winner/problem_001"
+title = "Tic-tac-toe winner"
+topic = "nested_loops"
+difficulty = "hard"
+
+prompt = """
+Write `winner(board)` for a 3x3 tic-tac-toe board (list of lists of 'X','O',''). Return 'X', 'O', or None.
+"""
+
+starter_code = """
+def winner(board):
+    # TODO
+    pass
+"""
+
+tests = """
+assert winner([['X', 'X', 'X'], ['O', '', 'O'], ['', '', '']]) == 'X'
+assert winner([["","",""],["","",""],["","",""]]) is None
+"""

@@ -1,0 +1,20 @@
+slug = "lists/hard/merge_sorted/problem_001"
+title = "Merge two sorted lists"
+topic = "lists"
+difficulty = "hard"
+
+prompt = """
+Write `merge_sorted(a, b)` where `a` and `b` are sorted lists, and return a single sorted merged list.
+"""
+
+starter_code = """
+def merge_sorted(a, b):
+    # TODO
+    pass
+"""
+
+tests = """
+assert merge_sorted([2, 6, 6, 8, 10, 18], [4, 12, 14, 15, 20, 20]) == [2, 4, 6, 6, 8, 10, 12, 14, 15, 18, 20, 20]
+assert merge_sorted([], [1,2]) == [1,2]
+assert merge_sorted([1,2], []) == [1,2]
+"""

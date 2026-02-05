@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% set body_class = "ide-page" %}
+{% block title %}Python Interpreter{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/py_panel.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ide_layout.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/repl.css') }}">
+<style>
+  .muted{ color:#6b7280; font-size:.95rem; }
+  #paneLeft{ display:none; }
+  .gutter-h{ display:none; }
+  #paneTop{ flex: 0 0 56%; }
+  #paneBottom{ flex: 1 1 44%; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:.25rem;">Python Interpreter</h2>
+<div class="muted" style="margin-bottom:.75rem;">Stateful REPL (runs in your browser). A REPL (Read-Eval-Print Loop) is an interactive programming environment that lets developers type code, get immediate results, and repeat the process.</div>
+
+<div id="ide" class="ide fit-viewport">
+  <div id="paneLeft" class="pane pane-left pad"></div>
+  <div class="gutter gutter-h"></div>
+
+  <div class="pane pane-right">
+    <div id="paneTop" class="pane" style="padding:12px;">
+      <div class="py-panel">
+        <div class="toolbar-row" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+          <button id="replLoadEditorBtn" class="py-btn" type="button">Load editor into session</button>
+          <button id="replResetBtn" class="py-btn" type="button">Reset session</button>
+          <button id="replClearBtn" class="py-btn" type="button">Clear output</button>
+          <div class="repl-status" id="replStatus">loading…</div>
+          <div class="spacer"></div>
+        </div>
+        <textarea id="editor"></textarea>
+      </div>
+    </div>
+
+    <div class="gutter gutter-v" title="Drag to resize"></div>
+
+    <div id="paneBottom" class="pane" style="padding:12px;">
+      <div class="py-panel repl-shell">
+        <h3 style="margin-top:0;">REPL</h3>
+
+        <div class="repl-input-row">
+          <div class="repl-prompt">&gt;&gt;&gt;</div>
+          <textarea id="replIn" class="repl-in" placeholder="Type an expression or statement. Enter to run. Shift+Enter for newline."></textarea>
+          <button id="replSendBtn" class="py-btn" type="button">Run</button>
+        </div>
+
+        <div id="replOut" class="py-out repl-output">
+          <div class="system">Loading…</div>
+        </div>
+
+        <div class="muted">Tip: use the editor above for multi-line code, then “Load editor into session”.</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+
+<script src="{{ url_for('static', filename='js/py_panel.js') }}"></script>
+<script src="{{ url_for('static', filename='js/split_panes.js') }}"></script>
+<script src="{{ url_for('static', filename='js/repl_page.js') }}"></script>
+
+<script>
+  // Customize the initial editor contents if you want.
+  window.REPL_INITIAL_CODE = "x = 10\nx * 2\n";
+  document.addEventListener("DOMContentLoaded", ()=> {
+    SplitPanes.init("ide", "paneLeft", "paneTop", "paneBottom", "repl");
+  });
+</script>
+{% endblock %}

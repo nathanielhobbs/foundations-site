@@ -1,0 +1,18 @@
+slug = "comprehensions/easy/evens/problem_001"
+title = "Filter evens"
+topic = "comprehensions"
+difficulty = "easy"
+
+prompt = """
+Write `evens(nums)` that returns a new list of only the even numbers (try a comprehension).
+"""
+
+starter_code = """
+def evens(nums):
+    # TODO
+    pass
+"""
+
+tests = """
+assert evens([3, 3, 13, 11, 13, 13, 14, 1, 20, 20]) == [14, 20, 20]
+"""

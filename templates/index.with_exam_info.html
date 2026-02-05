@@ -1,0 +1,579 @@
+<!-- templates/index.html -->
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<h1>Welcome to Foundations of Business Programming</h1>
+<br>
+
+
+
+<!-- ===== Solution Key cards (practice + real midterm) ===== -->
+<style>
+  /* Theme-aware colors for solution cards */
+  body {
+    --soln-bg: #f6f8fa;
+    --soln-fg: #24292f;
+    --soln-border: #d0d7de;
+    --soln-muted: rgba(127, 127, 127, 0.9);
+    --soln-accent: #2563eb;
+  }
+
+  /* Match your site's dark theme selector here */
+  body[data-theme="dark"] {
+    --soln-bg: #0b1020;
+    --soln-fg: #e6e6e6;
+    --soln-border: #2a324a;
+    --soln-muted: rgba(200, 200, 200, 0.7);
+    --soln-accent: #60a5fa;
+  }
+
+  .soln-card {
+    background: var(--soln-bg);
+    color: var(--soln-fg);
+    border: 1px solid var(--soln-border);
+    border-radius: 14px;
+    padding: 0;
+    overflow: hidden;
+    margin: 1rem 0;
+  }
+
+  .soln-card summary {
+    list-style: none;          /* hide default marker */
+    cursor: pointer;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--soln-border);
+    font-weight: 800;
+    font-size: clamp(1.05rem, 1.2vw + 1rem, 1.4rem);
+    line-height: 1.2;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    background: linear-gradient(180deg, transparent, rgba(0,0,0,0.02));
+  }
+
+  .soln-card summary::before {
+    content: "▶";
+    font-size: 0.95rem;
+    transform: translateY(1px);
+    color: var(--soln-accent);
+  }
+
+  details[open].soln-card summary::before { content: "▼"; }
+
+  .soln-inner { padding: 1rem 1.25rem 1.25rem; }
+
+  .soln-inner h3 {
+    margin: 1.1rem 0 .5rem;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: .01em;
+  }
+
+  .soln-inner ol { padding-left: 1.25rem; margin: .2rem 0 .8rem; }
+  .soln-inner li { margin: .35rem 0; }
+
+  .soln-note { font-size: .9rem; color: var(--soln-muted); }
+
+  .soln-code {
+    border: 1px solid var(--soln-border);
+    background: rgba(127,127,127,.06);
+    padding: .6rem .75rem;
+    border-radius: 10px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: .92rem;
+    line-height: 1.35;
+    margin: .4rem 0 .6rem;
+  }
+
+  .ans { font-weight: 800; }
+  .tick { color: var(--soln-accent); font-weight: 900; }
+</style>
+
+
+<h2><a href="static/exams/practice-final/Fall_2025_Foundations_Final_Practice.pdf"> Download </a> practice final </h2>
+
+<!-- Fall 2025 Final Practice — Solution Key -->
+<details class="soln-card">
+  <summary>Fall 2025 Final Practice — <span style="color:var(--soln-accent)">Solution Key</span></summary>
+  <div class="soln-inner">
+
+    <section>
+      <h3>1) Multiple Choice</h3>
+      <ol>
+        <li>
+          <strong>1.1</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            1. <code>[i*i for i in range(5)]</code>
+          </span>
+        </li>
+        <li>
+          <strong>1.2</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            1. <code>{w: len(w) for w in words}</code>
+          </span>
+        </li>
+        <li>
+          <strong>1.3</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            3. <code>if __name__ == "__main__": main()</code>
+          </span>
+        </li>
+        <li>
+          <strong>1.4</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            2. <code>[1, 2, 3, 4, 5]</code>
+          </span>
+        </li>
+        <li>
+          <strong>1.5</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            2. <code>with open("data.txt") as f: ...</code>
+          </span>
+        </li>
+        <li>
+          <strong>1.6</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            3. <code>len(sys.argv) == 3</code>
+          </span>
+        </li>
+        <li>
+          <strong>1.7</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            1. <code>parser.add_argument("filename"); parser.add_argument("--verbose", action="store_true")</code>
+          </span>
+        </li>
+        <li>
+          <strong>1.8</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            2. <code>from .stats import summarize</code>
+          </span>
+        </li>
+        <li>
+          <strong>1.extra (extra credit)</strong>
+          <div class="soln-note">
+            Inside <code>script.py</code>, “Which of the following expressions evaluate to <code>["a","b","c"]</code>?” is intentionally the
+            “mystery” extra-credit question.
+            <ul>
+              <li>If you assume the command is <code>python script.py a b c</code>, then both (a) <code>sys.argv[1:]</code> and (d) <code>list(sys.argv[1:])</code> evaluate to <code>["a","b","c"]</code>.</li>
+              <li>If you point out that the command line was never specified, you can also argue it is underspecified / unanswerable.</li>
+            </ul>
+          </div>
+        </li>
+        <li>
+          <strong>1.9</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            1. <code>import analytics</code>
+          </span>
+        </li>
+        <li>
+          <strong>1.10</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            1. <code>[w[0] for w in words if w[0].isupper()]</code>
+          </span>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h3>2) True/False</h3>
+      <ol>
+        <li><strong>2.1</strong> <span class="ans">True</span></li>
+        <li><strong>2.2</strong> <span class="ans">True</span></li>
+        <li><strong>2.3</strong> <span class="ans">True</span></li>
+        <li><strong>2.4</strong> <span class="ans">True</span> <span class="soln-note">(for our purposes in this course)</span></li>
+        <li><strong>2.5</strong> <span class="ans">False</span></li>
+        <li><strong>2.6</strong> <span class="ans">True</span></li>
+        <li><strong>2.7</strong> <span class="ans">False</span></li>
+        <li><strong>2.8</strong> <span class="ans">True</span></li>
+        <li><strong>2.9</strong> <span class="ans">False</span></li>
+      </ol>
+    </section>
+
+    <section>
+      <h3>3) Code Problem Identification &amp; Short Traces</h3>
+      <ol>
+        <li>
+          <strong>3.1</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            2. Prints <code>10</code> then <code>30</code>
+          </span>
+          <div class="soln-note">
+            Index 1 is skipped with <code>continue</code>, so values at indices 0 and 2 are printed.
+          </div>
+        </li>
+        <li>
+          <strong>3.2</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            3. <code>len(sys.argv) == 3</code>
+          </span>
+          <div class="soln-note">
+            <code>["runner.py", "one", "two"]</code> → length 3.
+          </div>
+        </li>
+        <li>
+          <strong>3.3</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            2. <code>[2, 4]</code>
+          </span>
+          <div class="soln-note">
+            The comprehension keeps only even numbers from <code>[1, 2, 3, 4]</code>.
+          </div>
+        </li>
+        <li>
+          <strong>3.4</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            2. prints
+            <pre class="inline-code">top of tools
+done</pre>
+          </span>
+          <div class="soln-note">
+            Importing <code>tools</code> runs its top-level <code>print</code> once, then <code>use_tools.py</code> prints <code>"done"</code>.
+          </div>
+        </li>
+        <li>
+          <strong>3.5</strong>
+          <span class="ans">
+            <span class="tick">#</span>
+            2. <code>1</code>
+          </span>
+          <div class="soln-note">
+            The loop adds the value for key <code>"a"</code>, then breaks when it reaches key <code>"b"</code>.
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h3>4) Open-Ended</h3>
+
+      <p><strong>4.1</strong> <code>get_args()</code>: return all command-line arguments except the script name.</p>
+      <pre class="soln-code"><code>import sys
+
+def get_args():
+    """Return a list of all command-line arguments except the script name."""
+    return sys.argv[1:]</code></pre>
+
+      <p><strong>4.2</strong> <code>odd_indices(L)</code>: elements at odd indices (1, 3, 5, ...) where the value is even.</p>
+      <pre class="soln-code"><code>def odd_indices(L):
+    """Return elements at odd indices whose values are even."""
+    result = []
+    for i in range(1, len(L), 2):
+        if L[i] % 2 == 0:
+            result.append(L[i])
+    return result
+
+# or, as a comprehension:
+# return [L[i] for i in range(1, len(L), 2) if L[i] % 2 == 0]</code></pre>
+
+      <p><strong>4.3</strong> Short explanation: <code>sys.argv</code> vs <code>argparse</code>.</p>
+      <div class="soln-note">
+        <ul>
+          <li><code>sys.argv</code> is just the raw list of strings from the command line (including the script name). You manually check lengths, positions, and convert types.</li>
+          <li><code>argparse</code> lets you declare positional arguments and options (like <code>--verbose</code>, <code>--year</code>), with types, defaults, and automatic help/error messages.</li>
+          <li>Example where <code>argparse</code> is clearly better: a script that needs multiple optional flags
+            such as <code>--input</code>, <code>--output</code>, <code>--limit N</code>, and <code>--verbose</code>. With <code>argparse</code> you avoid manual parsing of <code>sys.argv</code> and get built-in usage text and validation.
+          </li>
+        </ul>
+      </div>
+
+      <p><strong>4.4</strong> <code>merge_counts(d1, d2)</code>: combine counts, summing overlapping keys.</p>
+      <pre class="soln-code"><code>def merge_counts(d1, d2):
+    """Return a new dict whose keys are from both d1 and d2.
+    If a key appears in both, sum the values.
+    """
+    result = dict(d1)  # copy so we don't modify d1
+    for key, value in d2.items():
+        if key in result:
+            result[key] += value
+        else:
+            result[key] = value
+    return result</code></pre>
+
+      <p><strong>4.5</strong> <code>demo.py</code>: define <code>greet(name)</code> and run a small test only when executed as a script.</p>
+      <pre class="soln-code"><code>def greet(name):
+    return f"Hello, {name}!"
+
+def main():
+    print("Testing greet")
+    print(greet("World"))
+
+if __name__ == "__main__":
+    main()</code></pre>
+      <div class="soln-note">
+        Importing <code>demo</code> from another module just defines <code>greet</code> and <code>main</code>;
+        the test code runs only when you execute <code>python demo.py</code>.
+      </div>
+
+    </section>
+
+  </div>
+</details>
+
+<h2><a href="static/exams/practice-midterm/2025_Fall_Foundations_midterm_practice.pdf">Download</a> practice midterm </h2>
+
+<!-- Practice Midterm — Solution Key -->
+<details class="soln-card">
+  <summary>Midterm Practice — <span style="color:var(--soln-accent)">Solution Key</span></summary>
+  <div class="soln-inner">
+    <!-- keep your existing practice key content here exactly as it was -->
+    <!-- (you can paste it back from your current file) -->
+  </div>
+</details>
+
+<h2><a href="static/exams/midterm/Fall_2025_Foundations_Midterm.pdf">Download</a> Fall 2025 midterm </h2>
+
+<!-- Fall 2025 Midterm — Solution Key -->
+<details class="soln-card">
+  <summary>Fall 2025 Midterm — <span style="color:var(--soln-accent)">Solution Key</span></summary>
+  <div class="soln-inner">
+
+    <section>
+      <h3>1) Multiple Choice</h3>
+      <ol>
+        <li>
+          <strong>1.1</strong>
+          <span class="ans"><span class="tick">#</span> 1. <code>set(L)</code></span>
+        </li>
+        <li>
+          <strong>1.2</strong>
+          <span class="ans"><span class="tick">#</span> 3. Returns <code>s</code> reversed</span>
+        </li>
+        <li>
+          <strong>1.3</strong>
+          <span class="ans"><span class="tick">#</span> 1. <code>[w[0].upper() for w in words if len(w) &gt;= 4]</code></span>
+        </li>
+        <li>
+          <strong>1.4 *this was extra credit. any answer correc. any answer correct, bonus for stating:</strong>
+          <div class="soln-note">enumerate returns pairs of (index,value) pairs. Index first, value second.</div>
+        </li>
+        <li>
+          <strong>1.5</strong>
+          <span class="ans"><span class="tick">#</span> 3. <code>"a"</code></span>
+        </li>
+        <li>
+          <strong>1.6</strong>
+          <span class="ans"><span class="tick">#</span> 2. <code>continue</code> starts the next loop condition check</span>
+        </li>
+        <li>
+          <strong>1.7</strong>
+          <span class="ans"><span class="tick">#</span> 1 and 3</span>
+          <div class="soln-note">Those three print exactly <code>a,b,c</code>.</div>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h3>2) True/False</h3>
+      <ol>
+        <li><strong>2.1</strong> <span class="ans">False</span></li>
+        <li><strong>2.2</strong> <span class="ans">True</span></li>
+        <li><strong>2.3</strong> <span class="ans">False</span></li>
+        <li><strong>2.4</strong> <span class="ans">True</span></li>
+        <li><strong>2.5</strong> <span class="ans">False</span></li>
+        <li><strong>2.6</strong> <span class="ans">True</span></li>
+      </ol>
+    </section>
+
+    <section>
+      <h3>3) Code Problem Identification &amp; Short Traces</h3>
+      <ol>
+        <li>
+          <strong>3.1</strong>
+          <span class="ans"><span class="tick">#</span> 1. <code>1</code></span>
+          <div class="soln-note">Loop prints the value for key <code>"a"</code> then breaks when it sees <code>"b"</code>.</div>
+        </li>
+        <li>
+          <strong>3.2</strong>
+          <span class="ans"><span class="tick">#</span> 2. <code>[1, 2, 3, [4, 5]]</code></span>
+        </li>
+        <li>
+          <strong>3.3</strong>
+          <span class="ans"><span class="tick">#</span> 3. <code>5</code></span>
+          <div class="soln-note">Computed as <code>b + kw["x"] + len(args) = 1 + 2 + 2 = 5</code>.</div>
+        </li>
+        <li>
+          <strong>3.4</strong>
+          <span class="ans"><span class="tick">#</span> 3. <code>4</code></span>
+          <div class="soln-note">The loop adds 1 and 3 to <code>s</code>, skipping 2; final <code>s</code> is 4.</div>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h3>4) Open-Ended</h3>
+
+      <p><strong>4.1</strong> Write a function that returns a new list containing the elements at odd indices of a given list <code>L</code>.</p>
+       <pre class="soln-code"><code>def elements_at_odd_indices(L):
+    """Return a new list with elements from odd indices of L."""
+    odd_idx_list = []
+    for i in range(len(L)):
+        if i%2 == 1: # check if *index* is odd
+		odd_idx_list.append(L[i]) # add *value* at that index
+    return odd_idx_list</code></pre>
+       <p> or </p>
+       <pre class="soln-code"><code>def elements_at_odd_indices(L):
+    """Return a new list with elements from odd indices of L."""
+    return [L[i] for i in range(1, len(L), 2)]</code></pre>
+       <p> or </p>
+ <pre class="soln-code"><code>def elements_at_odd_indices(L):
+    return L[1::2]</code></pre>
+
+
+      <p><strong>4.2</strong> Program that opens <code>"nums.txt"</code> and computes the average of the integers (one per line).</p>
+      <pre class="soln-code"><code>total = 0
+with open("nums.txt") as f:
+    lines = f.readlines() # returns list of strings, each string one line
+    for line in lines:
+
+        total += int(line)
+
+avg = total / len(lines)
+print(avg)
+      </pre>
+
+      <p><strong>4.3</strong> One-line list comprehension for cubes of <code>nums = [3, 6, 9, 12, 15]</code>.</p>
+      <pre class="soln-code"><code>cubes_even = [n**3 for n in nums]</code></pre>
+      <p>or>
+      <pre class="soln-code"><code>cubes_even = [n*n*n for n [3,6,9,12,15]]</code></pre>
+    </section>
+
+  </div>
+</details>
+<!-- ===== /Solution Key cards ===== -->
+
+
+<br><br>
+<section id="schedule">
+  <h2>Course Schedule</h2>
+  <table class="schedule">
+    <thead>
+      <tr>
+        <th>Week</th>
+        <th>Topic</th>
+        <th>Items Due</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="done">
+        <td>1</td>
+        <td>Intro to terminal/python</td>
+        <td></td>
+      </tr>
+      <tr class="done">
+        <td>2</td>
+        <td>Built-in types: String, Integer, Float, <code>list</code>, <code>tuple</code></td>
+        <td></td>
+      </tr>
+      <tr class="done">
+        <td>3</td>
+        <td>Built-in types: <code>dict</code>, Functions: <code>def</code>, <code>return</code>, <code>*args</code>, <code>**kwargs</code></td>
+        <td></td>
+      </tr>
+      <tr class="done">
+        <td>4</td>
+        <td>Conditionals: <code>if</code>, <code>elif</code>, <code>else</code></td>
+        <td>HW1 released</td>
+      </tr>
+      <tr class="done">
+        <td>5</td>
+        <td>Loops: <code>for</code> and <code>while</code> loops</td>
+        <td>HW1 due</td>
+      </tr>
+      <tr class="done">
+        <td>6</td>
+        <td>Nested loops, <code>break</code>, <code>continue</code>, <code>enumerate</code></td>
+        <td></td>
+      </tr>
+      <tr class="done">
+        <td>7</td>
+        <td>Comprehensions: List, dictionary, and set comprehensions</td>
+        <td>HW2 released</td>
+      </tr>
+      <tr class="done">
+        <td>8</td>
+        <td>File I/O: <code>open</code> and <code>with</code>, Exceptions: <code>try/except</code></td>
+        <td>HW2 due</td>
+      </tr>
+      <tr class="done">
+        <td>9</td>
+	<td>Command-line Arguments: <code>sys.argv</code>, <code>argparse</code></td>
+        <td>Midterm</td>
+      </tr>
+      <tr class="done">
+        <td>10</td>
+	<td>Scripts vs Modules & Packages: <code>import</code>, <code>from</code>, <code>as</code>,<code>if __name__=='__main__',__init__.py, __main__.py</td>
+        <td>HW3 released</td>
+      </tr>
+      <tr>
+        <td>11</td>
+        <td>General Programming: language model back-end</td>
+        <td>HW3 due, HW4 released</td>
+      </tr>
+      <tr>
+        <td>12</td>
+        <td>General Programming: language model front-end / Object Oriented Programming</td>
+        <td>HW4 due, HW4.5 released</td>
+      </tr>
+      <tr>
+        <td>13 (Thanksgiving)</td>
+        <td>General Programming: program 2 (TBD)</td>
+        <td>HW4.5 due, HW5 released</td>
+      </tr>
+      <tr>
+        <td>14</td>
+        <td>General Programming: program 2 (TBD)</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>15</td>
+        <td>Review</td>
+        <td>HW5 due</td>
+      </tr>
+      <tr>
+        <td>16</td>
+        <td>Final exams / Final projects</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<style>
+  table.schedule {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+  }
+  table.schedule th, table.schedule td {
+    border: 1px solid #ccc;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  table.schedule th {
+    background: #f5f5f5;
+  }
+  /* Cross out completed rows */
+  .schedule tr.done td {
+    text-decoration: line-through;
+    color: #666;
+  }
+</style>
+
+
+{% endblock %}
+

@@ -1,0 +1,21 @@
+slug = "functions/medium/apply_n/problem_001"
+title = "Apply a function n times"
+topic = "functions"
+difficulty = "medium"
+
+prompt = """
+Write `apply_n(f, x, n)` that applies `f` to `x` exactly `n` times.
+Example: if `f(x)=x+1`, then `apply_n(f, 10, 3) = 13`.
+"""
+
+starter_code = """
+def apply_n(f, x, n):
+    # TODO
+    pass
+"""
+
+tests = """
+def inc(x): return x+1
+assert apply_n(inc, 10, 3) == 13
+assert apply_n(inc, 0, 0) == 0
+"""

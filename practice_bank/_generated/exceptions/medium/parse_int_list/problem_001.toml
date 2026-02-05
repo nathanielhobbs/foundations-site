@@ -1,0 +1,21 @@
+slug = "exceptions/medium/parse_int_list/problem_001"
+title = "Parse int list"
+topic = "exceptions"
+difficulty = "medium"
+
+prompt = """
+Write `parse_int_list(s)` where `s` looks like `'1,2,3'`. Return a list of ints.
+If any item fails to parse, return `None`.
+"""
+
+starter_code = """
+def parse_int_list(s):
+    # TODO
+    pass
+"""
+
+tests = """
+assert parse_int_list('') == []
+assert parse_int_list("1,2,3") == [1,2,3]
+assert parse_int_list("a,2") is None
+"""

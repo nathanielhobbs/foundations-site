@@ -1,0 +1,19 @@
+slug = "numbers/medium/mean3/problem_001"
+title = "Mean of three"
+topic = "numbers"
+difficulty = "medium"
+
+prompt = """
+Write `mean3(a, b, c)` that returns the average of three numbers (a float).
+"""
+
+starter_code = """
+def mean3(a, b, c):
+    # TODO
+    pass
+"""
+
+tests = """
+out = mean3(-50, 47, -30)
+assert abs(out - (-11.0)) < 1e-9
+"""

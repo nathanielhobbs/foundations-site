@@ -1,0 +1,21 @@
+slug = "loops/medium/reverse_int/problem_001"
+title = "Reverse digits"
+topic = "loops"
+difficulty = "medium"
+
+prompt = """
+Write `reverse_int(n)` that reverses the digits of a nonnegative integer.
+Example: 120 -> 21
+"""
+
+starter_code = """
+def reverse_int(n):
+    # TODO
+    pass
+"""
+
+tests = """
+assert reverse_int(77110) == 1177
+assert reverse_int(120) == 21
+assert reverse_int(0) == 0
+"""

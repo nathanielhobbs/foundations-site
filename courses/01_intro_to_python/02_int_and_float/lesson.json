@@ -1,0 +1,51 @@
+{
+  "title": "02. Introduction to Types: int and float",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. Python as a calculator",
+      "kind": "practice",
+      "prompt_file": "01_calc.md",
+      "starter_file": "01_starter.py",
+      "test_glob": "test_step01.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 2,
+      "title": "2. int vs float",
+      "kind": "practice",
+      "prompt_file": "02_int_float.md",
+      "starter_file": "02_starter.py",
+      "test_glob": "test_step02.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 3,
+      "title": "3. Operators + precedence",
+      "kind": "practice",
+      "prompt_file": "03_ops_precedence.md",
+      "starter_file": "03_starter.py",
+      "test_glob": "test_step03.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 4,
+      "title": "4. Practice: total with tax + tip",
+      "kind": "practice",
+      "prompt_file": "04_practice_total.md",
+      "starter_file": "04_starter.py",
+      "test_glob": "test_step04.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 5,
+      "title": "5. Practice: // and % (time conversion)",
+      "kind": "practice",
+      "prompt_file": "05_practice_divmod.md",
+      "starter_file": "05_starter.py",
+      "test_glob": "test_step05.py",
+      "cmd_hint": "python main.py"
+    }
+  ]
+}

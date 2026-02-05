@@ -1,0 +1,416 @@
+{# templates/practice/problem.html #}
+{% extends "base.html" %}
+{% set body_class = "ide-page" %}
+{% block title %}Practice — {{ p.title }}{% endblock %}
+
+{% block extra_head %}
+  {{ super() }}
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material.min.css">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/py_panel.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ide_layout.css') }}">
+
+  <style>
+    .muted{ color:#6b7280; font-size:.95rem; }
+
+    /* prompt rendering (match homework) */
+    .doc p{ margin: 8px 0; }
+    .doc pre{
+      background: var(--block-code-bg);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 12px;
+      overflow:auto;
+      border: 1px solid var(--panel-border);
+    }
+    .doc code{
+      background: var(--inline-code-bg);
+      color: var(--text);
+      padding: 2px 6px;
+      border-radius: 8px;
+    }
+
+    /* Flex children need min-height:0 or they won't stretch correctly */
+    .pane-right, #paneTop, #paneBottom { min-height: 0; }
+
+    /* Make panes + panels participate in height/flex */
+    #ide .pane-right { display:flex; flex-direction:column; min-height:0; }
+    #paneTop, #paneBottom { display:flex; flex-direction:column; min-height:0; }
+    
+    /* A “fill the pane” panel (used for editor + output) */
+    .py-panel.fill{
+      height: 100%;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    
+    /* Let CodeMirror actually take the remaining height under the toolbar */
+    .editor-wrap{ flex:1 1 auto; min-height:0; }
+    .editor-wrap .CodeMirror{ height:100% !important; }
+    
+    /* nicer default split (optional) */
+    #paneTop{ flex: 0 0 62%; }
+    #paneBottom{ flex: 1 1 38%; }
+
+    .toolbar-practice{
+	  display:flex;
+	  align-items:center;
+	  justify-content:space-between;
+	  gap:12px;
+	  flex-wrap:wrap;
+	}
+
+	.toolbar-left{
+	  display:flex;
+	  align-items:center;
+	  gap:10px;
+	  flex-wrap:wrap;
+	}
+
+	.toolbar-sep{
+	  width:1px;
+	  height:28px;
+	  background: var(--panel-border, #d0d7de);
+	  opacity:.8;
+	  margin: 0 2px;
+	}
+
+	.toolbar-right{
+	  display:flex;
+	  align-items:center;
+	}
+
+
+  </style>
+{% endblock %}
+
+{% block content %}
+{% set NETID = (session.get('netid') or '') %}
+<script>
+  window.__PRACTICE = {
+    slug: {{ p.slug|tojson if p.slug is defined else request.path|tojson }},
+    title: {{ p.title|tojson }},
+    topic: {{ p.topic|tojson }},
+    difficulty: {{ p.difficulty|tojson }},
+    prompt: {{ p.prompt|tojson }},
+    starter: {{ p.starter_code|tojson }},
+    tests: {{ p.tests|tojson }},
+    netid: {{ NETID|tojson }},
+  };
+</script>
+
+<div class="ide-stack">
+  <h2 style="margin-bottom:.4rem;">{{ p.title }}</h2>
+  <div class="muted" style="margin-bottom:6px;">
+    Practice: <span style="font-weight:600;">{{ p.topic }}</span> / <span style="font-weight:600;">{{ p.difficulty }}</span>
+  </div>
+
+  <div id="ide" class="ide fit-viewport" style="margin-top:1rem;">
+    <!-- LEFT -->
+    <div id="paneLeft" class="pane pane-left pad">
+      <div class="muted" style="margin-bottom:10px;">
+        Use <b>Run</b> to see <code>print()</code> output. Use <b>Check</b> to run tests.
+      </div>
+
+      <div class="prompt">
+        <div id="prompt" class="doc"></div>
+      </div>
+    </div>
+
+    <div class="gutter gutter-h" title="Drag to resize"></div>
+
+    <!-- RIGHT -->
+    <div class="pane pane-right">
+      <div id="paneTop" class="pane" style="padding:12px;">
+        <div class="py-panel fill">
+		<div class="toolbar-row toolbar-practice">
+		  <div class="toolbar-left">
+		    <button id="runBtn" class="py-btn" type="button">Run</button>
+		    <button id="checkBtn" class="py-btn" type="button">Check</button>
+		    <button id="resetBtn" class="py-btn" type="button">Reset</button>
+
+		    <span class="toolbar-sep"></span>
+
+		    <button id="prevBtn" class="py-btn" type="button">Prev</button>
+		    <button id="nextBtn" class="py-btn" type="button">Next</button>
+		  </div>
+
+		  <div class="toolbar-right">
+		    <div id="status" class="muted">Ready</div>
+		  </div>
+		</div>
+
+	  <div class="editor-wrap">
+            <textarea id="editor"></textarea>
+	  </div>
+        </div>
+      </div>
+
+      <div class="gutter gutter-v" title="Drag to resize"></div>
+
+      <div id="paneBottom" class="pane" style="padding:12px;">
+        <div class="py-panel out-panel fill">
+          <h3 style="margin-top:0;">Output</h3>
+          <div id="out" class="py-out" style="margin-top:.6rem;">
+            <div class="system">Run or Check to see output.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="{{ url_for('static', filename='js/py_panel.js') }}"></script>
+<script src="{{ url_for('static', filename='js/split_panes.js') }}"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+	(function(){
+	  const P = window.__PRACTICE;
+
+		function getPlaylist(){
+		  try{
+		    return JSON.parse(localStorage.getItem("practice:lastList") || "[]");
+		  }catch(e){
+		    return [];
+		  }
+		}
+
+		function nextSlug(){
+		  const list = getPlaylist();
+		  const i = list.indexOf(P.slug);
+		  if (i >= 0 && i + 1 < list.length) return list[i+1];
+		  return null;
+		}
+
+		function prevSlug(){
+		  const list = getPlaylist();
+		  const i = list.indexOf(P.slug);
+		  if (i > 0) return list[i-1];
+		  return null;
+		}
+
+
+	  const outId = "out";
+	  const statusEl = document.getElementById("status");
+
+	  // Render prompt (markdown-friendly)
+	  const promptEl = document.getElementById("prompt");
+	  if (promptEl && window.marked) promptEl.innerHTML = marked.parse(P.prompt || "");
+	  else if (promptEl) promptEl.textContent = (P.prompt || "");
+
+	  // Editor (uses your site theme switching)
+	  const editor = PyPanel.makeEditor("editor", {
+	    indentUnit: 4,
+	    tabSize: 4,
+	    indentWithTabs: false,
+	    extraKeys: {
+	      "Ctrl-Enter": ()=> runCode(),
+	      "Cmd-Enter": ()=> runCode(),
+	      "Ctrl-/": "toggleComment",
+	      "Cmd-/": "toggleComment",
+	      "Tab": "insertSoftTab",
+	      "Shift-Tab": "indentLess",
+	    }
+	  });
+
+	  // Per-user persistence like homework
+	  const LS_KEY = `practice:${P.slug}:netid:${P.netid}:code`;
+	  const saved = localStorage.getItem(LS_KEY);
+	  const starter = P.starter || "";
+	  editor.setValue(saved ?? starter);
+
+	function fitIde(){
+	  const ide = document.getElementById("ide");
+	  if(!ide) return;
+	  const top = ide.getBoundingClientRect().top;
+	  ide.style.height = Math.max(420, window.innerHeight - top - 16) + "px";
+	}
+	fitIde();
+	window.addEventListener("resize", fitIde);
+
+
+	  SplitPanes.init("ide", "paneLeft", "paneTop", "paneBottom", `practice:${P.slug}:${P.netid}`);
+	  window.addEventListener("splitter:changed", ()=>{ try { editor.refresh(); } catch(e){} });
+
+	  // ----- Local pyodide runner worker (same as sandbox) -----
+	  let pyRunner = null;
+	  const pending = new Map();
+
+	  function ensurePyRunner(){
+	    if (pyRunner) return;
+	    statusEl.textContent = "Loading Python…";
+	    pyRunner = new Worker("{{ url_for('static', filename='js/py_runner_worker.js') }}");
+	    pyRunner.onmessage = (e)=>{
+	      const m = e.data || {};
+	      const cb = pending.get(m.id);
+	      if (!cb) return;
+	      pending.delete(m.id);
+	      cb(m);
+	    };
+	  }
+
+	  function runLocal(code){
+	    ensurePyRunner();
+	    return new Promise((resolve)=>{
+	      const id = Math.random().toString(36).slice(2);
+	      pending.set(id, resolve);
+	      pyRunner.postMessage({ id, code });
+	    });
+	  }
+
+	  function sanitize(s){
+	    return (s || "")
+	      .replace(/\r\n/g, "\n")
+	      .replace(/\t/g, "    ")
+	      .replace(/^\n+/, "");
+	  }
+
+	  function setBusy(b){
+	    runBtn.disabled = b;
+	    checkBtn.disabled = b;
+	    resetBtn.disabled = b;
+	  }
+
+	  const runBtn   = document.getElementById("runBtn");
+	  const checkBtn = document.getElementById("checkBtn");
+	  const resetBtn = document.getElementById("resetBtn");
+
+		const prevBtn = document.getElementById("prevBtn");
+		const nextBtn = document.getElementById("nextBtn");
+
+		function getPlaylist(){
+		  try{ return JSON.parse(localStorage.getItem("practice:lastList") || "[]"); }
+		  catch(e){ return []; }
+		}
+		function nextSlug(){
+		  const list = getPlaylist();
+		  const i = list.indexOf(P.slug);
+		  if(i >= 0 && i+1 < list.length) return list[i+1];
+		  return null;
+		}
+		function prevSlug(){
+		  const list = getPlaylist();
+		  const i = list.indexOf(P.slug);
+		  if(i > 0) return list[i-1];
+		  return null;
+		}
+		function refreshNavButtons(){
+		  if(prevBtn) prevBtn.disabled = !prevSlug();
+		  if(nextBtn) nextBtn.disabled = !nextSlug();
+		}
+		refreshNavButtons();
+
+		if(prevBtn) prevBtn.onclick = ()=>{ const s = prevSlug(); if(s) window.location.href = "/practice/" + s; };
+		if(nextBtn) nextBtn.onclick = ()=>{ const s = nextSlug(); if(s) window.location.href = "/practice/" + s; };
+			
+
+	  async function runCode(){
+	    setBusy(true);
+	    try{
+	      statusEl.textContent = "Running…";
+	      PyPanel.resetOut(outId, "Running…");
+
+	      const code = sanitize(editor.getValue());
+	      localStorage.setItem(LS_KEY, code);
+
+	      const res = await runLocal(code);
+
+	      PyPanel.resetOut(outId);
+	      statusEl.textContent = "Ready";
+
+	      if (res.ok){
+		if (res.stdout) PyPanel.append(outId, "stdout", res.stdout);
+		if (res.stderr) PyPanel.append(outId, "stderr", res.stderr);
+		if (!res.stdout && !res.stderr) PyPanel.append(outId, "system", "No output.");
+	      } else {
+		PyPanel.append(outId, "stderr", res.error || "Error");
+	      }
+	    } catch(e){
+	      PyPanel.resetOut(outId);
+	      PyPanel.append(outId, "stderr", String(e && e.message ? e.message : e));
+	      statusEl.textContent = "Error";
+	    } finally {
+	      setBusy(false);
+	    }
+	  }
+
+		async function recordAttempt(passed){
+		  const r = await fetch("/api/practice/attempt", {
+		    method:"POST",
+		    headers:{ "Content-Type":"application/json" },
+		    body: JSON.stringify({ slug: P.slug, passed: !!passed })
+		  });
+		  const j = await r.json().catch(()=> ({}));
+		  if (!r.ok || !j.ok) console.warn("recordAttempt failed", r.status, j);
+		}
+	
+	  async function checkTests(){
+	    setBusy(true);
+	    try{
+	      statusEl.textContent = "Checking…";
+	      PyPanel.resetOut(outId, "Checking…");
+
+	      const code = sanitize(editor.getValue());
+	      localStorage.setItem(LS_KEY, code);
+
+	      // run code + tests together (asserts raise -> worker returns ok:false)
+	      const combined = code + "\n\n" + sanitize(P.tests || "");
+	      const res = await runLocal(combined);
+
+	      PyPanel.resetOut(outId);
+	      statusEl.textContent = "Ready";
+
+	      if (res.ok){
+		PyPanel.append(outId, "system", "✅ All tests passed");
+		if (res.stdout) PyPanel.append(outId, "stdout", res.stdout);
+		if (res.stderr) PyPanel.append(outId, "stderr", res.stderr);
+	      } else {
+		PyPanel.append(outId, "system", "❌ Tests failed");
+		PyPanel.append(outId, "stderr", res.error || "Error");
+	      }
+              await recordAttempt(res.ok);
+
+		if(res.ok){
+		  const ns = nextSlug();
+		  if(ns){
+		    PyPanel.append(outId, "system", `Next: /practice/${ns}`);
+		    setTimeout(()=>{ window.location.href = "/practice/" + ns; }, 650);
+		  }
+		}
+
+
+	    } catch(e){
+	      PyPanel.resetOut(outId);
+	      PyPanel.append(outId, "stderr", String(e && e.message ? e.message : e));
+	      statusEl.textContent = "Error";
+	    } finally {
+	      setBusy(false);
+	    }
+	  }
+
+	  runBtn.onclick = runCode;
+	  checkBtn.onclick = checkTests;
+
+	  resetBtn.onclick = () => {
+	    editor.setValue(starter);
+	    localStorage.removeItem(LS_KEY);
+	    PyPanel.resetOut(outId, "Reset.");
+	    statusEl.textContent = "Ready";
+	  };
+	})();
+});
+</script>
+{% endblock %}
+

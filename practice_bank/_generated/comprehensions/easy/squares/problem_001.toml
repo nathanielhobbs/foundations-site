@@ -1,0 +1,18 @@
+slug = "comprehensions/easy/squares/problem_001"
+title = "Squares with a list comprehension"
+topic = "comprehensions"
+difficulty = "easy"
+
+prompt = """
+Write `squares(n)` that returns `[1^2, 2^2, ..., n^2]`. (Try a list comprehension.)
+"""
+
+starter_code = """
+def squares(n):
+    # TODO
+    pass
+"""
+
+tests = """
+assert squares(5) == [1, 4, 9, 16, 25]
+"""

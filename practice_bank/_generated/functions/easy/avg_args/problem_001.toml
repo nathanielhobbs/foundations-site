@@ -1,0 +1,19 @@
+slug = "functions/easy/avg_args/problem_001"
+title = "Average of *args"
+topic = "functions"
+difficulty = "easy"
+
+prompt = """
+Write `avg(*args)` that returns the average. Assume at least one arg.
+"""
+
+starter_code = """
+def avg(*args):
+    # TODO
+    pass
+"""
+
+tests = """
+out = avg(*[16, 1, 4, 12, 10])
+assert abs(out - (8.6)) < 1e-9
+"""

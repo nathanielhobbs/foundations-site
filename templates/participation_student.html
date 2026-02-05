@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Participation{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:.4rem;">Participation</h2>
+<div class="muted" style="margin-bottom:1rem;">
+  Logged in as <span style="font-weight:600;">{{ netid }}</span>
+</div>
+
+<div style="padding:.75rem 1rem; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:1rem;">
+  <div><strong>Today ({{ today }})</strong>:
+    {% if did_today %}
+      <span style="color:#16a34a; font-weight:700;">counted</span>
+    {% else %}
+      <span style="color:#b45309; font-weight:700;">not yet</span>
+    {% endif %}
+  </div>
+  <div class="muted" style="margin-top:.35rem;">
+    Tip: typing in a lecture challenge should count you automatically.
+  </div>
+</div>
+
+<h3 style="margin-top:0;">History</h3>
+{% if entries and entries|length %}
+  <table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="text-align:left; padding:.4rem; border-bottom:1px solid #e5e7eb;">Day</th>
+        <th style="text-align:left; padding:.4rem; border-bottom:1px solid #e5e7eb;">Section</th>
+        <th style="text-align:left; padding:.4rem; border-bottom:1px solid #e5e7eb;">Source</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td style="padding:.4rem; border-bottom:1px solid #f1f5f9;">{{ e.day }}</td>
+        <td style="padding:.4rem; border-bottom:1px solid #f1f5f9;">{{ e.section }}</td>
+        <td style="padding:.4rem; border-bottom:1px solid #f1f5f9;">{{ e.source }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="muted">No participation recorded yet.</div>
+{% endif %}
+{% endblock %}
+

@@ -1,0 +1,18 @@
+slug = "comprehensions/easy/lengths/problem_001"
+title = "Word lengths"
+topic = "comprehensions"
+difficulty = "easy"
+
+prompt = """
+Write `lengths(words)` that returns a list of lengths of each word (try a comprehension).
+"""
+
+starter_code = """
+def lengths(words):
+    # TODO
+    pass
+"""
+
+tests = """
+assert lengths(['a', 'bb', 'ccc']) == [1, 2, 3]
+"""

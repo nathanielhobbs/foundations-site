@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Topics{% endblock %}
+
+{% block extra_head %}
+<style>
+  .cards{ display:flex; flex-direction:column; gap:14px; max-width: 920px; margin: 0 auto; }
+  .card{
+    display:block;
+    border:1px solid var(--panel-border, #d0d7de);
+    background: var(--panel-bg, #fff);
+    color: inherit;
+    border-radius: 14px;
+    padding: 14px 14px;
+    text-decoration:none;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  }
+  .card:hover{ border-color: rgba(37,99,235,.45); }
+  .title{ font-weight: 800; font-size: 1.1rem; }
+  .sub{ color:#6b7280; margin-top:2px; font-size:.95rem; }
+  .meta{ display:flex; gap:10px; align-items:center; margin-top:10px; }
+  .bar{ flex:1; height:10px; background: rgba(0,0,0,.06); border-radius: 999px; overflow:hidden; }
+  .fill{ height:100%; background: var(--accent, #2563eb); width:0%; }
+  .pct{ font-variant-numeric: tabular-nums; color:#374151; font-size:.95rem; min-width: 56px; text-align:right; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="color: rgba(120,120,120,.95); font-size:0.95rem; margin-bottom:10px;">
+  Home &nbsp;›&nbsp; course
+</div>
+
+<h1 style="margin:0 0 14px;">Topics</h1>
+
+<div class="cards">
+  {% for t in topics %}
+    <a class="card" href="/course/{{ t.slug }}">
+      <div class="title">{{ t.title }}</div>
+      <div class="sub">{{ t.lessons_count }} lessons · {{ t.done_steps }}/{{ t.total_steps }} steps</div>
+      <div class="meta">
+        <div class="bar"><div class="fill" style="width: {{ t.pct }}%;"></div></div>
+        <div class="pct">{{ t.pct }}%</div>
+      </div>
+    </a>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,24 @@
+title = "FizzBuzz list"
+topic = "loops"
+difficulty = "medium"
+
+prompt = """
+Write a function fizzbuzz(n) that returns a list of strings for numbers 1..n:
+- "FizzBuzz" if divisible by 3 and 5
+- "Fizz" if divisible by 3
+- "Buzz" if divisible by 5
+- otherwise the number as a string
+"""
+
+starter_code = """
+def fizzbuzz(n):
+    # TODO
+    pass
+"""
+
+tests = """
+assert fizzbuzz(1) == ["1"]
+assert fizzbuzz(5) == ["1","2","Fizz","4","Buzz"]
+assert fizzbuzz(15)[-1] == "FizzBuzz"
+"""
+

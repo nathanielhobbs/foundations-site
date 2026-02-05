@@ -1,0 +1,18 @@
+slug = "tuples/medium/sort_by_second/problem_001"
+title = "Sort by second value"
+topic = "tuples"
+difficulty = "medium"
+
+prompt = """
+Write `sort_by_second(pairs)` that returns a new list of tuples sorted by the second element.
+"""
+
+starter_code = """
+def sort_by_second(pairs):
+    # TODO
+    pass
+"""
+
+tests = """
+assert sort_by_second([(6, 9), (7, 8), (4, 8), (0, 1), (8, 4), (5, 1)]) == [(0, 1), (5, 1), (8, 4), (7, 8), (4, 8), (6, 9)]
+"""

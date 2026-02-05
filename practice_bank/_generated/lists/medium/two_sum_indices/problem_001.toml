@@ -1,0 +1,20 @@
+slug = "lists/medium/two_sum_indices/problem_001"
+title = "Two Sum (indices)"
+topic = "lists"
+difficulty = "medium"
+
+prompt = """
+Given `nums` and `target`, return a tuple `(i, j)` such that `nums[i] + nums[j] == target` and `i != j`.
+Assume exactly one solution exists. Return smaller index first.
+"""
+
+starter_code = """
+def two_sum(nums, target):
+    # TODO
+    pass
+"""
+
+tests = """
+assert two_sum([2, 7, 11, 15], 9) == (0, 1)
+assert two_sum([3, 2, 4], 6) == (1, 2)
+"""

@@ -1,0 +1,20 @@
+slug = "dicts/hard/most_common/problem_001"
+title = "Most common key"
+topic = "dicts"
+difficulty = "hard"
+
+prompt = """
+Write `most_common(d)` that returns the key with the largest value.
+If tied, return the lexicographically smallest key.
+"""
+
+starter_code = """
+def most_common(d):
+    # TODO
+    pass
+"""
+
+tests = """
+assert most_common({'a': 5, 'b': 1, 'c': 3}) == 'a'
+assert most_common({"a":1,"b":1}) == "a"
+"""

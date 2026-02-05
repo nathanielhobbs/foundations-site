@@ -1,0 +1,20 @@
+slug = "conditionals/easy/is_even/problem_001"
+title = "Is even?"
+topic = "conditionals"
+difficulty = "easy"
+
+prompt = """
+Write `is_even(n)` that returns True if n is even, otherwise False.
+"""
+
+starter_code = """
+def is_even(n):
+    # TODO
+    pass
+"""
+
+tests = """
+assert is_even(20) == True
+assert is_even(0) is True
+assert is_even(3) is False
+"""

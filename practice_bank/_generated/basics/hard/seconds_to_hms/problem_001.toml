@@ -1,0 +1,20 @@
+slug = "basics/hard/seconds_to_hms/problem_001"
+title = "Seconds to (h, m, s)"
+topic = "basics"
+difficulty = "hard"
+
+prompt = """
+Write `seconds_to_hms(total)` that returns a tuple `(hours, minutes, seconds)`.
+"""
+
+starter_code = """
+def seconds_to_hms(total):
+    # TODO
+    pass
+"""
+
+tests = """
+assert seconds_to_hms(7164) == (1, 59, 24)
+assert seconds_to_hms(0) == (0, 0, 0)
+assert seconds_to_hms(60) == (0, 1, 0)
+"""

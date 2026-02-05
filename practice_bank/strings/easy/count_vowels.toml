@@ -1,0 +1,21 @@
+title = "Count vowels"
+topic = "strings"
+difficulty = "easy"
+
+prompt = """
+Write a function count_vowels(s) that returns how many vowels are in s.
+Count a, e, i, o, u (both lowercase and uppercase).
+"""
+
+starter_code = """
+def count_vowels(s):
+    # TODO
+    pass
+"""
+
+tests = """
+assert count_vowels("hello") == 2
+assert count_vowels("AEIOU") == 5
+assert count_vowels("xyz") == 0
+"""
+

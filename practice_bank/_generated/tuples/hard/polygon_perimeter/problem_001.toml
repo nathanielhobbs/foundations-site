@@ -1,0 +1,20 @@
+slug = "tuples/hard/polygon_perimeter/problem_001"
+title = "Polygon perimeter"
+topic = "tuples"
+difficulty = "hard"
+
+prompt = """
+Write `perimeter(points)` that returns the perimeter of a polygon given a list of `(x, y)` points in order.
+Connect the last point back to the first. Return a float.
+"""
+
+starter_code = """
+def perimeter(points):
+    # TODO
+    pass
+"""
+
+tests = """
+out = perimeter([(0, 0), (3, 0), (3, 4)])
+assert abs(out - (12.0)) < 1e-9
+"""

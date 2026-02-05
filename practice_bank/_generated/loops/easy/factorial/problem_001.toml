@@ -1,0 +1,20 @@
+slug = "loops/easy/factorial/problem_001"
+title = "Factorial"
+topic = "loops"
+difficulty = "easy"
+
+prompt = """
+Write `factorial(n)` that returns `n!` using a loop. Assume `n >= 0`.
+"""
+
+starter_code = """
+def factorial(n):
+    # TODO
+    pass
+"""
+
+tests = """
+assert factorial(3) == 6
+assert factorial(0) == 1
+assert factorial(1) == 1
+"""

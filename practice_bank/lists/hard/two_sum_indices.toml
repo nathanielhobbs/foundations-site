@@ -1,0 +1,27 @@
+title = "Two Sum (indices)"
+topic = "lists"
+difficulty = "hard"
+
+prompt = """
+Given a list of integers nums and an integer target,
+return a tuple (i, j) such that nums[i] + nums[j] == target and i != j.
+
+You may assume exactly one solution exists.
+Return the pair with the smaller index first.
+
+Example:
+nums=[2,7,11,15], target=9 -> (0,1)
+"""
+
+starter_code = """
+def two_sum(nums, target):
+    # TODO
+    pass
+"""
+
+tests = """
+assert two_sum([2,7,11,15], 9) == (0,1)
+assert two_sum([3,2,4], 6) == (1,2)
+assert two_sum([3,3], 6) == (0,1)
+"""
+

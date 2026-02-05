@@ -1,0 +1,684 @@
+{% extends "base.html" %}
+{% block title %}Practice Problems{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+  .controls{
+    display:flex; gap:12px; flex-wrap:wrap; align-items:end;
+    margin: 10px 0 14px 0;
+  }
+  .controls label{ display:flex; flex-direction:column; gap:6px; font-size:.95rem; }
+  .controls select, .controls input{
+    padding:8px 10px; border-radius:10px;
+    border:1px solid var(--panel-border,#d0d7de);
+    background: var(--panel-bg, transparent);
+    color: var(--text, inherit);
+    min-width: 160px;
+  }
+
+  .toprow{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .stats{ opacity:.75; font-size:.95rem; }
+
+  .grid{
+    display:grid;
+    gap:12px;
+  }
+  .grid.cols2{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.cols3{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	@media (max-width: 980px){
+	  #viewWrap{ grid-template-columns: 1fr !important; }
+	  #listPane{ display:none !important; }
+	  #previewPane{ display:none !important; }
+	  .grid.cols3{ grid-template-columns: 1fr; }
+	}
+
+  @media (max-width: 980px){ .grid.cols2, .grid.cols3{ grid-template-columns: 1fr; } }
+
+  .card{
+    border:1px solid var(--panel-border,#d0d7de);
+    border-radius:14px;
+    padding:12px;
+    background: var(--panel-bg, transparent);
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    min-height: 110px;
+  }
+  .card a.title{
+    font-weight:700;
+    text-decoration:none;
+    color: var(--text, inherit);
+  }
+  .meta{
+    display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+    font-size:.92rem;
+    opacity:.85;
+  }
+  .pill{
+    border:1px solid var(--panel-border,#d0d7de);
+    border-radius:999px;
+    padding:3px 8px;
+    font-size:.86rem;
+    opacity:1; 
+  }
+  .pill.easy{ }
+  .pill.medium{ }
+  .pill.hard{ }
+
+  .row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    margin-top:auto;
+  }
+  .status{
+    font-size:.92rem;
+    opacity:.85;
+  }
+  .done{ color: #16a34a; font-weight:600; }
+  .notdone{ opacity:.75; }
+
+  .btn{
+    padding:8px 10px;
+    border-radius:12px;
+    border:1px solid var(--panel-border,#d0d7de);
+    background: var(--panel-bg, transparent);
+    color: var(--text, inherit);
+    cursor:pointer;
+  }
+  .btn.primary{
+    border-color: var(--accent, #2563eb);
+  }
+
+	.topiclinks{
+	  display:flex; gap:8px; flex-wrap:wrap;
+	  margin: 10px 0 12px 0;
+	}
+	.tchip{
+	  display:inline-flex;
+	  align-items:center;
+	  gap:6px;
+	  border:1px solid var(--panel-border,#d0d7de);
+	  border-radius:999px;
+	  padding:6px 10px;
+	  text-decoration:none;
+	  color: var(--text, inherit);
+	  background: var(--panel-bg, transparent);
+	  font-size:.9rem;
+	}
+	.tchip.active{
+	  border-color: var(--accent, #2563eb);
+	  box-shadow: 0 0 0 2px rgba(37,99,235,.12) inset;
+	  font-weight:600;
+	}
+
+   .btn{
+    padding:8px 10px;
+    border-radius:12px;
+    border:1px solid var(--panel-border,#d0d7de);
+    background: var(--panel-bg, transparent);
+    color: var(--text, inherit);
+    cursor:pointer;
+  }
+
+  /* make primary actually look primary */
+  .btn.primary{
+    background: var(--accent, #2563eb);
+    color: #fff;
+    border-color: var(--accent, #2563eb);
+  }
+  .btn.primary:hover{ filter: brightness(0.96); }
+
+  /* subtle “stands out but not loud” */
+  .btn.soft{
+    border-color: rgba(37,99,235,.35);
+    background: rgba(37,99,235,.08);
+  }
+
+  /* list buttons */
+  .list-item{
+    text-align:left;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    width:100%;
+  }
+  .list-item.active{
+    border-color: var(--accent, #2563eb);
+    background: rgba(37,99,235,.08);
+    box-shadow: 0 0 0 2px rgba(37,99,235,.12) inset;
+  }
+  .list-item .lt{
+    display:flex;
+    gap:8px;
+    align-items:baseline;
+    flex-wrap:wrap;
+  }
+  .muted2{ opacity:.7; }
+
+  /* markdown-ish preview styling */
+  .doc p{ margin: 8px 0; }
+  .doc pre{
+    background: var(--block-code-bg, rgba(0,0,0,.04));
+    color: var(--text, inherit);
+    padding: 10px 12px;
+    border-radius: 12px;
+    overflow:auto;
+    border: 1px solid var(--panel-border,#d0d7de);
+  }
+  .doc code{
+    background: var(--inline-code-bg, rgba(0,0,0,.05));
+    color: var(--text, inherit);
+    padding: 2px 6px;
+    border-radius: 8px;
+  }
+  
+  #grid{ grid-column: 1 / -1; }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Practice Problems</h1>
+<div id="stats" class="stats">Loading…</div>
+
+
+<div class="toprow">
+	<div style="display:flex; gap:10px; flex-wrap:wrap;">
+	  <span id="continueMountTop">
+	    <button class="btn primary" id="continueBtn" type="button">Continue</button>
+	  </span>
+	  <button class="btn soft" id="toggleViewBtn" type="button">Toggle list/grid</button>
+	</div>
+</div>
+
+<div class="topiclinks" id="topicLinks">
+  <a class="tchip" data-topic="" href="{{ url_for('practice.practice_index') }}">All</a>
+  {% for t in topics %}
+    <a class="tchip" data-topic="{{ t }}" href="{{ url_for('practice.practice_index') }}?topic={{ t|urlencode }}">{{ t }}</a>
+  {% endfor %}
+</div>
+
+
+<div class="controls">
+	  <label>
+	  Sort
+	  <select id="sortBy">
+	    <option value="title">title</option>
+	    <option value="topic">topic</option>
+	    <option value="difficulty">difficulty</option>
+	    <option value="status">status</option>
+	  </select>
+	</label>
+  <label>
+    Topic
+    <select id="topicFilter">
+      <option value="">All</option>
+      {% for t in topics %}
+        <option value="{{ t }}">{{ t }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    Difficulty
+    <select id="diffFilter">
+      <option value="">All</option>
+      <option value="easy">easy</option>
+      <option value="medium">medium</option>
+      <option value="hard">hard</option>
+    </select>
+  </label>
+
+  <label style="flex:1; min-width:220px;">
+    Search
+    <input id="searchBox" placeholder="title…" />
+  </label>
+
+</div>
+
+<div id="viewWrap" style="display:grid; grid-template-columns: 360px 1fr; gap:12px;">
+  <!-- left list (only used in list mode) -->
+  <div id="listPane" class="card" style="padding:10px; display:none;">
+	  <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:8px;">
+	  <div style="font-weight:700;">Practice Problems</div>
+	  <span id="continueMountList"></span>
+	</div>
+
+    <div id="listItems" style="display:flex; flex-direction:column; gap:6px;"></div>
+  </div>
+
+  <!-- right content -->
+  <div>
+    <div id="previewPane" class="card" style="display:none;">
+      <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+        <div>
+          <div id="pvTitle" style="font-weight:800; font-size:1.1rem;">Select a problem</div>
+          <div id="pvMeta" class="meta" style="margin-top:6px;"></div>
+        </div>
+	<a id="pvOpen" class="btn primary" href="#" style="white-space:nowrap;">Open</a>
+      </div>
+      <div id="pvStatus" class="status" style="margin-top:10px;">—</div>
+      <div id="pvDesc" class="doc" style="margin-top:12px;"></div>
+    </div>
+
+    <div id="grid" class="grid cols3" style="margin-top:12px;">
+      {% for p in problems %}
+      <div class="card"
+           data-slug="{{ p.slug }}"
+           data-topic="{{ p.topic }}"
+           data-diff="{{ p.difficulty }}"
+           data-title="{{ p.title|lower }}"
+           data-titlepretty="{{ p.title }}"
+	   data-prompt='{{ p.prompt|tojson|e }}'>
+	   <!-- data-prompt="{{ p.prompt|replace('\n',' ')|truncate(160, True)|e }}" -->
+        <a class="title" href="/practice/{{ p.slug }}">{{ p.title }}</a>
+
+        <div class="meta">
+          <span class="pill">{{ p.topic }}</span>
+          <span class="pill {{ p.difficulty }}">{{ p.difficulty }}</span>
+        </div>
+
+        <div class="row">
+          <div class="status" data-status>—</div>
+	  <a class="btn soft" href="/practice/{{ p.slug }}">Open</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+<script>
+(function(){
+  const topic = document.getElementById('topicFilter');
+  const diff = document.getElementById('diffFilter');
+  const search = document.getElementById('searchBox');
+  const grid = document.getElementById('grid');
+  const cards = Array.from(grid.querySelectorAll('.card'));
+
+  // progress map: slug -> {attempts, completed_at}
+  let progress = {};
+	for (const c of cards){
+	  c.querySelectorAll('a').forEach(a=>{
+	    a.addEventListener('click', ()=> savePlaylist(), { passive: true });
+	  });
+	}
+  const stats = document.getElementById('stats');
+
+	const pvDesc = document.getElementById('pvDesc');
+
+	let selectedSlug = sessionStorage.getItem("practice:selectedSlug") || null;
+
+	function visibleCards(){
+	  return cards.filter(c => c.style.display !== 'none');
+	}
+
+	function promptFromCard(card){
+	  try { return JSON.parse(card.dataset.prompt || "\"\""); }
+	  catch(e){ return card.dataset.prompt || ""; }
+	}
+
+	//list-grid logic
+	const VIEW_KEY = "practice:viewMode"; // "grid" or "list"
+	const viewWrap = document.getElementById("viewWrap");
+
+	function setView(mode){
+	  const listPane = document.getElementById("listPane");
+	  const previewPane = document.getElementById("previewPane");
+
+	  if(mode === "list"){
+	    if(viewWrap) viewWrap.style.gridTemplateColumns = "360px 1fr";
+	    listPane.style.display = "";
+	    previewPane.style.display = "";
+	    grid.style.display = "none";
+	  }else{
+	    if(viewWrap) viewWrap.style.gridTemplateColumns = "1fr";
+	    listPane.style.display = "none";
+	    previewPane.style.display = "none";
+	    grid.style.display = "";
+	  }
+
+	  // move the single Continue button between mounts
+	  const cbtn = document.getElementById("continueBtn");
+	  const mount = document.getElementById(mode === "list" ? "continueMountList" : "continueMountTop");
+	  if (cbtn && mount && cbtn.parentElement !== mount) mount.appendChild(cbtn);
+
+	  localStorage.setItem(VIEW_KEY, mode);
+
+	  if(mode === "list"){
+	    rebuildList();
+	  }
+	}
+
+
+
+	// sorting + list rebuild + preview
+	const sortBy = document.getElementById("sortBy");
+
+	const BASE = "{{ url_for('practice.practice_index') }}";
+
+	function buildQuery(overrides={}){
+	  const p = new URLSearchParams();
+	  const t = (overrides.topic ?? topic.value ?? "").trim();
+	  const d = (overrides.difficulty ?? diff.value ?? "").trim();
+	  const q = (overrides.q ?? search.value ?? "").trim();
+	  const s = (overrides.sort ?? sortBy.value ?? "").trim();
+
+	  if(t) p.set("topic", t);
+	  if(d) p.set("difficulty", d);
+	  if(q) p.set("q", q);
+	  if(s) p.set("sort", s);
+
+	  const qs = p.toString();
+	  return qs ? `${BASE}?${qs}` : BASE;
+	}
+
+	function setActiveTopicLinks(){
+	  const cur = (topic.value || "").trim();
+	  document.querySelectorAll("#topicLinks .tchip").forEach(a=>{
+	    const t = (a.dataset.topic || "").trim();
+	    a.classList.toggle("active", t === cur);
+	  });
+	}
+
+	function updateTopicLinkHrefs(){
+	  document.querySelectorAll("#topicLinks .tchip").forEach(a=>{
+	    const t = (a.dataset.topic || "").trim();
+	    a.href = buildQuery({ topic: t });
+	  });
+	}
+
+	function syncUrl(){
+	  const u = buildQuery();
+	  window.history.replaceState({}, "", u);
+	  setActiveTopicLinks();
+	  updateTopicLinkHrefs();
+	}
+
+	function initFromUrl(){
+	  const params = new URLSearchParams(window.location.search);
+
+	  const t = (params.get("topic") || "").trim();
+	  const d = (params.get("difficulty") || "").trim();
+	  const q = (params.get("q") || "").trim();
+	  const s = (params.get("sort") || "").trim();
+
+	  if(t) topic.value = t;
+	  if(d) diff.value = d;
+	  if(q) search.value = q;
+
+	  if(s){
+	    sortBy.value = s;
+	  }else{
+	    // default behavior:
+	    // - on a topic page: easy -> hard
+	    // - otherwise: group by topic (and within topic easy->hard)
+	    sortBy.value = t ? "difficulty" : "topic";
+	  }
+
+	  setActiveTopicLinks();
+	  updateTopicLinkHrefs();
+	}
+
+
+	function difficultyRank(d){
+	  return (d === "easy") ? 1 : (d === "medium") ? 2 : 3;
+	}
+	function statusRank(slug){
+	  const p = progress[slug];
+	  if(p && p.completed_at) return 2;   // completed last
+	  if(p) return 1;                    // started
+	  return 0;                          // not started first
+	}
+
+	function sortCards(arr){
+	  const key = sortBy.value;
+	  return arr.slice().sort((a,b)=>{
+	    if(key === "title"){
+	      return a.dataset.title.localeCompare(b.dataset.title);
+	    }
+	    if(key === "topic"){
+		const t = a.dataset.topic.localeCompare(b.dataset.topic);
+		const d = difficultyRank(a.dataset.diff) - difficultyRank(b.dataset.diff);
+		return t || d || a.dataset.title.localeCompare(b.dataset.title);
+	    }
+	    if(key === "difficulty"){
+	      const d = difficultyRank(a.dataset.diff) - difficultyRank(b.dataset.diff);
+	      return d || a.dataset.title.localeCompare(b.dataset.title);
+	    }
+	    if(key === "status"){
+	      const s = statusRank(a.dataset.slug) - statusRank(b.dataset.slug);
+	      return s || difficultyRank(a.dataset.diff) - difficultyRank(b.dataset.diff);
+	    }
+	    return 0;
+	  });
+	}
+
+	function rebuildGridOrder(){
+	  const visible = cards.filter(c => c.style.display !== "none");
+	  const sorted = sortCards(visible);
+	  for(const c of sorted) grid.appendChild(c);
+	}
+
+	function setPreview(card){
+	  if(!card) return;
+	  const slug = card.dataset.slug;
+
+	  document.getElementById("pvTitle").textContent = card.dataset.titlepretty;
+	  document.getElementById("pvMeta").innerHTML =
+	    `<span class="pill">${card.dataset.topic}</span> <span class="pill ${card.dataset.diff}">${card.dataset.diff}</span>`;
+	  document.getElementById("pvOpen").href = "/practice/" + slug;
+
+	  const p = progress[slug];
+	  const pvStatus = document.getElementById("pvStatus");
+	  if(p && p.completed_at) pvStatus.innerHTML = `<span class="done">✅ Completed</span> • attempts: ${p.attempts ?? 0}`;
+	  else if(p) pvStatus.innerHTML = `<span class="notdone">Not completed</span> • attempts: ${p.attempts ?? 0}`;
+	  else pvStatus.innerHTML = `<span class="notdone">Not started</span>`;
+		const md = promptFromCard(card) || "";
+		const pvDesc = document.getElementById("pvDesc");
+		if (pvDesc){
+		  if (window.marked) pvDesc.innerHTML = marked.parse(md);
+		  else pvDesc.textContent = md;
+		}
+			
+
+	}
+
+	function updateActiveList(){
+	  document.querySelectorAll('#listItems .list-item').forEach(b=>{
+	    b.classList.toggle('active', b.dataset.slug === selectedSlug);
+	  });
+	}
+
+	function rebuildList(){
+	  const listItems = document.getElementById("listItems");
+	  if(!listItems) return;
+
+	  const vis = visibleCards();
+	  listItems.innerHTML = "";
+
+	  // keep selection valid
+	  if(!selectedSlug || !vis.some(c => c.dataset.slug === selectedSlug)){
+	    selectedSlug = vis[0]?.dataset.slug || null;
+	  }
+
+	  for (const c of vis){
+	    const b = document.createElement("button");
+	    b.type = "button";
+	    b.className = "btn list-item" + (c.dataset.slug === selectedSlug ? " active" : "");
+	    b.dataset.slug = c.dataset.slug;
+
+	    b.innerHTML = `
+	      <span class="lt">
+		<span>${c.dataset.titlepretty}</span>
+		<span class="muted2">(${c.dataset.topic})</span>
+	      </span>
+	      <span class="muted2">${c.dataset.diff}</span>
+	    `;
+
+	    b.addEventListener("click", ()=>{
+	      selectedSlug = c.dataset.slug;
+	      sessionStorage.setItem("practice:selectedSlug", selectedSlug);
+	      setPreview(c);
+	      updateActiveList();
+	    });
+
+	    listItems.appendChild(b);
+	  }
+
+	  // fill preview from selection
+	  const sel = vis.find(c => c.dataset.slug === selectedSlug);
+	  if(sel) setPreview(sel);
+	  updateActiveList();
+	}
+
+
+	setView(localStorage.getItem(VIEW_KEY) || "grid");
+
+	document.getElementById("toggleViewBtn").addEventListener("click", ()=>{
+	  const mode = (localStorage.getItem(VIEW_KEY) || "grid") === "grid" ? "list" : "grid";
+	  setView(mode);
+	  rebuildList(); // defined below
+	});
+	 
+
+  function matchesFilters(card){
+    const t = topic.value;
+    const d = diff.value;
+    const q = search.value.trim().toLowerCase();
+    const okTopic = !t || card.dataset.topic === t;
+    const okDiff  = !d || card.dataset.diff === d;
+    const okQ     = !q || card.dataset.title.includes(q);
+    return okTopic && okDiff && okQ;
+  }
+
+	function apply(){
+	  for(const c of cards){
+	    const show = matchesFilters(c);
+	    c.style.display = show ? "" : "none";
+	  }
+	  rebuildGridOrder();
+	  rebuildList();
+	  updateStats();
+	  syncUrl();
+	}
+	 
+
+	function visibleSlugs(){
+	  return cards
+	    .filter(c => c.style.display !== "none")
+	    .map(c => c.dataset.slug);
+	}
+
+	function savePlaylist(){
+	  try{
+	    const visible = cards.filter(c => c.style.display !== "none");
+	    const sorted = sortCards(visible);
+	    localStorage.setItem("practice:lastList", JSON.stringify(sorted.map(c=>c.dataset.slug)));
+	  }catch(e){}
+	}
+
+
+
+
+  function updateStats(){
+    const visible = cards.filter(c => c.style.display !== "none");
+    const total = visible.length;
+    let done = 0;
+    for(const c of visible){
+      const slug = c.dataset.slug;
+      if(progress[slug] && progress[slug].completed_at) done++;
+    }
+    stats.textContent = `Showing ${total} problems • Completed ${done}`;
+  }
+
+  function renderProgress(){
+    for(const c of cards){
+      const slug = c.dataset.slug;
+      const st = c.querySelector('[data-status]');
+      const p = progress[slug];
+      if(p && p.completed_at){
+        st.innerHTML = `<span class="done">✅ Completed</span> • attempts: ${p.attempts ?? 0}`;
+      } else if(p){
+        st.innerHTML = `<span class="notdone">Not completed</span> • attempts: ${p.attempts ?? 0}`;
+      } else {
+        st.innerHTML = `<span class="notdone">Not started</span>`;
+      }
+    }
+    updateStats();
+    rebuildGridOrder();
+    rebuildList();
+  }
+
+  async function loadProgress(){
+    try{
+      const r = await fetch("/api/practice/progress");
+      if(r.status === 401){
+        stats.textContent = "Log in to track progress.";
+        return;
+      }
+      const j = await r.json();
+      if(j.ok){
+        progress = j.progress || {};
+        renderProgress();
+      } else {
+        stats.textContent = "Could not load progress.";
+      }
+    }catch(e){
+      stats.textContent = "Could not load progress.";
+    }
+  }
+
+	document.getElementById("continueBtn").addEventListener("click", ()=>{
+	  const visible = cards.filter(c => c.style.display !== "none");
+	  const sorted = sortCards(visible);
+	  try{ localStorage.setItem("practice:lastList", JSON.stringify(sorted.map(c=>c.dataset.slug))); }catch(e){}
+
+	  for(const c of sorted){
+	    const slug = c.dataset.slug;
+	    if(!(progress[slug] && progress[slug].completed_at)){
+	      window.location.href = "/practice/" + slug;
+	      return;
+	    }
+	  }
+	  if(sorted.length) window.location.href = "/practice/" + sorted[0].dataset.slug;
+	});
+
+
+  topic.addEventListener('change', apply);
+  diff.addEventListener('change', apply);
+  search.addEventListener('input', apply);
+  sortBy.addEventListener("change", apply);
+
+	const params = new URLSearchParams(window.location.search);
+	if(params.get("topic")) topic.value = params.get("topic");
+	if(params.get("difficulty")) diff.value = params.get("difficulty");
+	if(params.get("q")) search.value = params.get("q");
+	if(params.get("sort")) sortBy.value = params.get("sort");
+
+	function syncUrl(){
+	  const p = new URLSearchParams();
+	  if(topic.value) p.set("topic", topic.value);
+	  if(diff.value) p.set("difficulty", diff.value);
+	  if(search.value.trim()) p.set("q", search.value.trim());
+	  if(sortBy.value) p.set("sort", sortBy.value);
+	  const newUrl = window.location.pathname + "?" + p.toString();
+	  window.history.replaceState({}, "", newUrl);
+	}
+
+
+  initFromUrl();
+  apply();
+  syncUrl();
+  loadProgress();
+  if (localStorage.getItem(VIEW_KEY) === "list") rebuildList();
+})();
+</script>
+{% endblock %}
+

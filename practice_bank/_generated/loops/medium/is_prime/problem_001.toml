@@ -1,0 +1,20 @@
+slug = "loops/medium/is_prime/problem_001"
+title = "Is prime?"
+topic = "loops"
+difficulty = "medium"
+
+prompt = """
+Write `is_prime(n)` that returns True if n is prime, else False. Assume n is an int.
+"""
+
+starter_code = """
+def is_prime(n):
+    # TODO
+    pass
+"""
+
+tests = """
+assert is_prime(72) == False
+assert is_prime(2) is True
+assert is_prime(4) is False
+"""

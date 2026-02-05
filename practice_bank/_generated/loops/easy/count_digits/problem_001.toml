@@ -1,0 +1,20 @@
+slug = "loops/easy/count_digits/problem_001"
+title = "Count digits"
+topic = "loops"
+difficulty = "easy"
+
+prompt = """
+Write `count_digits(n)` that returns how many digits are in the nonnegative integer `n`.
+(For example, `count_digits(0) == 1`.)
+"""
+
+starter_code = """
+def count_digits(n):
+    # TODO
+    pass
+"""
+
+tests = """
+assert count_digits(235612) == 6
+assert count_digits(0) == 1
+"""

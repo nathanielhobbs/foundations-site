@@ -1,0 +1,20 @@
+slug = "numbers/easy/round2/problem_001"
+title = "Round to 2 decimals"
+topic = "numbers"
+difficulty = "easy"
+
+prompt = """
+Write `round2(x)` that returns `x` rounded to 2 decimal places.
+"""
+
+starter_code = """
+def round2(x):
+    # TODO
+    pass
+"""
+
+tests = """
+assert round2(-16.096) == -16.1
+assert round2(1.234) == 1.23
+assert round2(1.235) == 1.24
+"""

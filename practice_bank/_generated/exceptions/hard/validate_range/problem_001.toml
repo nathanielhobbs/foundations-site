@@ -1,0 +1,33 @@
+slug = "exceptions/hard/validate_range/problem_001"
+title = "Validate integer in range"
+topic = "exceptions"
+difficulty = "hard"
+
+prompt = """
+Write `validate_int_in_range(s, lo, hi)`:
+- Convert `s` to int
+- If conversion fails, raise `ValueError`
+- If not in [lo, hi], raise `ValueError`
+- Otherwise return the int
+"""
+
+starter_code = """
+def validate_int_in_range(s, lo, hi):
+    # TODO
+    pass
+"""
+
+tests = """
+assert validate_int_in_range("5", 0, 10) == 5
+try:
+    validate_int_in_range("nope", 0, 10)
+    assert False
+except ValueError:
+    pass
+
+try:
+    validate_int_in_range("99", 0, 10)
+    assert False
+except ValueError:
+    pass
+"""

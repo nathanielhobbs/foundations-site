@@ -1,0 +1,19 @@
+slug = "conditionals/medium/triangle_type/problem_001"
+title = "Triangle type"
+topic = "conditionals"
+difficulty = "medium"
+
+prompt = """
+Write `triangle_type(a, b, c)` that returns 'equilateral', 'isosceles', or 'scalene'. Assume inputs form a valid triangle.
+"""
+
+starter_code = """
+def triangle_type(a, b, c):
+    # TODO
+    pass
+"""
+
+tests = """
+assert triangle_type(10, 7, 4) == 'scalene'
+assert triangle_type(2,2,3) == "isosceles"
+"""

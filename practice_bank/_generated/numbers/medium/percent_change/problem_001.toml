@@ -1,0 +1,19 @@
+slug = "numbers/medium/percent_change/problem_001"
+title = "Percent change"
+topic = "numbers"
+difficulty = "medium"
+
+prompt = """
+Write `percent_change(old, new)` that returns `(new-old)/old` as a float.
+"""
+
+starter_code = """
+def percent_change(old, new):
+    # TODO
+    pass
+"""
+
+tests = """
+out = percent_change(179, 109)
+assert abs(out - (-0.39106145251396646)) < 1e-9
+"""

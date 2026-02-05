@@ -1,0 +1,19 @@
+slug = "cli/easy/has_flag/problem_001"
+title = "Does argv contain a flag?"
+topic = "cli"
+difficulty = "easy"
+
+prompt = """
+Write `has_flag(argv, flag)` that returns True if `flag` is present in the argv list.
+"""
+
+starter_code = """
+def has_flag(argv, flag):
+    # TODO
+    pass
+"""
+
+tests = """
+assert has_flag(['prog.py', '--verbose', '--n', '3'], '--missing') == False
+assert has_flag(['prog.py', '--verbose', '--n', '3'], "--verbose") is True
+"""

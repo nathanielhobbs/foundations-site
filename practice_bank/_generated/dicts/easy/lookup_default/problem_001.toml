@@ -1,0 +1,19 @@
+slug = "dicts/easy/lookup_default/problem_001"
+title = "Dictionary lookup with default"
+topic = "dicts"
+difficulty = "easy"
+
+prompt = """
+Write `lookup(d, key, default)` that returns `d[key]` if present, otherwise `default` (don’t use `dict.get`).
+"""
+
+starter_code = """
+def lookup(d, key, default):
+    # TODO
+    pass
+"""
+
+tests = """
+assert lookup({"a":1,"b":2}, "a", 99) == 1
+assert lookup({"a":1,"b":2}, "z", 99) == 99
+"""

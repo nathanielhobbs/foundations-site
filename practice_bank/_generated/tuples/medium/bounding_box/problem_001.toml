@@ -1,0 +1,18 @@
+slug = "tuples/medium/bounding_box/problem_001"
+title = "Bounding box"
+topic = "tuples"
+difficulty = "medium"
+
+prompt = """
+Write `bounding_box(points)` that returns `(min_x, min_y, max_x, max_y)` for a list of `(x, y)` points.
+"""
+
+starter_code = """
+def bounding_box(points):
+    # TODO
+    pass
+"""
+
+tests = """
+assert bounding_box([(-3, 3), (2, -4), (-5, -4), (-3, 5), (-3, 5), (1, 4), (-4, 1)]) == (-5, -4, 2, 5)
+"""

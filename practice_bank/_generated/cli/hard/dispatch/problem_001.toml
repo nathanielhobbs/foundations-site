@@ -1,0 +1,22 @@
+slug = "cli/hard/dispatch/problem_001"
+title = "Dispatch a subcommand"
+topic = "cli"
+difficulty = "hard"
+
+prompt = """
+Write `dispatch(argv)`:
+- If argv[1] is 'add', return int(argv[2]) + int(argv[3])
+- If argv[1] is 'mul', return int(argv[2]) * int(argv[3])
+Assume argv is valid.
+"""
+
+starter_code = """
+def dispatch(argv):
+    # TODO
+    pass
+"""
+
+tests = """
+assert dispatch(["prog.py","add","2","3"]) == 5
+assert dispatch(["prog.py","mul","4","5"]) == 20
+"""

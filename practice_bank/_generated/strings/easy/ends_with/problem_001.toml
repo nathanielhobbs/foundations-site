@@ -1,0 +1,21 @@
+slug = "strings/easy/ends_with/problem_001"
+title = "Ends with?"
+topic = "strings"
+difficulty = "easy"
+
+prompt = """
+Write `ends_with(s, suffix)` that returns True if `s` ends with `suffix`.
+"""
+
+starter_code = """
+def ends_with(s, suffix):
+    # TODO
+    pass
+"""
+
+tests = """
+assert ends_with('foundation', 'on') == True
+assert ends_with("abc", "c") is True
+assert ends_with("abc", "bc") is True
+assert ends_with("abc", "d") is False
+"""

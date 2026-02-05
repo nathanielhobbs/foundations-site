@@ -1,0 +1,19 @@
+slug = "numbers/easy/abs_diff/problem_001"
+title = "Absolute difference"
+topic = "numbers"
+difficulty = "easy"
+
+prompt = """
+Write `abs_diff(a, b)` that returns `|a - b|`.
+"""
+
+starter_code = """
+def abs_diff(a, b):
+    # TODO
+    pass
+"""
+
+tests = """
+assert abs_diff(79, 39) == 40
+assert abs_diff(5, 5) == 0
+"""

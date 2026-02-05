@@ -1,0 +1,20 @@
+slug = "conditionals/hard/median3/problem_001"
+title = "Median of three"
+topic = "conditionals"
+difficulty = "hard"
+
+prompt = """
+Write `median3(a, b, c)` that returns the middle value (not min, not max). Don’t sort.
+"""
+
+starter_code = """
+def median3(a, b, c):
+    # TODO
+    pass
+"""
+
+tests = """
+assert median3(-1, 5, 3) == 3
+assert median3(1, 2, 3) == 2
+assert median3(3, 1, 2) == 2
+"""

@@ -1,0 +1,20 @@
+slug = "basics/medium/f_to_c/problem_001"
+title = "Fahrenheit to Celsius"
+topic = "basics"
+difficulty = "medium"
+
+prompt = """
+Write `f_to_c(f)` that converts Fahrenheit to Celsius. Return a float.
+"""
+
+starter_code = """
+def f_to_c(f):
+    # TODO
+    pass
+"""
+
+tests = """
+out = f_to_c(88)
+assert abs(out - (31.11111111111111)) < 1e-9
+assert abs(f_to_c(32) - 0) < 1e-9
+"""

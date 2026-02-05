@@ -1,0 +1,19 @@
+slug = "dicts/easy/has_key/problem_001"
+title = "Has key?"
+topic = "dicts"
+difficulty = "easy"
+
+prompt = """
+Write `has_key(d, key)` that returns True if `key` is in `d`, otherwise False.
+"""
+
+starter_code = """
+def has_key(d, key):
+    # TODO
+    pass
+"""
+
+tests = """
+assert has_key({'x': 10, 'y': 20}, 'z') == False
+assert has_key({'x': 10, 'y': 20}, "x") is True
+"""

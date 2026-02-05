@@ -1,0 +1,20 @@
+slug = "exceptions/easy/safe_divide/problem_001"
+title = "Safe divide"
+topic = "exceptions"
+difficulty = "easy"
+
+prompt = """
+Write `safe_divide(a, b)` that returns `a/b` or `None` if division fails.
+"""
+
+starter_code = """
+def safe_divide(a, b):
+    # TODO
+    pass
+"""
+
+tests = """
+assert safe_divide(-17, 1) == -17.0
+assert safe_divide(10, 2) == 5
+assert safe_divide(10, 0) is None
+"""

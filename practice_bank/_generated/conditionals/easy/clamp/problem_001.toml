@@ -1,0 +1,21 @@
+slug = "conditionals/easy/clamp/problem_001"
+title = "Clamp a number"
+topic = "conditionals"
+difficulty = "easy"
+
+prompt = """
+Write `clamp(x, lo, hi)` that returns `x` but forced into the inclusive range `[lo, hi]`.
+"""
+
+starter_code = """
+def clamp(x, lo, hi):
+    # TODO
+    pass
+"""
+
+tests = """
+assert clamp(14, -8, 3) == 3
+assert clamp(5, 0, 10) == 5
+assert clamp(-1, 0, 10) == 0
+assert clamp(999, 0, 10) == 10
+"""

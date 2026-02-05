@@ -1,0 +1,20 @@
+slug = "functions/easy/product_args/problem_001"
+title = "Product of *args"
+topic = "functions"
+difficulty = "easy"
+
+prompt = """
+Write `product(*args)` that returns the product of all numbers. If no args, return 1.
+"""
+
+starter_code = """
+def product(*args):
+    # TODO
+    pass
+"""
+
+tests = """
+assert product(*[9, 9, 1, 6]) == 486
+assert product() == 1
+assert product(5) == 5
+"""

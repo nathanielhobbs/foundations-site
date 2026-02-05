@@ -1,0 +1,18 @@
+slug = "comprehensions/medium/invert_dict/problem_001"
+title = "Invert a dict"
+topic = "comprehensions"
+difficulty = "medium"
+
+prompt = """
+Write `invert(d)` that returns a new dict mapping values to keys. Assume all values are unique.
+"""
+
+starter_code = """
+def invert(d):
+    # TODO
+    pass
+"""
+
+tests = """
+assert invert({'a': 1, 'b': 2, 'c': 3}) == {1: 'a', 2: 'b', 3: 'c'}
+"""

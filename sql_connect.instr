@@ -1,0 +1,2 @@
+psql -U foundations -d postgresql://localhost:5433/foundations_site
+# then password (check .env file)

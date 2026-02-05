@@ -1,0 +1,33 @@
+{
+  "title": "01. Values, Variables, and Types",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. Values, variables, and type()",
+      "kind": "practice",
+      "prompt_file": "01_everything_objects.md",
+      "starter_file": "01_starter.py",
+      "test_glob": "test_step01.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 2,
+      "title": "2. Converting between types",
+      "kind": "practice",
+      "prompt_file": "02_classes_and_instances.md",
+      "starter_file": "02_starter.py",
+      "test_glob": "test_step02.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 3,
+      "title": "3. Common type mistakes",
+      "kind": "practice",
+      "prompt_file": "03_dot_notation_preview.md",
+      "starter_file": "03_starter.py",
+      "test_glob": "test_step03.py",
+      "cmd_hint": "python main.py"
+    }
+  ]
+}

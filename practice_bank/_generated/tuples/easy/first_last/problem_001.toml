@@ -1,0 +1,19 @@
+slug = "tuples/easy/first_last/problem_001"
+title = "First and last character"
+topic = "tuples"
+difficulty = "easy"
+
+prompt = """
+Write `first_last(s)` that returns a tuple `(first, last)`. If `s` is empty, return `('', '')`.
+"""
+
+starter_code = """
+def first_last(s):
+    # TODO
+    pass
+"""
+
+tests = """
+assert first_last('mississippi') == ('m', 'i')
+assert first_last("") == ("", "")
+"""

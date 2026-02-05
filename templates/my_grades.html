@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}My Grades{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:.35rem;">My Grades</h2>
+<div class="muted" style="margin-bottom:10px;">Latest final submission for each homework.</div>
+
+<div class="py-panel" style="padding:12px;">
+  <table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Homework</th>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Submitted</th>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Due</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Late days</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Raw</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Late penalty</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Reopen penalty</th>
+        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--panel-border,#d0d7de);">Final</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15);">
+          <div style="font-weight:700;">{{ r.slug }}</div>
+          <div class="muted">{{ r.title }}</div>
+        </td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15);">{{ r.submitted_at|human_dt or "-" }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15);">{{ r.due_at|human_dt or "-" }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">{{ r.late_days }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">{{ r.score_raw if r.score_raw is not none else "-" }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">{{ "%.0f%%"|format((r.penalty_frac or 0)*100) }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">{{ "%.0f%%"|format((r.reopen_penalty_frac or 0)*100) }}</td>
+        <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right; font-weight:800;">
+          {{ r.score_effective if r.score_effective is not none else "-" }}
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not rows %}
+      <tr><td colspan="8" class="muted" style="padding:10px;">No final submissions yet.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+

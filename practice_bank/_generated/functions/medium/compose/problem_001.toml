@@ -1,0 +1,21 @@
+slug = "functions/medium/compose/problem_001"
+title = "Compose two functions"
+topic = "functions"
+difficulty = "medium"
+
+prompt = """
+Write `compose(f, g)` that returns a new function `h(x)` which computes `f(g(x))`.
+"""
+
+starter_code = """
+def compose(f, g):
+    # TODO
+    pass
+"""
+
+tests = """
+def inc(x): return x+1
+def dbl(x): return 2*x
+h = compose(dbl, inc)   # dbl(inc(x))
+assert h(3) == 8
+"""

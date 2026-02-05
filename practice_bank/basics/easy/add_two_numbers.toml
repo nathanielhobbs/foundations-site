@@ -1,0 +1,20 @@
+slug = "basics/easy/add_two_numbers"
+title = "Add two numbers"
+topic = "basics"
+difficulty = "easy"
+
+prompt = """
+Write a function `add(a, b)` that returns the sum of `a` and `b`.
+"""
+
+starter_code = """
+def add(a, b):
+    # TODO
+    pass
+"""
+
+tests = """
+assert add(2, 3) == 5
+assert add(-1, 1) == 0
+assert add(10, 0) == 10
+"""

@@ -1,0 +1,19 @@
+slug = "strings/medium/title_case/problem_001"
+title = "Title case"
+topic = "strings"
+difficulty = "medium"
+
+prompt = """
+Write `title_case(s)` that capitalizes each word (first letter uppercase, rest lowercase).
+"""
+
+starter_code = """
+def title_case(s):
+    # TODO
+    pass
+"""
+
+tests = """
+assert title_case('foundations of business programming') == 'Foundations Of Business Programming'
+assert title_case("hELLo") == "Hello"
+"""

@@ -1,0 +1,20 @@
+slug = "exceptions/easy/safe_int/problem_001"
+title = "Safe int conversion"
+topic = "exceptions"
+difficulty = "easy"
+
+prompt = """
+Write `safe_int(s)` that returns `int(s)` if possible, otherwise returns `None`.
+"""
+
+starter_code = """
+def safe_int(s):
+    # TODO
+    pass
+"""
+
+tests = """
+assert safe_int('nope') == None
+assert safe_int("10") == 10
+assert safe_int("no") is None
+"""

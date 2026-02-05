@@ -1,0 +1,22 @@
+slug = "strings/hard/run_length_encode/problem_001"
+title = "Run-length encode"
+topic = "strings"
+difficulty = "hard"
+
+prompt = """
+Write `rle(s)` that returns a list of `(char, count)` pairs for consecutive runs.
+
+Example: `rle('aaabbc') -> [('a',3), ('b',2), ('c',1)]`
+"""
+
+starter_code = """
+def rle(s):
+    # TODO
+    pass
+"""
+
+tests = """
+assert rle('a') == [('a', 1)]
+assert rle("") == []
+assert rle("a") == [("a", 1)]
+"""

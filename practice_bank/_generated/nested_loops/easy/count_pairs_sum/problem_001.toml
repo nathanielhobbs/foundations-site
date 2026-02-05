@@ -1,0 +1,18 @@
+slug = "nested_loops/easy/count_pairs_sum/problem_001"
+title = "Count pairs that sum to target"
+topic = "nested_loops"
+difficulty = "easy"
+
+prompt = """
+Write `count_pairs(nums, target)` that counts pairs (i<j) with nums[i]+nums[j]==target.
+"""
+
+starter_code = """
+def count_pairs(nums, target):
+    # TODO
+    pass
+"""
+
+tests = """
+assert count_pairs([1, 0, 5, 1, 8, 3, 4], 15) == 0
+"""

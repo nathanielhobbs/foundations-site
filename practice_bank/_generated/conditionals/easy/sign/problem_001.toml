@@ -1,0 +1,21 @@
+slug = "conditionals/easy/sign/problem_001"
+title = "Sign of a number"
+topic = "conditionals"
+difficulty = "easy"
+
+prompt = """
+Write `sign(x)` that returns -1 if x<0, 0 if x==0, and 1 if x>0.
+"""
+
+starter_code = """
+def sign(x):
+    # TODO
+    pass
+"""
+
+tests = """
+assert sign(5) == 1
+assert sign(-5) == -1
+assert sign(0) == 0
+assert sign(7) == 1
+"""

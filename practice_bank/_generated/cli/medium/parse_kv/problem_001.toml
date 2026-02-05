@@ -1,0 +1,19 @@
+slug = "cli/medium/parse_kv/problem_001"
+title = "Parse key=value args"
+topic = "cli"
+difficulty = "medium"
+
+prompt = """
+Write `parse_kv(argv)` where argv looks like `['prog.py', 'a=1', 'b=two']`.
+Return a dict mapping keys to values as strings.
+"""
+
+starter_code = """
+def parse_kv(argv):
+    # TODO
+    pass
+"""
+
+tests = """
+assert parse_kv(['prog.py', 'a=1', 'b=two', 'c=3']) == {'a': '1', 'b': 'two', 'c': '3'}
+"""

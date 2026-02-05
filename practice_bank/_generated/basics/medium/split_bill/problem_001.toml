@@ -1,0 +1,19 @@
+slug = "basics/medium/split_bill/problem_001"
+title = "Split a bill"
+topic = "basics"
+difficulty = "medium"
+
+prompt = """
+Write `split_bill(total, people)` that returns how much each person pays (a float).
+"""
+
+starter_code = """
+def split_bill(total, people):
+    # TODO
+    pass
+"""
+
+tests = """
+out = split_bill(18, 2)
+assert abs(out - (9.0)) < 1e-9
+"""

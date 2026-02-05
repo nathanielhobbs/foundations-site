@@ -1,0 +1,33 @@
+{
+  "title": "00. The Python Interpreter (REPL) + Running Scripts",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. REPL vs script: expressions and print()",
+      "kind": "practice",
+      "prompt_file": "01_repl_vs_script.md",
+      "starter_file": "01_starter.py",
+      "test_glob": "test_step01.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 2,
+      "title": "2. Code runs top-to-bottom",
+      "kind": "practice",
+      "prompt_file": "02_top_to_bottom.md",
+      "starter_file": "02_starter.py",
+      "test_glob": "test_step02.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 3,
+      "title": "3. Reading errors: NameError and TypeError",
+      "kind": "practice",
+      "prompt_file": "03_reading_errors.md",
+      "starter_file": "03_starter.py",
+      "test_glob": "test_step03.py",
+      "cmd_hint": "python main.py"
+    }
+  ]
+}

@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}My Participation{% endblock %}
+
+{% block content %}
+<style>
+  .muted { opacity: .75; }
+
+  .part-wrap{ max-width: 1100px; }
+  .part-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom: 10px; }
+  .chips{ display:flex; gap:8px; flex-wrap:wrap; }
+  .chip{
+    border:1px solid rgba(127,127,127,.35);
+    border-radius:999px;
+    padding:.25rem .6rem;
+    font-size:.9rem;
+    background: rgba(127,127,127,.08);
+  }
+
+  .card{
+    border:1px solid rgba(127,127,127,.25);
+    border-radius: 14px;
+    background: rgba(127,127,127,.06);
+    padding: 14px;
+    margin: 12px 0;
+  }
+
+  .cal-top{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .legend{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:.9rem; }
+  .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; vertical-align:middle; }
+  .dot.on{ background:#16a34a; }
+  .dot.off{ background: rgba(127,127,127,.5); }
+
+  .cal{
+    margin-top: 10px;
+    display:grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .dow{
+    font-size:.85rem;
+    opacity:.8;
+    padding: 0 2px;
+  }
+  .day{
+    border:1px solid rgba(127,127,127,.25);
+    border-radius: 12px;
+    min-height: 54px;
+    padding: 8px 10px;
+    background: rgba(127,127,127,.05);
+    position: relative;
+    overflow:hidden;
+  }
+  .day .num{ font-weight:700; font-size:.95rem; }
+  .day .sub{ font-size:.8rem; opacity:.8; margin-top:2px; }
+  .day.on{
+    border-color: rgba(22,163,74,.55);
+    background: rgba(22,163,74,.12);
+  }
+  .day.today{
+    outline: 2px solid rgba(78,161,243,.55);
+    outline-offset: 0px;
+  }
+  .day.blank{
+    border-color: transparent;
+    background: transparent;
+  }
+  .day:hover{
+    transform: translateY(-1px);
+    transition: transform .08s ease;
+  }
+
+  details.part-details summary{
+    cursor:pointer;
+    user-select:none;
+    font-weight:700;
+    margin-bottom: 8px;
+  }
+
+  table.part-table{ width:100%; border-collapse:collapse; }
+  table.part-table th, table.part-table td{ text-align:left; padding:8px; border-bottom:1px solid rgba(127,127,127,.22); }
+</style>
+
+<div class="part-wrap">
+  <div class="part-head">
+    <div>
+      <h2 style="margin:0 0 .25rem 0;">My Participation</h2>
+      <div class="muted">{{ netid }} · Section {{ section }} · last 30 days</div>
+    </div>
+    <div class="chips">
+      <span class="chip" id="chipCount">— counted</span>
+      <span class="chip" id="chipStreak">— day streak</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cal-top">
+      <div style="font-weight:700;">Calendar</div>
+      <div class="legend">
+        <span><span class="dot on"></span> counted</span>
+        <span><span class="dot off"></span> not counted</span>
+      </div>
+    </div>
+
+    <div class="cal" id="calDow"></div>
+    <div class="cal" id="calGrid"></div>
+  </div>
+
+  <details class="part-details card">
+    <summary>Details (list)</summary>
+
+    <table class="part-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.day }}</td>
+          <td>
+            {% if r.did %}
+              <span style="font-weight:700; color:#16a34a;">✓ counted</span>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+</div>
+
+<script>
+(function(){
+  const rows = {{ rows|tojson }};
+  // Expect r.day like "YYYY-MM-DD"
+  const didByDay = new Map(rows.map(r => [String(r.day), !!r.did]));
+
+  const DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const calDow = document.getElementById("calDow");
+  const calGrid = document.getElementById("calGrid");
+
+  // Render DOW header
+  calDow.style.gridTemplateColumns = "repeat(7, minmax(0, 1fr))";
+  calDow.innerHTML = DOW.map(d => `<div class="dow">${d}</div>`).join("");
+
+  function ymd(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const da = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${da}`;
+  }
+
+  // Build last 30 days range ending today (local)
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - 29);
+
+  // We want a grid aligned to Monday.
+  // JS getDay(): Sun=0..Sat=6. Convert to Mon=0..Sun=6:
+  const startDow = (start.getDay() + 6) % 7;
+  const gridStart = new Date(start);
+  gridStart.setDate(gridStart.getDate() - startDow);
+
+  const days = [];
+  // 6 weeks max is plenty for 30-day window
+  for (let i=0; i<42; i++){
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    days.push(d);
+  }
+
+  // Render grid
+  calGrid.innerHTML = days.map(d => {
+    const key = ymd(d);
+    const inRange = (d >= start && d <= today);
+    if (!inRange) return `<div class="day blank"></div>`;
+
+    const did = didByDay.get(key) || false;
+    const isToday = (d.getTime() === today.getTime());
+    const cls = ["day", did ? "on" : "", isToday ? "today" : ""].filter(Boolean).join(" ");
+    const pretty = d.toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" });
+    return `
+      <div class="${cls}" title="${pretty}">
+        <div class="num">${d.getDate()}</div>
+        <div class="sub">${did ? "✓ counted" : "—"}</div>
+      </div>
+    `;
+  }).join("");
+
+  // Summary chips
+  const counted = rows.filter(r => r.did).length;
+  document.getElementById("chipCount").textContent = `${counted} / ${rows.length} counted`;
+
+  // Streak (count backwards from today while did==true)
+  let streak = 0;
+  for (let i=rows.length-1; i>=0; i--){
+    if (rows[i].did) streak++;
+    else break;
+  }
+  document.getElementById("chipStreak").textContent = `${streak} day streak`;
+})();
+</script>
+{% endblock %}

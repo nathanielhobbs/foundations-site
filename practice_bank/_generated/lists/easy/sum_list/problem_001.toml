@@ -1,0 +1,20 @@
+slug = "lists/easy/sum_list/problem_001"
+title = "Sum a list (no sum())"
+topic = "lists"
+difficulty = "easy"
+
+prompt = """
+Write `sum_list(nums)` that returns the sum of the numbers in the list. (Don’t use `sum()`.)
+"""
+
+starter_code = """
+def sum_list(nums):
+    # TODO
+    pass
+"""
+
+tests = """
+assert sum_list([9, -3, -7, -8, -2, 0]) == -11
+assert sum_list([]) == 0
+assert sum_list([5]) == 5
+"""

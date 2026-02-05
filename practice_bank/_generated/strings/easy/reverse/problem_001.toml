@@ -1,0 +1,20 @@
+slug = "strings/easy/reverse/problem_001"
+title = "Reverse a string"
+topic = "strings"
+difficulty = "easy"
+
+prompt = """
+Write `reverse(s)` that returns the reversed string.
+"""
+
+starter_code = """
+def reverse(s):
+    # TODO
+    pass
+"""
+
+tests = """
+assert reverse('banana') == 'ananab'
+assert reverse("") == ""
+assert reverse("a") == "a"
+"""

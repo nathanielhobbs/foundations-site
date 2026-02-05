@@ -1,0 +1,19 @@
+slug = "dicts/easy/count_chars/problem_001"
+title = "Count characters"
+topic = "dicts"
+difficulty = "easy"
+
+prompt = """
+Write `count_chars(s)` that returns a dict mapping each character to its count.
+"""
+
+starter_code = """
+def count_chars(s):
+    # TODO
+    pass
+"""
+
+tests = """
+assert count_chars('banana') == {'b': 1, 'a': 3, 'n': 2}
+assert count_chars("") == {}
+"""

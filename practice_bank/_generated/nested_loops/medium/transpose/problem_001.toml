@@ -1,0 +1,18 @@
+slug = "nested_loops/medium/transpose/problem_001"
+title = "Transpose a matrix"
+topic = "nested_loops"
+difficulty = "medium"
+
+prompt = """
+Write `transpose(m)` where `m` is a list-of-lists matrix. Return the transposed matrix.
+"""
+
+starter_code = """
+def transpose(m):
+    # TODO
+    pass
+"""
+
+tests = """
+assert transpose([[1, 2, 3], [4, 5, 6]]) == [[1, 4], [2, 5], [3, 6]]
+"""

@@ -1,0 +1,19 @@
+slug = "lists/easy/max_list/problem_001"
+title = "Max in a list (no max())"
+topic = "lists"
+difficulty = "easy"
+
+prompt = """
+Write `max_list(nums)` that returns the largest value. Assume `nums` is non-empty. (Don’t use `max()`.)
+"""
+
+starter_code = """
+def max_list(nums):
+    # TODO
+    pass
+"""
+
+tests = """
+assert max_list([-15, -6, -14, 4, -3, 9, 20]) == 20
+assert max_list([1]) == 1
+"""

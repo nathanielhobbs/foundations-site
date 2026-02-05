@@ -1,0 +1,19 @@
+slug = "basics/easy/full_name/problem_001"
+title = "Make a full name"
+topic = "basics"
+difficulty = "easy"
+
+prompt = """
+Write `full_name(first, last)` that returns a string like `Grace Hopper`.
+"""
+
+starter_code = """
+def full_name(first, last):
+    # TODO
+    pass
+"""
+
+tests = """
+assert full_name('Grace', 'Hopper') == 'Grace Hopper'
+assert full_name("A", "B") == "A B"
+"""

@@ -1,0 +1,18 @@
+slug = "dicts/medium/merge_add/problem_001"
+title = "Merge dicts by adding values"
+topic = "dicts"
+difficulty = "medium"
+
+prompt = """
+Write `merge_add(d1, d2)` that returns a dict with keys from both. If a key is in both, add the values.
+"""
+
+starter_code = """
+def merge_add(d1, d2):
+    # TODO
+    pass
+"""
+
+tests = """
+assert merge_add({'a': 1, 'b': 2}, {'b': 5, 'c': 7}) == {'a': 1, 'b': 7, 'c': 7}
+"""

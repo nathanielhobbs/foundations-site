@@ -1,0 +1,18 @@
+slug = "comprehensions/medium/filter_dict/problem_001"
+title = "Filter a dict by value"
+topic = "comprehensions"
+difficulty = "medium"
+
+prompt = """
+Write `filter_ge(d, threshold)` that keeps only items where value >= threshold (try a dict comprehension).
+"""
+
+starter_code = """
+def filter_ge(d, threshold):
+    # TODO
+    pass
+"""
+
+tests = """
+assert filter_ge({'a': 1, 'b': 5, 'c': 2, 'd': 9}, 2) == {'b': 5, 'c': 2, 'd': 9}
+"""

@@ -1,0 +1,19 @@
+slug = "dicts/medium/frequency/problem_001"
+title = "Frequency dictionary"
+topic = "dicts"
+difficulty = "medium"
+
+prompt = """
+Write `freq(items)` that returns a dict mapping each item to how many times it occurs.
+"""
+
+starter_code = """
+def freq(items):
+    # TODO
+    pass
+"""
+
+tests = """
+assert freq(['cat', 'dog', 'cat', 'cat', 'bird']) == {'cat': 3, 'dog': 1, 'bird': 1}
+assert freq([]) == {}
+"""

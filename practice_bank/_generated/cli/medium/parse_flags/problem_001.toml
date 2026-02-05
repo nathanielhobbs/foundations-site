@@ -1,0 +1,26 @@
+slug = "cli/medium/parse_flags/problem_001"
+title = "Parse argv flags (simulated)"
+topic = "cli"
+difficulty = "medium"
+
+prompt = """
+Write `parse_flags(argv)` that parses:
+
+- `--n <int>` (required)
+- `--verbose` (optional)
+
+Return a dict like `{"n": 5, "verbose": True}`.
+
+`argv` will look like `["prog.py", "--n", "5", "--verbose"]`.
+"""
+
+starter_code = """
+def parse_flags(argv):
+    # TODO
+    pass
+"""
+
+tests = """
+argv = ['prog.py', '--n', '3', '--verbose']
+assert parse_flags(argv) == {'n': 3, 'verbose': True}
+"""

@@ -1,0 +1,19 @@
+slug = "functions/easy/format_kwargs/problem_001"
+title = "Format **kwargs"
+topic = "functions"
+difficulty = "easy"
+
+prompt = """
+Write `format_kwargs(**kwargs)` that returns a string like `a=1,b=2` with keys sorted alphabetically.
+"""
+
+starter_code = """
+def format_kwargs(**kwargs):
+    # TODO
+    pass
+"""
+
+tests = """
+assert format_kwargs(b=2, a=1) == "a=1,b=2"
+assert format_kwargs() == ""
+"""

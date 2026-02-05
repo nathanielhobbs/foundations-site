@@ -1,0 +1,19 @@
+slug = "lists/easy/count_occurrences/problem_001"
+title = "Count occurrences"
+topic = "lists"
+difficulty = "easy"
+
+prompt = """
+Write `count_occurrences(nums, target)` that returns how many times `target` appears in `nums`.
+"""
+
+starter_code = """
+def count_occurrences(nums, target):
+    # TODO
+    pass
+"""
+
+tests = """
+assert count_occurrences([3, 2, 3, 3, 2, 3, 1, 5, 2, 5], 3) == 4
+assert count_occurrences([], 3) == 0
+"""

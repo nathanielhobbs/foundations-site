@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Diff {{ slug }} / {{ netid }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .muted{ color:#6b7280; font-size:.95rem; }
+  .diffbox{
+    border:1px solid var(--panel-border,#d0d7de);
+    border-radius:14px;
+    padding:12px;
+    background: rgba(127,127,127,.06);
+    overflow:auto;
+    max-height: calc(100vh - 260px);
+  }
+  .diffbox pre{
+    margin:0;
+    white-space: pre;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .diff-hdr{ color: rgba(100,100,100,.95); font-weight:700; }
+  .diff-hunk{ color: rgba(37,99,235,.95); font-weight:700; }
+  .diff-add{ background: rgba(34,197,94,.18); }
+  .diff-del{ background: rgba(239,68,68,.18); }
+  .diff-ctx{ color: inherit; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:.35rem;">Diff: {{ slug }} / {{ netid }}</h2>
+
+<div class="muted" style="margin-bottom:10px;">
+  Latest final id: <b>{{ latest.id }}</b>
+  {% if base %}
+    · Reopened-from id: <b>{{ base.id }}</b>
+  {% endif %}
+</div>
+
+<div style="display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:12px;">
+  <a class="py-btn" href="/admin/grades?slug={{ slug }}">Back to grades</a>
+  <a class="py-btn" href="/hw/{{ slug }}">Open homework page</a>
+</div>
+
+{% if note %}
+  <div class="py-panel" style="padding:12px; margin-bottom:12px;">
+    <div class="muted">{{ note }}</div>
+  </div>
+{% endif %}
+
+{% if diff_html is not none %}
+  <div class="diffbox">
+    <pre>{{ diff_html }}</pre>
+  </div>
+{% endif %}
+
+{% endblock %}
+
