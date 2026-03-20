@@ -1,0 +1,51 @@
+{
+  "title": "04. The String Type (str)",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. Creating strings and basic cleanup",
+      "kind": "practice",
+      "prompt_file": "01_strings_basics.md",
+      "starter_file": "01_starter.py",
+      "test_glob": "test_step01.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 2,
+      "title": "2. Indexing, slicing, and empty strings",
+      "kind": "practice",
+      "prompt_file": "02_index_slice.md",
+      "starter_file": "02_starter.py",
+      "test_glob": "test_step02.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 3,
+      "title": "3. String methods: lower/upper/replace/count",
+      "kind": "practice",
+      "prompt_file": "03_methods.md",
+      "starter_file": "03_starter.py",
+      "test_glob": "test_step03.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 4,
+      "title": "4. Split, join, and formatting with f-strings",
+      "kind": "practice",
+      "prompt_file": "04_split_join_format.md",
+      "starter_file": "04_starter.py",
+      "test_glob": "test_step04.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 5,
+      "title": "5. Practice: slugify (URL-friendly titles)",
+      "kind": "practice",
+      "prompt_file": "05_slugify.md",
+      "starter_file": "05_starter.py",
+      "test_glob": "test_step05.py",
+      "cmd_hint": "python main.py"
+    }
+  ]
+}

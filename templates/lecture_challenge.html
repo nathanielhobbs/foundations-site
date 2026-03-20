@@ -272,6 +272,13 @@
   margin-top: 8px; font-size: .8rem; color: rgb(var(--muted));
 }
 
+/* Preserve newlines in the prompt text */
+.prompt { white-space: pre-wrap; }
+
+/* Optional: nicer spacing if markdown produces <p> tags */
+.prompt p { margin: 0 0 .75rem 0; }
+
+
 </style>
 
 {% endblock %}
@@ -284,22 +291,36 @@
   <div id="studentCountdown" class="text-sm opacity-80 mb-2"></div>
 	<script>
 	(function(){
-	  // server should render ch.close_at (ISO) if present
 	  const closeISO = {{ (ch.close_at.isoformat() if ch.close_at else 'null')|tojson }};
 	  const box = document.getElementById('studentCountdown');
-	  function pad(n){ return n<10 ? '0'+n : n; }
+	  const DEFAULT_MS = 5 * 60 * 1000;
+
+	  function pad(n){ return n < 10 ? '0' + n : '' + n; }
+
+	  // Pick an end time once.
+	  let end = null;
+	  if (closeISO) {
+	    const d = new Date(closeISO);
+	    if (!isNaN(d.getTime())) end = d;
+	  }
+	  if (!end) end = new Date(Date.now() + DEFAULT_MS);
+
 	  function tick(){
-	    if (!closeISO){ box.textContent=''; return; }
-	    const end = new Date(closeISO);
-	    const ms  = end - new Date();
-	    if (ms <= 0){ box.textContent = 'Challenge closed'; return; }
-	    const s = Math.floor(ms/1000), m = Math.floor(s/60), r = s%60;
+	    const ms = end - new Date();
+	    if (ms <= 0){
+	      box.textContent = 'Challenge closed';
+	      return;
+	    }
+	    const s = Math.floor(ms/1000);
+	    const m = Math.floor(s/60);
+	    const r = s % 60;
 	    box.textContent = `Time remaining: ${m}:${pad(r)}`;
 	    setTimeout(tick, 250);
 	  }
 	  tick();
 	})();
 	</script>
+	
 
   <article class="prompt markdown-body">{{ ch.prompt_md|safe }}</article>
 
@@ -465,6 +486,21 @@ const cm = CodeMirror(document.getElementById('editor'), {
   indentUnit: 4,
   viewportMargin: Infinity,
 });
+let participationSent = false;
+
+async function pingParticipation(){
+  if (participationSent) return;
+  participationSent = true;
+  try{
+    await fetch("/api/participation/ping", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ source: "lecture", slug })
+    });
+  }catch(e){}
+}
+
+cm.on("change", ()=>{ pingParticipation(); });
 new MutationObserver((muts) => {
   for (const m of muts) if (m.attributeName === 'data-theme') cm.setOption('theme', cmThemeFromPage());
 }).observe(document.documentElement, { attributes: true });
@@ -498,6 +534,7 @@ spawnWorker();
 async function runPython(code) {
   const id = ++REQ_ID;
   const w = PY_WORKER || spawnWorker();
+  pingParticipation();
   const reply = new Promise((resolve) => {
     const handler = (e) => { if (e.data && e.data.id === id) { w.removeEventListener("message", handler); resolve(e.data); } };
     w.addEventListener("message", handler);
@@ -562,6 +599,7 @@ function fetchWithTimeout(url, opts={}, ms=12000){
 
 document.getElementById('submitBtn').addEventListener('click', async ()=>{
   setStatus('Submitting…')
+  pingParticipation();
   try {
     const { stdout, runtime_ms } = await runPython(cm.getValue());
     const payload = {

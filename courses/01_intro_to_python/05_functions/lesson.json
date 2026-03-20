@@ -1,0 +1,51 @@
+{
+  "title": "05. Functions",
+  "is_open": true,
+  "steps": [
+    {
+      "id": 1,
+      "title": "1. Defining and calling functions",
+      "kind": "practice",
+      "prompt_file": "01_def_call_return.md",
+      "starter_file": "01_starter.py",
+      "test_glob": "test_step01.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 2,
+      "title": "2. Parameters, defaults, and keyword arguments",
+      "kind": "practice",
+      "prompt_file": "02_params_defaults.md",
+      "starter_file": "02_starter.py",
+      "test_glob": "test_step02.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 3,
+      "title": "3. Return values vs side effects (lists)",
+      "kind": "practice",
+      "prompt_file": "03_side_effects.md",
+      "starter_file": "03_starter.py",
+      "test_glob": "test_step03.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 4,
+      "title": "4. Raising errors for bad input",
+      "kind": "practice",
+      "prompt_file": "04_raising_errors.md",
+      "starter_file": "04_starter.py",
+      "test_glob": "test_step04.py",
+      "cmd_hint": "python main.py"
+    },
+    {
+      "id": 5,
+      "title": "5. Practice: combining helpers",
+      "kind": "practice",
+      "prompt_file": "05_practice_helpers.md",
+      "starter_file": "05_starter.py",
+      "test_glob": "test_step05.py",
+      "cmd_hint": "python main.py"
+    }
+  ]
+}

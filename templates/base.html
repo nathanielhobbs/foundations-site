@@ -6,8 +6,67 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
-    :root { --bg: white; --text: black; --link: #0645AD; }
-    [data-theme="dark"] { --bg: #121212; --text: #e0e0e0; --link: #4ea1f3; }
+
+  :root{
+    --bg:#ffffff;
+    --text:#111111;
+    --link:#0645AD;
+
+    --panel-bg:#ffffff;
+    --panel-text:var(--text);
+    --panel-border:#d0d7de;
+
+    --muted:#6b7280;
+
+    --code-bg: rgba(127,127,127,.10);
+    --inline-code-bg: rgba(127,127,127,.14);
+
+    --input-bg:#ffffff;
+    --input-border:#bbb;
+
+    --table-header-bg: rgba(0,0,0,.04);
+  }
+
+  [data-theme="dark"]{
+    --bg:#121212;
+    --text:#e6e6e6;
+    --link:#4ea1f3;
+
+    --panel-bg:#0f1115;
+    --panel-text:#e6e6e6;
+    --panel-border:#2a2f3a;
+
+    --muted: rgba(230,230,230,.70);
+
+    --code-bg: rgba(255,255,255,.08);
+    --inline-code-bg: rgba(255,255,255,.12);
+
+    --input-bg: rgba(255,255,255,.06);
+    --input-border:#3a4252;
+
+    --table-header-bg: rgba(255,255,255,.08);
+  }
+
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; margin: 0; padding: 0; }
+  a { color: var(--link); }
+
+  .muted{ color: var(--muted); }
+
+  /* Inputs (args box, etc) */
+  input, select, textarea{
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--input-border);
+  }
+
+  /* Tables (fix the home page header) */
+  table{ border-collapse: collapse; }
+  th, td{ border: 1px solid var(--panel-border); }
+  th{ background: var(--table-header-bg); color: var(--text); }
+
+  input::placeholder, textarea::placeholder{ color: var(--muted); }
+
+
     body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; margin: 0; padding: 0; }
     a { color: var(--link); }
     nav { background: var(--bg); border-bottom: 1px solid #ccc; padding: 0.6em 1em; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
@@ -23,6 +82,13 @@
     .breadcrumbs { font-size: 0.9em; margin: 0.5em 1em; color: gray; }
     .breadcrumbs a { text-decoration: none; color: var(--link); }
     .breadcrumbs span { margin: 0 0.3em; }
+    /* tighten breadcrumbs area */
+	.breadcrumbs, nav.breadcrumbs, .crumbs, .bread{
+	  margin: 6px 0 10px 0 !important;
+	}
+	h1, h2{
+	  margin-top: 10px;
+	}
 
     /* Centered modal */
     .modal { position: fixed; z-index: 2000; inset: 0; background-color: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; }
@@ -32,10 +98,28 @@
     .close:hover { color: red; }
     .login-btn { border: 1px solid #0073e6; background: #0073e6; color: white; border-radius: 5px; padding: 0.4em 0.9em; margin-left: 1em; cursor: pointer; }
     .login-btn:hover { background: #005bb5; }
+    .page-actions{
+	  position: fixed;
+	  top: 12px;
+	  right: 12px;
+	  z-index: 9999;
+	  display: flex;
+	  gap: 8px;
+	}
+
+	/* Zen mode hides chrome */
+	.zen-mode #siteHeader,
+	.zen-mode nav,
+	.zen-mode .breadcrumbs{
+	  display: none !important;
+	}
+	.zen-mode main{ padding-top: 12px !important; }
+
+
   </style>
   {% block extra_head %}{% endblock %}
 </head>
-<body class="{{body_class or '' }}>
+<body class="{{body_class|default('')}}">
   <div id="siteHeader">
     <div style="display: flex; align-items: center;">
       <span>Foundations of Business Programming</span>
@@ -43,10 +127,13 @@
         <span style="font-weight: normal; font-size: 1em; margin-left: 1.5em;">
           Section:
           <select id="sectionSelect" style="margin-left: 0.5em;">
+            <option value="42" {% if session.get("section") == 1 %}selected{% endif %}>42</option>
+	    <!--
             <option value="1" {% if session.get("section") == 1 %}selected{% endif %}>1</option>
             <option value="2" {% if session.get("section") == 2 %}selected{% endif %}>2</option>
             <option value="5" {% if session.get("section") == 5 %}selected{% endif %}>5</option>
             <option value="6" {% if session.get("section") == 6 %}selected{% endif %}>6</option>
+	    -->
           </select>
         </span>
 	{% elif session.get("netid") %}
@@ -75,12 +162,14 @@
 
 
     </div>
-    <div class="nav-right">
-      {% if not session.get("netid") %}
-        <button id="openLogin" class="login-btn">Login</button>
-      {% endif %}
-      <button id="themeToggle" aria-label="Toggle theme">🌞</button>
-    </div>
+    <!--
+    <div id="pageActions" class="page-actions">
+       <button id="themeToggle" class="py-btn" type="button" title="Light/Dark (Ctrl+Shift+L)">🌞/🌜</button>
+       <button id="zenToggle" class="py-btn" type="button" title="Zen mode (Ctrl+Shift+Z)">Zen 🧘</button>
+     </div>
+    -->
+
+    
   </div>
 
   <nav>
@@ -88,25 +177,29 @@
     <div class="nav-links">
       <a href="/"><i data-lucide="home"></i>Home</a>
       {% if session.get("netid") %}
-        <a href="/course"><i data-lucide="book-open"></i>Lessons</a>
         <a href="/hw"><i data-lucide="book-open"></i>Homeworks</a>
+        <a href="/course"><i data-lucide="book-open"></i>Lessons</a>
         <!--
         <a href="/assignments"><i data-lucide="book-open"></i>Assignments</a>
         <a href="/weekly_challenge"><i data-lucide="target"></i>Weekly Challenge</a>
         <a href="/chat{% if session.get('is_admin') %}{% else %}/{{ session['section'] }}{% endif %}"><i data-lucide="message-circle"></i>Live Chat</a>
-        <a href="/notebooks"><i data-lucide="file-text"></i>Notebooks</a>
         -->
+        <a href="/notebooks"><i data-lucide="file-text"></i>Notebooks</a>
+	<a href="/practice"><i data-lucide="dumbbell"></i>Practice Problems</a>
         <a href="/lecture/browse"><i data-lucide="swords"></i>Lecture Challenges</a>
       {% endif %}
+      <!--
       <a href="/tutorials"><i data-lucide="graduation-cap"></i>Tutorials</a>
-      <a href="/sandbox"><i data-lucide="code"></i>Python Sandbox</a>
+      -->
+      <a href="/my_participation"><i data-lucide="hand"></i>Participation</a>
+      <a href="/sandbox"><i data-lucide="square-terminal"></i>Python Sandbox</a>
+      <!--
       <a href="/about"><i data-lucide="info"></i>About</a>
+      -->
       {% if session.get("is_admin") %}
+          <a href="/admin/grades"><i data-lucide="binary"></i>HW Grades</a>
 	  <a href="/admin/lecture/new"><i data-lucide="plus-circle"></i>New Lecture Challenge</a>
-	  {% if session.get("is_admin") %}
 	  <a href="/admin/lecture/"><i data-lucide="list"></i>Lecture Challenges</a>
-{% endif %}
-
 	{% endif %}
 
     </div>
@@ -136,9 +229,10 @@
     </div>
   </div>
 
-  <div id="siteWrapper" style="padding: 1em;">
+  <main id="siteWrapper" style="padding: 1em;">
+    {{breadcumbs|safe}} 
     {% block content %}{% endblock %}
-  </div>
+  </main>
 
   <script>
   (function () {
@@ -171,7 +265,77 @@
   })();
   </script>
 
+  <script>
+(function(){
+  function setChromeVar(){
+    const header = document.getElementById("siteHeader");
+    const nav    = document.querySelector("nav");
+    const crumbs = document.querySelector(".breadcrumbs");
+    const pad = 24; // breathing room
 
+    const h = (header ? header.offsetHeight : 0)
+            + (nav ? nav.offsetHeight : 0)
+            + (crumbs ? crumbs.offsetHeight : 0)
+            + pad;
+
+    document.documentElement.style.setProperty("--app-chrome", h + "px");
+  }
+
+  function setZen(on){
+    document.documentElement.classList.toggle("zen-mode", !!on);
+    localStorage.setItem("zen", on ? "1" : "0");
+    setChromeVar();
+    // CodeMirror needs a refresh after layout changes
+    window.dispatchEvent(new Event("splitter:changed"));
+    setTimeout(()=>window.dispatchEvent(new Event("splitter:changed")), 50);
+  }
+
+  function toggleTheme(){
+    const root = document.documentElement;
+    const cur = root.getAttribute("data-theme") || "light";
+    const next = (cur === "dark") ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
+    setTimeout(()=>window.dispatchEvent(new Event("splitter:changed")), 0);
+  }
+
+  document.addEventListener("DOMContentLoaded", ()=>{
+    // Restore theme
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+
+    // Restore zen
+    setZen(localStorage.getItem("zen") === "1");
+
+    // Measure chrome now + after load (fonts/layout)
+    setChromeVar();
+    setTimeout(setChromeVar, 50);
+    window.addEventListener("resize", setChromeVar);
+
+    // Buttons
+    const themeBtn = document.getElementById("themeToggle");
+    const zenBtn   = document.getElementById("zenToggle");
+    if (themeBtn) themeBtn.addEventListener("click", toggleTheme);
+    if (zenBtn) zenBtn.addEventListener("click", ()=> setZen(!document.documentElement.classList.contains("zen-mode")));
+
+    // Shortcuts
+    document.addEventListener("keydown", (e)=>{
+      // Ctrl+Shift+Z => zen
+      if (e.ctrlKey && e.shiftKey && (e.key === "Z" || e.key === "z")){
+        e.preventDefault();
+        setZen(!document.documentElement.classList.contains("zen-mode"));
+      }
+      // Ctrl+Shift+L => theme
+      if (e.ctrlKey && e.shiftKey && (e.key === "L" || e.key === "l")){
+        e.preventDefault();
+        toggleTheme();
+      }
+    }, {capture:true});
+  });
+})();
+</script>
+
+<!-- 
   <script>
     // Theme toggle
     const themeToggle = document.getElementById("themeToggle");
@@ -185,7 +349,9 @@
       localStorage.setItem("theme", next);
       themeToggle.textContent = next === "dark" ? "🌙" : "🌞";
     });
-
+  </script>
+-->
+  <script>
     // Hamburger
     const hamburger = document.querySelector(".hamburger");
     const navLinks = document.querySelector(".nav-links");

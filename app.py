@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 import glob
 import shlex
+import difflib
+from markupsafe import Markup, escape
 import requests
 import traceback
 from dotenv import load_dotenv
@@ -11,8 +13,9 @@ from flask_socketio import emit, join_room, disconnect
 from extensions import socketio
 from lecture_utils import is_open_now, current_active_lecture_for, student_can_access
 import redis
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+import math
 import json
 import re
 from flask import session as flask_session
@@ -25,24 +28,28 @@ from extensions import db
 import base64
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
-from flask import flash  
+from flask import flash, abort  
 from autograde_lib import run_autograde, ASSIGNMENTS
 from models_homework import HomeworkSubmission
 from docker_grader import run_pytest_in_docker,run_python_in_docker
 from homework_defs import HOMEWORKS
-from models_homework import HomeworkSubmission
 
 BASE_DIR = Path(__file__).resolve().parent
 
 TZ_NAME = "America/New_York"  # or "UTC" if you prefer comparing in UTC
+TZ = ZoneInfo(TZ_NAME)
+
+LATE_PENALTY_PER_DAY = 0.05   # 5% per day late
+MAX_LATE_PENALTY = 1.0        # cap at 100% off
 
 load_dotenv()
 
 SECTION_REPOS = {
-    "1": "foundations-f25-sec1",
-    "2": "foundations-f25-sec2",
-    "5": "foundations-f25-sec5",
-    "6": "foundations-f25-sec6",
+  #  "1": "foundations-f25-sec1",
+  #  "2": "foundations-f25-sec2",
+  #  "5": "foundations-f25-sec5",
+  #  "6": "foundations-f25-sec6",
+  "42": "foundations-s26-sec42",
 }
 
 app = Flask(__name__)
@@ -85,8 +92,14 @@ db.init_app(app)
 from lecture import lecture_bp
 app.register_blueprint(lecture_bp)
 
+from practice import bp as practice_bp, api_bp as practice_api_bp
+app.register_blueprint(practice_bp)
+app.register_blueprint(practice_api_bp)
+
 # Make sure models are imported before create_all()
 from models_lecture import LectureChallenge, LectureSubmission
+from models_practice import PracticeProgress
+
 
 class TutorialState(db.Model):
     __tablename__ = "tutorial_state"
@@ -99,6 +112,9 @@ class TutorialState(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (db.UniqueConstraint("netid", "course", "lesson", name="uq_tutorial_state"),)
+
+def _score_effective(sub: HomeworkSubmission):
+    return sub.score_final_after_reopen if sub.score_final_after_reopen is not None else sub.score_final
 
 
 def _aware_local(dt):
@@ -320,6 +336,69 @@ def get_display_name(netid):
 def save_roster(df):
     df.to_csv(ROSTER_FILE, index=False)
 
+def _parse_due_at(hw: dict):
+    """
+    Accepts HOMEWORKS[slug]["due_at"] as either:
+      - ISO string (preferred), or
+      - "YYYY-MM-DD HH:MM" (assumed TZ local)
+    Returns aware datetime in TZ or None.
+    """
+    s = (hw or {}).get("due_at")
+    if not s:
+        return None
+    s = str(s).strip()
+
+    # ISO first
+    try:
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=TZ)
+        return dt.astimezone(TZ)
+    except Exception:
+        pass
+
+    # "YYYY-MM-DD HH:MM"
+    try:
+        dt = datetime.strptime(s, "%Y-%m-%d %H:%M").replace(tzinfo=TZ)
+        return dt
+    except Exception:
+        return None
+
+
+def _late_info(due_at: datetime | None, submitted_at: datetime):
+    if not due_at:
+        return (0, 0)
+    sec = int(max(0, (submitted_at - due_at).total_seconds()))
+    days = int(math.ceil(sec / 86400)) if sec > 0 else 0
+    return (sec, days)
+
+
+def _score_from_pytest_result(result: dict):
+    passed = int(result.get("passed") or 0)
+    failed = int(result.get("failed") or 0)
+    denom = passed + failed
+    if denom <= 0:
+        return None
+    return 100.0 * (passed / denom)
+
+def _passed_failed_from_submission(sub: HomeworkSubmission):
+    """
+    Return (passed, failed) from stored result_json.
+    Handles missing/old rows safely.
+    """
+    try:
+        j = json.loads(sub.result_json or "{}")
+        passed = int(j.get("passed") or 0)
+        failed = int(j.get("failed") or 0)
+        return passed, failed
+    except Exception:
+        return 0, 0
+
+
+def _penalty_frac_for_late_days(late_days: int):
+    return min(MAX_LATE_PENALTY, max(0.0, late_days * LATE_PENALTY_PER_DAY))
+
+
 def _aware(dt, tz: ZoneInfo):
     """
     Return a timezone-aware datetime in tz.
@@ -396,7 +475,101 @@ def time_page():
     now = datetime.now(ZoneInfo("America/New_York"))
     return render_template("time.html", now=now)
 
-# --- Admin: list all lecture challenges ---
+@app.route("/repl")
+def repl():
+    return render_template("repl.html")
+
+@app.get("/grades")
+def my_grades_page():
+    if not session.get("netid"):
+        return redirect(url_for("login"))  # or your login route
+
+    netid = session["netid"]
+
+    finals = (HomeworkSubmission.query
+        .filter_by(netid=netid, is_final=1)
+        .order_by(HomeworkSubmission.slug.asc(), HomeworkSubmission.created_at.desc())
+        .all())
+
+    # keep only latest final per slug
+    latest = {}
+    for s in finals:
+        if s.slug not in latest:
+            latest[s.slug] = s
+
+    rows = []
+    for slug, s in sorted(latest.items(), key=lambda kv: kv[0]):
+        rows.append({
+            "slug": slug,
+            "title": HOMEWORKS.get(slug, {}).get("title", slug),
+            "submitted_at": s.submitted_at or (s.created_at.isoformat() if s.created_at else None),
+            "due_at": s.due_at,
+            "late_days": s.late_days,
+            "score_raw": s.score_raw,
+            "penalty_frac": s.penalty_frac,
+            "reopen_penalty_frac": s.reopen_penalty_frac,
+            "score_final": s.score_final,
+            "score_effective": _score_effective(s),
+        })
+
+    return render_template("my_grades.html", rows=rows)
+
+@app.get("/admin/grades")
+def admin_grades_page():
+    if not (session.get("netid") and session.get("is_admin")):
+        return "Forbidden", 403
+
+    slug = (request.args.get("slug") or "").strip()
+    section = (request.args.get("section") or "").strip()
+
+    q = HomeworkSubmission.query   # <-- remove .filter_by(is_final=1)
+
+    if slug:
+        q = q.filter_by(slug=slug)
+    if section:
+        try:
+            q = q.filter_by(section=int(section))
+        except Exception:
+            pass
+
+    subs = q.order_by(
+        HomeworkSubmission.slug.asc(),
+        HomeworkSubmission.section.asc(),
+        HomeworkSubmission.netid.asc(),
+        HomeworkSubmission.created_at.desc()
+    ).all()
+
+    # latest submit per (slug, netid)
+    latest = {}
+    for s in subs:
+        k = (s.slug, s.netid)
+        if k not in latest:
+            latest[k] = s
+
+    rows = []
+    for (slug2, netid2), s in sorted(latest.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        rows.append({
+            "id": s.id,
+            "slug": slug2,
+            "title": HOMEWORKS.get(slug2, {}).get("title", slug2),
+            "netid": netid2,
+            "section": s.section,
+            "submitted_at": s.submitted_at or (s.created_at.isoformat() if s.created_at else None),
+            "due_at": s.due_at,
+            "late_days": s.late_days,
+            "score_raw": s.score_raw,
+            "penalty_frac": s.penalty_frac,
+            "reopen_penalty_frac": s.reopen_penalty_frac,
+            "score_final": s.score_final,
+            "score_effective": _score_effective(s),
+
+            # add a simple status for the table
+            "status": ("FINAL" if s.is_final == 1 else ("REOPENED" if s.reopened_at else "OLD")),
+            "reopened_at": s.reopened_at,
+        })
+
+    return render_template("admin_grades.html", rows=rows, slug=slug, section=section, homeworks=HOMEWORKS)
+
 @app.get("/admin/lecture/")
 def admin_lecture_index():
     if not session.get("is_admin"):
@@ -452,8 +625,12 @@ def list_notebooks_from_github(repo, folder="notebooks"):
 
     # contents endpoint (avoid trailing slash when folder == "")
     url = f"https://api.github.com/repos/{GITHUB_NOTES_ORG}/{repo}/contents" + (f"/{folder}" if folder else "")
-    resp = requests.get(url, headers=headers)
+    resp = requests.get(url, headers=headers, timeout=10)
     if resp.status_code != 200:
+        app.logger.warning(
+            "GitHub notebooks failed: org=%s repo=%s folder=%s status=%s body=%s",
+            GITHUB_NOTES_ORG, repo, folder, resp.status_code, resp.text[:200]
+        )
         return []
 
     items = []
@@ -704,6 +881,7 @@ def login():
         if password == app.config.get("ADMIN_PASSWORD", ""):
             session["is_admin"] = True
             session["section"] = None
+            session["admin_view_section"] = int(next(iter(SECTION_REPOS.keys())))
             # --- stamp current login version ---
             session["login_version"] = CURRENT_LOGIN_VERSION
             return redirect(url_for("index"))
@@ -748,8 +926,16 @@ def course_lesson(course, lesson):
                 s["starter_code"] = (root / sc).read_text(encoding="utf-8")
             except FileNotFoundError:
                 s["starter_code"] = ""
-    prompt_md = (root / "prompt.md").read_text(encoding="utf-8")
-    starter = (root / "starter.py").read_text(encoding="utf-8")
+    try:
+        prompt_md = (root / "prompt.md").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        prompt_md = "# Lesson\n\nMissing `prompt.md`."
+
+    try:
+        starter = (root / "starter.py").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        starter = ""
+
 
     st = TutorialState.query.filter_by(netid=session["netid"], course=course, lesson=lesson).first()
     if not st:
@@ -758,6 +944,34 @@ def course_lesson(course, lesson):
         db.session.commit()
 
     progress = json.loads(st.progress_json or "{}")
+
+
+    # Build enriched steps (each step can have its own prompt + starter)
+    steps = []
+    for ss in meta.get("steps", []):
+        sss = dict(ss)
+        pf = sss.get("prompt_file")
+        sf = sss.get("starter_file")
+
+        # prompt per-step (fallback to lesson prompt.md)
+        if pf:
+            try:
+                sss["prompt_md"] = (root / pf).read_text(encoding="utf-8")
+            except FileNotFoundError:
+                sss["prompt_md"] = prompt_md
+        else:
+            sss["prompt_md"] = prompt_md
+
+        # starter per-step (fallback to starter.py)
+        if sf:
+            try:
+                sss["starter_code"] = (root / sf).read_text(encoding="utf-8")
+            except FileNotFoundError:
+                sss["starter_code"] = starter
+        else:
+            sss["starter_code"] = starter
+
+        steps.append(sss)
 
     return render_template(
         "course_lesson.html",
@@ -768,6 +982,175 @@ def course_lesson(course, lesson):
         prompt_md=prompt_md,
         initial_code=st.code,
         progress=progress,
+    )
+
+# --- Simple message relay (Redis Streams) ---
+RELAY_MAX_PAYLOAD = 20_000  # chars
+
+@app.post("/api/relay/<room>/send")
+def api_relay_send(room):
+    if not session.get("netid"):
+        return jsonify({"error": "not_logged_in"}), 401
+
+    data = request.get_json(force=True) or {}
+    sender = (data.get("sender") or "").strip()[:64]
+    to     = (data.get("to") or "").strip()[:64]
+    payload = data.get("payload")
+
+    if not room or len(room) > 64:
+        return jsonify({"error": "bad_room"}), 400
+    if not sender or not to:
+        return jsonify({"error": "missing_sender_or_to"}), 400
+    if payload is None:
+        return jsonify({"error": "missing_payload"}), 400
+
+    payload = str(payload)
+    if len(payload) > RELAY_MAX_PAYLOAD:
+        return jsonify({"error": "payload_too_large"}), 413
+
+    key = f"relay:{room}"
+    ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+    msg_id = r.xadd(key, {"sender": sender, "to": to, "payload": payload, "ts": str(ts)})
+    # Optional trim so rooms don't grow forever
+    r.xtrim(key, maxlen=500, approximate=True)
+
+    return jsonify({"id": msg_id})
+
+
+@app.get("/api/relay/<room>/recv")
+def api_relay_recv(room):
+    if not session.get("netid"):
+        return jsonify({"error": "not_logged_in"}), 401
+
+    after = (request.args.get("after") or "0-0").strip()
+    want_to = (request.args.get("to") or "").strip()[:64]
+
+    if not room or len(room) > 64:
+        return jsonify({"error": "bad_room"}), 400
+    if not want_to:
+        return jsonify({"error": "missing_to"}), 400
+
+    key = f"relay:{room}"
+
+    # read up to N new messages after `after`
+    resp = r.xread({key: after}, count=50, block=0)  # non-blocking (poll from client)
+    if not resp:
+        return jsonify({"msg": None, "cursor": after})
+
+    _stream_key, entries = resp[0]
+    cursor = after
+    found = None
+
+    for msg_id, fields in entries:
+        cursor = msg_id  # advance cursor even if not for us
+        if (fields.get("to") or "") == want_to:
+            found = {
+                "id": msg_id,
+                "sender": fields.get("sender"),
+                "to": fields.get("to"),
+                "payload": fields.get("payload"),
+                "ts": fields.get("ts"),
+            }
+            break
+
+    return jsonify({"msg": found, "cursor": cursor})
+
+@app.route("/crypto/relay")
+def crypto_relay():
+    if not session.get("netid"):
+        return redirect(url_for("login"))
+
+    room = (request.args.get("room") or uuid4().hex[:8]).strip()
+    who  = (request.args.get("who") or "Alice").strip()
+    if who not in ("Alice", "Bob"):
+        who = "Alice"
+
+    other = "Bob" if who == "Alice" else "Alice"
+    base = request.host_url.rstrip("/")
+
+    initial_code = f'''\
+# Open two tabs:
+#  /crypto/relay?room={room}&who=Alice
+#  /crypto/relay?room={room}&who=Bob
+
+from js import fetch, JSON
+#from pyodide.ffi import to_js, run_sync
+from pyodide.ffi import to_js
+import time, urllib.parse, asyncio
+
+ROOM = {room!r}
+ME   = {who!r}
+THEM = {"Bob" if who=="Alice" else "Alice"!r}
+
+def _url(path, params=None):
+    if not params:
+        return path
+    return path + "?" + urllib.parse.urlencode(params)
+
+async def _get(path, params=None):
+    resp = await fetch(_url(path, params))
+    if not resp.ok:
+        raise Exception(f"HTTP {{resp.status}}: " + await resp.text())
+    return await resp.json()
+
+async def _post(path, obj):
+    resp = await fetch(path, method="POST",
+                       headers=to_js({{"Content-Type":"application/json"}}),
+                       body=JSON.stringify(to_js(obj)))
+    if not resp.ok:
+        raise Exception(f"HTTP {{resp.status}}: " + await resp.text())
+    return await resp.json()
+
+_cursor = "0-0"
+
+
+async def send(payload, to=THEM):
+    return await _post(f"/api/relay/{{ROOM}}/send",
+           {{"sender": ME, "to": to, "payload": str(payload)}})
+
+
+async def recv(timeout_s=0):
+    global _cursor
+    end = time.time() + float(timeout_s)
+    while True:
+        j = await _get(f"/api/relay/{{ROOM}}/recv", {{"after": _cursor, "to": ME}})
+        _cursor = j.get("cursor", _cursor)
+        if j.get("msg") is not None:
+            return j["msg"]
+        if timeout_s <= 0 or time.time() >= end:
+            return None
+        await asyncio.sleep(0.25)
+#def send(payload, to=THEM):
+#    return run_sync(_post(f"/api/relay/{{ROOM}}/send",
+#                          {{"sender": ME, "to": to, "payload": str(payload)}}))
+
+#def recv(timeout_s=0):
+#    global _cursor
+#    end = time.time() + float(timeout_s)
+#    while True:
+#        j = run_sync(_get(f"/api/relay/{{ROOM}}/recv", {{"after": _cursor, "to": ME}}))
+#        _cursor = j.get("cursor", _cursor)
+#        if j.get("msg") is not None:
+#            return j["msg"]
+#        if timeout_s <= 0 or time.time() >= end:
+#            return None
+#        time.sleep(0.25)
+
+print("Ready:", ME, "room", ROOM)
+# try:
+# send("ciphertext: 12345")
+# print(recv(10))
+'''
+
+    return render_template(
+        "sandbox.html",
+        body_class="sandbox",
+        course="crypto",
+        lesson="relay",
+        prompt_md="",
+        initial_code=initial_code,
+        default_args="",
     )
 
 @app.post("/api/course/<course>/<lesson>/check")
@@ -809,6 +1192,7 @@ def api_course_check(course, lesson):
 
     return jsonify(res | {"progress": progress})
 
+
 @app.post("/api/course/<course>/<lesson>/progress")
 def api_course_progress(course, lesson):
     if not session.get("netid"):
@@ -841,13 +1225,33 @@ def api_course_run(course, lesson):
     args = data.get("args") or ""
 
     # reuse your docker python runner (it already works)
-    res = run_python_in_docker(code, timeout_s=3, args=shlex.split(args)[:20])
+    try:
+
+        res = run_python_in_docker(code, timeout_s=3, args=shlex.split(args)[:20])
+
+    except Exception as e:
+
+        app.logger.exception("api_course_run failed")
+
+        res = {
+
+            "stdout": "",
+
+            "stderr": f"Server error (run): {e}",
+
+            "cmd_display": "$ python main.py",
+
+            "timeout": False,
+
+            "error": str(e),
+
+        }
 
     # save code draft
     st = TutorialState.query.filter_by(netid=session["netid"], course=course, lesson=lesson).first()
     if st:
         st.code = code
-        st.updated_at = datetime.now(datetime.UTC)
+        st.updated_at = datetime.now(timezone.utc)
         db.session.commit()
 
     return jsonify(res)
@@ -879,8 +1283,40 @@ def list_lessons(course: str):
     return lessons
 
 
+def _pretty_title(slug: str) -> str:
+    return slug.replace("_", " ").replace("-", " ").strip().title()
+
+def _done_steps(progress_json):
+    import json as _json
+    try:
+        d = _json.loads(progress_json or "{}")
+        return sum(1 for v in d.values() if v)
+    except Exception:
+        return 0
+
+def _steps_count_for_lesson(course: str, lesson: str) -> int:
+    import json as _json
+    from pathlib import Path as _Path
+    root = (_Path(BASE_DIR) / "courses" / course / lesson).resolve()
+    try:
+        meta = _json.loads((root / "lesson.json").read_text(encoding="utf-8"))
+        return len(meta.get("steps", []))
+    except Exception:
+        return 0
+
+@app.template_filter("human_dt")
+def human_dt(s):
+    if not s:
+        return ""
+    try:
+        dt = datetime.fromisoformat(s)
+        # Example: Jan 21, 2026 4:06 PM
+        return dt.strftime("%b %d, %Y %-I:%M %p")
+    except Exception:
+        return str(s)
+
 @app.get("/course")
-@app.get("/course/")   # allow trailing slash
+@app.get("/course/")
 def course_root():
     if not session.get("netid"):
         return redirect(url_for("index"))
@@ -889,31 +1325,89 @@ def course_root():
     if not courses_dir.exists():
         abort(404)
 
-    try:
-        course_dirs = sorted(courses_dir.iterdir())
-    except Exception:
-        app.logger.exception("Cannot list courses dir: %s", courses_dir)
-        abort(404)
+    netid = session["netid"]
+    topics = []
 
-    for p in course_dirs:
+    for p in sorted(courses_dir.iterdir()):
         if not p.is_dir():
             continue
+
         lessons = list_lessons(p.name)
-        if lessons:
-            return redirect(url_for("course_index", course=p.name))
+        if not lessons:
+            continue
 
-    abort(404)
+        states = TutorialState.query.filter_by(netid=netid, course=p.name).all()
+        by_lesson = {s.lesson: s for s in states}
 
+        total_steps = 0
+        done_steps = 0
+        for l in lessons:
+            total = _steps_count_for_lesson(p.name, l["slug"])
+            total_steps += total
+            st = by_lesson.get(l["slug"])
+            done_steps += _done_steps(getattr(st, "progress_json", None)) if st else 0
+
+        pct = int(round(100 * done_steps / total_steps)) if total_steps else 0
+        topics.append({
+            "slug": p.name,
+            "title": _pretty_title(p.name),
+            "lessons_count": len(lessons),
+            "done_steps": done_steps,
+            "total_steps": total_steps,
+            "pct": pct,
+        })
+
+    if not topics:
+        abort(404)
+
+    return render_template("courses_index.html", topics=topics)
 
 
 @app.get("/course/<course>")
 def course_index(course):
     if not session.get("netid"):
         return redirect(url_for("index"))
+
+    canonical = course.replace("-", "_")
+    if canonical != course:
+        return redirect(url_for("course_index", course=canonical), code=301)
+    course = canonical
+
     lessons = list_lessons(course)
     if not lessons:
         abort(404)
-    return render_template("course_index.html", course=course, lessons=lessons)
+
+    netid = session["netid"]
+    states = TutorialState.query.filter_by(netid=netid, course=course).all()
+    by_lesson = {s.lesson: s for s in states}
+
+    course_total = 0
+    course_done = 0
+
+    for l in lessons:
+        total = _steps_count_for_lesson(course, l["slug"])
+        st = by_lesson.get(l["slug"])
+        done = _done_steps(getattr(st, "progress_json", None)) if st else 0
+
+        l["total_steps"] = total
+        l["done_steps"] = min(done, total) if total else done
+        l["pct"] = int(round(100 * l["done_steps"] / total)) if total else 0
+
+        course_total += total
+        course_done += l["done_steps"]
+
+    course_pct = int(round(100 * course_done / course_total)) if course_total else 0
+    topic_title = _pretty_title(course)
+
+    return render_template(
+        "course_index.html",
+        course=course,
+        topic_title=topic_title,
+        lessons=lessons,
+        course_total=course_total,
+        course_done=course_done,
+        course_pct=course_pct,
+    )
 
 
 @app.get("/hw")
@@ -923,28 +1417,75 @@ def hw_index():
 
     netid = session["netid"]
     items = []
+
+    submitted_count = 0
+    total_count = len(HOMEWORKS)
+
+    grade_sum = 0.0
+    grade_n = 0
+
     for slug, hw in HOMEWORKS.items():
         latest = (HomeworkSubmission.query
                   .filter_by(slug=slug, netid=netid)
                   .order_by(HomeworkSubmission.created_at.desc())
                   .first())
+
         status = None
         if latest:
-            try:
-                r = json.loads(latest.result_json or "{}")
-                ok = (r.get("exit_code") == 0) and (r.get("failed", 0) == 0)
-                status = {
-                    "ok": bool(ok),
-                    "passed": r.get("passed", 0),
-                    "failed": r.get("failed", 0),
-                    "submitted_at": latest.created_at,
-                }
-            except Exception:
-                status = {"ok": False, "passed": 0, "failed": 0, "submitted_at": latest.created_at}
+            # final score preference
+            final_score = latest.score_final_after_reopen if getattr(latest, "score_final_after_reopen", None) is not None else latest.score_final
 
-        items.append({"slug": slug, "title": hw["title"], "status": status})
+            passed, failed = _passed_failed_from_submission(latest)
+            denom = passed + failed
+            t_pct = (100.0 * passed / denom) if denom else 0.0
+            ok = (latest.is_final == 1)
 
-    return render_template("hw_index.html", items=items)
+
+            if latest.is_final == 1:
+                state = "submitted"
+                submitted_count += 1
+                if final_score is not None:
+                    grade_sum += float(final_score)
+                    grade_n += 1
+            elif getattr(latest, "reopened_at", None):
+                state = "reopened"  # needs resubmit
+            else:
+                state = "draft"
+
+            status = {
+                "state": state,
+                "ok": ok,                 # used for “submitted vs not”
+                "passed": passed,         # template expects these
+                "failed": failed,
+                "pct": t_pct,             # for progress bar per HW
+                "submitted_at": latest.submitted_at or (latest.created_at.isoformat() if latest.created_at else None),
+                "raw": latest.score_raw,
+                "final": final_score,
+                "late_days": latest.late_days,
+                "penalty_frac": latest.penalty_frac,
+                "reopen_penalty_frac": getattr(latest, "reopen_penalty_frac", 0.0),
+            }
+ 
+
+        items.append({
+            "slug": slug,
+            "title": hw["title"],
+            "due_at": hw.get("due_at"),
+            "status": status,
+        })
+
+    submitted_pct = (submitted_count / total_count * 100.0) if total_count else 0.0
+    avg_score = (grade_sum / grade_n) if grade_n else None
+
+    return render_template(
+        "hw_index.html",
+        items=items,
+        submitted_count=submitted_count,
+        total_count=total_count,
+        submitted_pct=submitted_pct,
+        avg_score=avg_score,
+    )
+
 
 
 @app.get("/hw/<slug>")
@@ -956,10 +1497,17 @@ def hw_page(slug):
     if not hw:
         abort(404)
 
-    latest = (HomeworkSubmission.query
-              .filter_by(slug=slug, netid=session["netid"])
-              .order_by(HomeworkSubmission.created_at.desc())
-              .first())
+    netid = session["netid"]
+
+    latest_any = (HomeworkSubmission.query
+        .filter_by(slug=slug, netid=netid)
+        .order_by(HomeworkSubmission.created_at.desc())
+        .first())
+
+    latest_final = (HomeworkSubmission.query
+        .filter_by(slug=slug, netid=netid, is_final=1)
+        .order_by(HomeworkSubmission.created_at.desc())
+        .first())
 
     root = (BASE_DIR / hw["root"]).resolve()
     starter_path = root / "starter.py"
@@ -967,8 +1515,14 @@ def hw_page(slug):
     starter = starter_path.read_text(encoding="utf-8") if starter_path.exists() else ""
     prompt_md = prompt_path.read_text(encoding="utf-8") if prompt_path.exists() else ""
 
-    initial_code = latest.code if latest else starter
-    submitted_at = latest.created_at.isoformat() if latest else None
+    initial_code = (latest_any.code if latest_any else starter)
+
+    # LOCK only if there is a final
+    submitted_at = None
+    if latest_final:
+        submitted_at = latest_final.submitted_at or latest_final.created_at.isoformat()
+
+    reopened_at = latest_any.reopened_at if (latest_any and latest_any.reopened_at) else None
 
     return render_template(
         "homework.html",
@@ -976,7 +1530,88 @@ def hw_page(slug):
         slug=slug,
         initial_code=initial_code,
         submitted_at=submitted_at,
+        reopened_at=reopened_at,      # optional: show banner
         prompt_md=prompt_md,
+    )
+
+
+@app.get("/admin/hw/<slug>/diff")
+def admin_hw_diff(slug):
+    if not (session.get("netid") and session.get("is_admin")):
+        return "Forbidden", 403
+    if slug not in HOMEWORKS:
+        return "Unknown homework", 404
+
+    netid = (request.args.get("netid") or "").strip()
+    if not netid:
+        return "Missing netid", 400
+
+    # latest final (this is what student currently has "on the books")
+    latest = (HomeworkSubmission.query
+        .filter_by(slug=slug, netid=netid, is_final=1)
+        .order_by(HomeworkSubmission.created_at.desc())
+        .first())
+    if not latest:
+        return "No final submission found.", 404
+
+    base = None
+    base_code = None
+
+    # if it came from a reopen, this points back to the “reopened” submission row
+    if latest.reopened_from_id:
+        base = HomeworkSubmission.query.get(int(latest.reopened_from_id))
+
+    # baseline code: prefer saved diff base; fallback to base.code
+    if base:
+        base_code = base.diff_base_code or base.code
+
+    if not base_code:
+        # nothing to diff (either not reopened, or reopen baseline missing)
+        return render_template(
+            "admin_hw_diff.html",
+            slug=slug,
+            netid=netid,
+            latest=latest,
+            base=base,
+            diff_html=None,
+            note="No reopen baseline found for this latest submission (not reopened or diff_base_code missing)."
+        )
+
+    new_code = latest.code or ""
+
+    udiff = list(difflib.unified_diff(
+        base_code.splitlines(),
+        new_code.splitlines(),
+        fromfile=f"{slug}:{netid}:before",
+        tofile=f"{slug}:{netid}:after",
+        lineterm=""
+    ))
+
+    def diff_to_html(lines):
+        out = []
+        for line in lines:
+            cls = "diff-ctx"
+            if line.startswith(("---", "+++")):
+                cls = "diff-hdr"
+            elif line.startswith("@@"):
+                cls = "diff-hunk"
+            elif line.startswith("+") and not line.startswith("+++"):
+                cls = "diff-add"
+            elif line.startswith("-") and not line.startswith("---"):
+                cls = "diff-del"
+            out.append(f'<span class="{cls}">{escape(line)}</span>')
+        return Markup("\n".join(out))
+
+    diff_html = diff_to_html(udiff) if udiff else Markup("")
+
+    return render_template(
+        "admin_hw_diff.html",
+        slug=slug,
+        netid=netid,
+        latest=latest,
+        base=base,
+        diff_html=diff_html,
+        note=None
     )
 
 @app.post("/api/hw/<slug>/run")
@@ -1044,13 +1679,17 @@ def hw_submit(slug):
         action = "check"
 
     netid = session["netid"]
+    # defaults so "check" doesn't crash
+    reopen_penalty_frac = 0.0
+    score_final_after_reopen = None
 
     # enforce one submit
     if action == "submit":
         existing = (HomeworkSubmission.query
-                    .filter_by(slug=slug, netid=netid)
-                    .order_by(HomeworkSubmission.created_at.desc())
-                    .first())
+            .filter_by(slug=slug, netid=netid, is_final=1)
+            .order_by(HomeworkSubmission.created_at.desc())
+            .first())
+
         if existing:
             return jsonify({
                 "error": "already_submitted",
@@ -1080,20 +1719,78 @@ def hw_submit(slug):
     result["cmd_display"] = "$ pytest -q"
 
 
+    #submitted_at = None
+    #submission_id = None
+
+    #if action == "submit":
+    #    sub = HomeworkSubmission(
+    #        slug=slug,
+    #        netid=netid,
+    #        section=session.get("section"),
+    #        code=code,
+    #        result_json=json.dumps(result),
+    #    )
+    #    db.session.add(sub)
+    #    db.session.commit()
+    #    submitted_at = sub.created_at.isoformat()
+    #    submission_id = sub.id
+
+    #return jsonify({
+    #    "title": hw["title"],
+    #    "passed": result["passed"],
+    #    "failed": result["failed"],
+    #    "output": result["output"],
+    #    "submission_id": submission_id,
+    #    "submitted_at": submitted_at,
+    #})
     submitted_at = None
     submission_id = None
 
+    submitted_dt = datetime.now(TZ)
+    due_dt = _parse_due_at(hw)  # hw = HOMEWORKS[slug]
+    late_seconds, late_days = _late_info(due_dt, submitted_dt)
+
+    score_raw = _score_from_pytest_result(result)
+    penalty_frac = _penalty_frac_for_late_days(late_days)  # 0.05/day
+    score_final = None
+    if score_raw is not None:
+        score_final = max(0.0, score_raw * (1.0 - penalty_frac))
+
     if action == "submit":
+        reopen_base = (HomeworkSubmission.query
+            .filter_by(slug=slug, netid=netid)
+            .filter(HomeworkSubmission.reopened_at.isnot(None))
+            .order_by(HomeworkSubmission.created_at.desc())
+            .first())
+
+        reopen_penalty_frac = float(reopen_base.reopen_penalty_frac or 0.0) if reopen_base else 0.0
+
+        score_final_after_reopen = None
+        if score_final is not None:
+            score_final_after_reopen = max(0.0, score_final * (1.0 - reopen_penalty_frac))
         sub = HomeworkSubmission(
             slug=slug,
             netid=netid,
             section=session.get("section"),
             code=code,
             result_json=json.dumps(result),
+
+            is_final=1,
+            due_at=(due_dt.isoformat() if due_dt else None),
+            submitted_at=submitted_dt.isoformat(),
+            late_seconds=late_seconds,
+            late_days=late_days,
+            score_raw=score_raw,
+            penalty_frac=penalty_frac,
+            score_final=score_final,
+
+            # reopen linkage (optional if no reopen happened)
+            reopened_from_id=(reopen_base.id if reopen_base else None),
+            score_final_after_reopen=score_final_after_reopen,
         )
         db.session.add(sub)
         db.session.commit()
-        submitted_at = sub.created_at.isoformat()
+        submitted_at = sub.submitted_at
         submission_id = sub.id
 
     return jsonify({
@@ -1103,7 +1800,215 @@ def hw_submit(slug):
         "output": result["output"],
         "submission_id": submission_id,
         "submitted_at": submitted_at,
+
+        "due_at": (due_dt.isoformat() if due_dt else None),
+        "late_days": late_days,
+        "penalty_frac": penalty_frac,
+        "score_raw": score_raw,
+        "score_final": score_final,
+
+        "reopen_penalty_frac": reopen_penalty_frac,
+        "score_final_after_reopen": score_final_after_reopen,
+        "score_effective": (score_final_after_reopen if score_final_after_reopen is not None else score_final),
+
     })
+
+@app.post("/api/admin/hw/<slug>/rerun")
+def api_admin_hw_rerun(slug):
+    if not (session.get("netid") and session.get("is_admin")):
+        return jsonify({"error": "not_admin"}), 403
+    if slug not in HOMEWORKS:
+        return jsonify({"error": "unknown_homework"}), 404
+
+    data = request.get_json(force=True) or {}
+    netid = (data.get("netid") or "").strip().lower()
+    include_hidden = bool(data.get("include_hidden", False))  # admin toggle
+    use_final = bool(data.get("use_final", True))             # default: latest final
+
+    if not netid:
+        return jsonify({"error": "missing_netid"}), 400
+
+    q = HomeworkSubmission.query.filter_by(slug=slug, netid=netid)
+    if use_final:
+        q = q.filter_by(is_final=1)
+    sub = q.order_by(HomeworkSubmission.created_at.desc()).first()
+    if not sub:
+        return jsonify({"error": "no_submission"}), 404
+
+    root = (BASE_DIR / HOMEWORKS[slug]["root"]).resolve()
+
+    # Reuse the same loader logic as hw_submit (inline a small copy here)
+    files = {"student.py": sub.code or ""}
+    for p in sorted((root / "tests_public").glob("*.py")):
+        files[p.name] = p.read_text(encoding="utf-8")
+    if include_hidden and (root / "tests_hidden").exists():
+        for p in sorted((root / "tests_hidden").glob("*.py")):
+            files[p.name] = p.read_text(encoding="utf-8")
+
+    result = run_pytest_in_docker(files, timeout_s=15)
+    result["cmd_display"] = "$ pytest -q" + (" (with hidden)" if include_hidden else "")
+
+    return jsonify({
+        "slug": slug,
+        "netid": netid,
+        "submission_id": sub.id,
+        "is_final": int(sub.is_final or 0),
+        "ran_hidden": include_hidden,
+        "passed": result.get("passed", 0),
+        "failed": result.get("failed", 0),
+        "output": result.get("output", ""),
+        "result": result,
+    })
+
+@app.post("/api/admin/hw/<slug>/regrade")
+def api_admin_hw_regrade(slug):
+    if not (session.get("netid") and session.get("is_admin")):
+        return jsonify({"error": "not_admin"}), 403
+    if slug not in HOMEWORKS:
+        return jsonify({"error": "unknown_homework"}), 404
+
+    data = request.get_json(force=True) or {}
+    include_hidden = bool(data.get("include_hidden", True))
+
+    # fetch all finals for this slug
+    subs = (HomeworkSubmission.query
+        .filter(HomeworkSubmission.slug == slug)
+        .filter(HomeworkSubmission.submitted_at.isnot(None))  # key change
+        .order_by(HomeworkSubmission.netid.asc(), HomeworkSubmission.created_at.desc())
+        .all())
+
+
+    # keep latest final per netid
+    latest = {}
+    for s in subs:
+        if s.netid not in latest:
+            latest[s.netid] = s
+
+    hw = HOMEWORKS[slug]
+    root = (BASE_DIR / hw["root"]).resolve()
+
+    changed = 0
+    details = []
+
+    for netid, sub in latest.items():
+        files = {"student.py": sub.code or ""}
+        for p in sorted((root / "tests_public").glob("*.py")):
+            files[p.name] = p.read_text(encoding="utf-8")
+        if include_hidden and (root / "tests_hidden").exists():
+            for p in sorted((root / "tests_hidden").glob("*.py")):
+                files[p.name] = p.read_text(encoding="utf-8")
+
+        result = run_pytest_in_docker(files, timeout_s=15)
+
+        score_raw = _score_from_pytest_result(result)
+        # keep the originally stored late penalty fields
+        penalty_frac = float(sub.penalty_frac or 0.0)
+        score_final = (max(0.0, score_raw * (1.0 - penalty_frac)) if score_raw is not None else None)
+
+        reopen_penalty = float(sub.reopen_penalty_frac or 0.0)
+        score_final_after_reopen = (max(0.0, score_final * (1.0 - reopen_penalty)) if score_final is not None else None)
+
+        sub.result_json = json.dumps(result)
+        sub.score_raw = score_raw
+        sub.score_final = score_final
+        sub.score_final_after_reopen = score_final_after_reopen
+
+        changed += 1
+        details.append({
+            "netid": netid,
+            "passed": result.get("passed", 0),
+            "failed": result.get("failed", 0),
+            "score_effective": (score_final_after_reopen if score_final_after_reopen is not None else score_final),
+        })
+
+    db.session.commit()
+    return jsonify({"ok": True, "slug": slug, "updated": changed, "details": details})
+
+
+@app.post("/api/admin/hw/<slug>/reopen")
+def admin_hw_reopen(slug):
+    if not session.get("netid"):
+        return jsonify({"error": "not_logged_in"}), 401
+
+    # adjust to your admin logic
+    if not (session.get("is_admin") or session.get("netid") == os.environ.get("ADMIN_NETID")):
+        return jsonify({"error": "not_admin"}), 403
+
+    if slug not in HOMEWORKS:
+        return jsonify({"error": "unknown_homework"}), 404
+
+    data = request.get_json(force=True) or {}
+    netid = (data.get("netid") or "").strip()
+    penalty = data.get("penalty", 0.10)
+    try:
+        penalty = float(penalty)
+    except Exception:
+        return jsonify({"error": "bad_penalty"}), 400
+    penalty = max(0.0, min(1.0, penalty))
+
+    if not netid:
+        return jsonify({"error": "missing_netid"}), 400
+
+    final = (HomeworkSubmission.query
+        .filter_by(slug=slug, netid=netid, is_final=1)
+        .order_by(HomeworkSubmission.created_at.desc())
+        .first())
+
+    if not final:
+        return jsonify({"error": "no_final_to_reopen"}), 404
+
+    now_iso = datetime.now(TZ).isoformat()
+
+    # De-finalize + mark reopen event on that row
+    final.is_final = 0
+    final.reopened_at = now_iso
+    final.reopen_penalty_frac = penalty
+    final.diff_base_code = final.code  # baseline snapshot at reopen time
+
+    db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "slug": slug,
+        "netid": netid,
+        "reopened_at": now_iso,
+        "reopen_penalty_frac": penalty,
+        "reopened_from_id": final.id,
+    })
+
+@app.get("/admin/hw/<slug>/submission")
+def admin_hw_submission(slug):
+    if not session.get("is_admin"):
+        abort(403)
+
+    netid = request.args.get("netid", "").strip()
+    if not netid:
+        abort(400)
+
+    sub = (HomeworkSubmission.query
+           .filter_by(slug=slug, netid=netid)
+           .order_by(HomeworkSubmission.created_at.desc())
+           .first())
+
+    result_pretty = "{}"
+    output_text = ""
+    if sub:
+        try:
+            result_pretty = json.dumps(json.loads(sub.result_json or "{}"), indent=2, sort_keys=True)
+        except Exception:
+            result_pretty = sub.result_json or "{}"
+        output_text = sub.output_text or ""
+
+    return render_template(
+        "admin_hw_submission.html",
+        slug=slug,
+        netid=netid,
+        sub=sub,
+        result_pretty=result_pretty,
+        output_text=output_text,
+    )
+
+
 
 @app.route("/notebooks")
 def notebooks():
@@ -1264,19 +2169,19 @@ def chat(section):
     )
 
 
-@app.route("/set_section", methods=["POST"])
+@app.post("/set_section")
 def set_section():
     if not session.get("is_admin"):
         return jsonify(success=False, error="Unauthorized"), 403
 
-    new_section = request.json.get("section")
-    if new_section not in ["1", "2", "5", "6"]:
-        return jsonify(success=False, error="Invalid section"), 400
+    new_section = str((request.json or {}).get("section", "")).strip()
+
+    valid_sections = set(SECTION_REPOS.keys())  # e.g. {"1","2","5","6","42"}
+    if new_section not in valid_sections:
+        return jsonify(success=False, error=f"Invalid section: {new_section}"), 400
 
     session["section"] = int(new_section)
-
-    if session.get("is_admin"):
-        session["admin_view_section"] = int(new_section)
+    session["admin_view_section"] = int(new_section)
     return jsonify(success=True, section=session["section"])
 
 
@@ -1669,11 +2574,170 @@ def handle_support_message(data):
     
     emit("support_error", {"message": "Message not found"})
 
-    
+def check_admin_access():
+    if not session.get("is_admin"):
+        abort(403)
+#@app.before_request
+
+# ---- participation counting rules ----
+LECTURE_RESERVED_SLUGS = {
+    "browse", "list", "create", "admin", "settings",
+    "test", "linetest",
+}
+
+# (optional) if you want to count only “active” api calls, keep this.
+LECTURE_COUNTED_API_ACTIONS = {"touch", "submit", "save", "run", "event", "heartbeat"}
+
+def _lecture_slug_counts(slug: str | None) -> bool:
+    if not slug:
+        return False
+    slug = slug.strip().lower()
+    if slug in LECTURE_RESERVED_SLUGS:
+        return False
+    if slug.startswith("admin"):
+        return False
+    return True
+
+def _counts_toward_participation(source: str) -> bool:
+    if not source:
+        return False
+    if source == "lecture":
+        return True  # legacy default, if you still use it anywhere
+    if source.startswith("lecture:"):
+        slug = source.split(":", 1)[1]
+        return _lecture_slug_counts(slug)
+    return False
+
+def _auto_mark_lecture_participation():
+    netid = session.get("netid")
+    section = session.get("section")
+    if not netid or not section:
+        return
+
+    path = request.path or ""
+    parts = [p for p in path.split("/") if p]
+
+    # /lecture/<slug>
+    if len(parts) >= 2 and parts[0] == "lecture":
+        slug = parts[1]
+        if not _lecture_slug_counts(slug):
+            return
+        mark_participation(netid, str(section), source=f"lecture:{slug}")
+        return
+
+    # /api/lecture/<slug>/...
+    if len(parts) >= 3 and parts[0] == "api" and parts[1] == "lecture":
+        slug = parts[2]
+        if not _lecture_slug_counts(slug):
+            return
+
+        action = parts[3] if len(parts) >= 4 else ""
+        # If you want to count ANY api call tied to a real slug, delete this if-block.
+        if action and action not in LECTURE_COUNTED_API_ACTIONS:
+            return
+
+        mark_participation(netid, str(section), source=f"lecture:{slug}")
+        return
+
+def _today_est():
+    return datetime.now(est).strftime("%Y-%m-%d")
+
+@app.route("/my_participation")
+def my_participation():
+    if not session.get("netid"):
+        return redirect(url_for("login"))  # adjust if needed
+
+    netid = session["netid"]
+    section = str(session.get("section") or "")
+
+    # show last 30 days
+    rows = []
+    start = datetime.now(est).date()
+    for i in range(0, 30):
+        d = (start - timedelta(days=i)).strftime("%Y-%m-%d")
+        did = bool(section and r.sismember(f"participation:{d}:{section}", netid))
+        rows.append({"day": d, "section": section, "did": did})
+
+    return render_template("participation_me.html", rows=rows, netid=netid, section=section)
+
+# ---------------------------
+# Participation (chat + lecture)
+# ---------------------------
+
+def participation_day():
+    # your app already defines `est` (America/New_York)
+    return datetime.now(est).strftime("%Y-%m-%d")
+
+def mark_participation(netid: str, section: str, source: str = "lecture", day: str | None = None):
+    if not netid:
+        return
+    if not section:
+        section = "unknown"
+    day = day or participation_day()
+
+    # only “count” certain sources
+    if _counts_toward_participation(source):
+        r.sadd(f"participation:{day}:{section}", netid)
+
+    # keep per-student log (ok to keep everything)
+    r.sadd(f"participation_by_student:{netid}", f"{day}:{section}:{source}")
+
+    try:
+        r.expire(f"participation:{day}:{section}", 60 * 60 * 24 * 200)
+        r.expire(f"participation_by_student:{netid}", 60 * 60 * 24 * 200)
+    except Exception:
+        pass
+
+@app.post("/api/participation/ping")
+def participation_ping():
+    netid = session.get("netid")
+    if not netid:
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    section = session.get("section") or request.cookies.get("section") or "unknown"
+    j = request.get_json(silent=True) or {}
+    source = j.get("source") or "lecture"
+
+    mark_participation(netid, section, source=source)
+    return jsonify({"ok": True})
+
+
+@app.get("/participation")
+def participation_home():
+    admin_netid = (app.config.get("ADMIN_NETID") or "").strip().lower()
+
+    # admin -> existing dashboard
+    if session.get("is_admin") or ((session.get("netid") or "").lower() == admin_netid and admin_netid):
+        return redirect(url_for("participation_dashboard"))
+
+    netid = session.get("netid")
+    if not netid:
+        return redirect(url_for("login"))
+
+    raw = list(r.smembers(f"participation_by_student:{netid}") or [])
+    entries = []
+    for x in raw:
+        if isinstance(x, (bytes, bytearray)):
+            x = x.decode("utf-8", "replace")
+        parts = x.split(":")
+        if len(parts) >= 3:
+            day, section, source = parts[0], parts[1], ":".join(parts[2:])
+        elif len(parts) == 2:
+            day, section, source = parts[0], parts[1], ""
+        else:
+            continue
+        entries.append({"day": day, "section": section, "source": source})
+
+    entries.sort(key=lambda e: e["day"], reverse=True)
+    today = participation_day()
+    did_today = any(e["day"] == today for e in entries)
+
+    return render_template("participation_student.html", netid=netid, entries=entries, today=today, did_today=did_today)
+
+
 @app.route("/participation_dashboard")
 def participation_dashboard():
     check_admin_access()
-    passcode = request.args.get("code")
 
     keys = r.keys("participation:*:*")
     entries = []
@@ -1685,10 +2749,7 @@ def participation_dashboard():
             continue
 
     entries = sorted(set(entries))
-
-    return render_template("participation_dashboard.html",
-                           entries=entries,
-                           passcode=passcode)
+    return render_template("participation_dashboard.html", entries=entries)
 
 
 # e.g. https://foundations.hobbsresearch.com/participation/2025-07-04/1
@@ -2678,7 +3739,13 @@ def record_submission(challenge_id, netid, code, keystrokes):
 @app.route("/api/notebooks")
 def api_notebooks():
     if session.get("is_admin"):
-        section_str = request.args.get("section") or str(session.get("section") or "1")
+        section_str = (
+        request.args.get("section")
+        or str(session.get("admin_view_section") or session.get("section") or "")
+        or next(iter(SECTION_REPOS.keys()), None)
+        )
+        if section_str is None:
+            return jsonify(success=False, error="No sections configured"), 500
     else:
         netid = session.get("netid")
         if not netid:

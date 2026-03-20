@@ -1,32 +1,62 @@
 {% extends "base.html" %}
-{% block title %}Course: {{ course }}{% endblock %}
+{% block title %}Topic: {{ course }}{% endblock %}
 
 {% block extra_head %}
 <style>
-  .lesson-card{ border:1px solid var(--panel-border,#ddd); border-radius:12px; padding:12px; margin:.6rem 0; background:var(--panel-bg,#fff); }
-  .locked{ opacity:.55; }
-  .row{ display:flex; justify-content:space-between; gap:12px; align-items:center; }
-  .tag{ font-size:.85rem; padding:.15rem .55rem; border-radius:999px; border:1px solid #e5e7eb; background:rgba(0,0,0,.03); color:#374151; }
+  .hdr-sub{ color:#6b7280; margin:6px 0 14px; }
+  .summary{ display:flex; gap:10px; align-items:center; margin: 8px 0 18px; }
+  .bar{ flex:1; height:12px; background: rgba(0,0,0,.06); border-radius: 999px; overflow:hidden; }
+  .fill{ height:100%; background: var(--accent, #2563eb); }
+  .pct{ min-width:60px; text-align:right; font-variant-numeric: tabular-nums; color:#374151; }
+  .lesson{
+    display:block;
+    border:1px solid var(--panel-border, #d0d7de);
+    background: var(--panel-bg, #fff);
+    border-radius:14px;
+    padding:12px 14px;
+    margin:.6rem 0;
+    text-decoration:none;
+    color:inherit;
+  }
+  .lesson:hover{ border-color: rgba(37,99,235,.45); }
+  .lesson.locked{ opacity:.55; pointer-events:none; }
+  .title{ font-weight: 800; }
+  .sub{ color:#6b7280; font-size:.95rem; margin-top:2px; }
+  .row{ display:flex; gap:10px; align-items:center; margin-top:10px; }
+  .mini{ flex:1; height:10px; background: rgba(0,0,0,.06); border-radius:999px; overflow:hidden; }
+  .mini > div{ height:100%; background: var(--accent, #2563eb); }
+  .steps{ font-size:.95rem; color:#374151; min-width: 120px; text-align:right; font-variant-numeric: tabular-nums; }
 </style>
 {% endblock %}
 
 {% block content %}
-<h2>Course: {{ course }}</h2>
+<div style="color: rgba(120,120,120,.95); font-size:0.95rem; margin-bottom:10px;">
+  Home &nbsp;›&nbsp; course &nbsp;›&nbsp; {{ course }}
+</div>
+
+<h1 style="margin:0;">Topic: {{ topic_title }}</h1>
+<div class="hdr-sub">{{ course_done }}/{{ course_total }} steps completed</div>
+
+<div class="summary">
+  <div class="bar"><div class="fill" style="width: {{ course_pct }}%;"></div></div>
+  <div class="pct">{{ course_pct }}%</div>
+</div>
 
 {% for l in lessons %}
-  <div class="lesson-card {% if not l.is_open %}locked{% endif %}">
-    <div class="row">
-      <div>
-        <div style="font-weight:700;">{{ l.title }}</div>
-        <div style="color:#6b7280; font-size:.95rem;">/{{ course }}/{{ l.slug }}</div>
+  {% if l.is_open %}
+    <a class="lesson" href="/course/{{ course }}/{{ l.slug }}">
+      <div class="title">{{ l.title }}</div>
+      <div class="sub">/{{ course }}/{{ l.slug }}</div>
+      <div class="row">
+        <div class="mini"><div style="width: {{ l.pct }}%;"></div></div>
+        <div class="steps">{{ l.done_steps }}/{{ l.total_steps }} steps</div>
       </div>
-
-      {% if l.is_open %}
-        <a class="tag" href="/course/{{ course }}/{{ l.slug }}">Open</a>
-      {% else %}
-        <span class="tag">Locked</span>
-      {% endif %}
+    </a>
+  {% else %}
+    <div class="lesson locked">
+      <div class="title">{{ l.title }}</div>
+      <div class="sub">Locked</div>
     </div>
-  </div>
+  {% endif %}
 {% endfor %}
 {% endblock %}

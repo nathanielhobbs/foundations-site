@@ -20,6 +20,17 @@
       <input name="section" value="{{ section }}" class="argsBox" style="min-width:140px;" placeholder="e.g. 5">
     </div>
     <button class="py-btn" type="submit">Filter</button>
+    <button class="py-btn" type="button"
+		onclick="regradeSelected()"
+		style="border-color: rgba(220,38,38,.45);">
+	  Regrade selected HW
+	</button>
+
+	<button class="py-btn" type="button"
+		onclick="regradeAll()"
+		style="border-color: rgba(220,38,38,.45);">
+	  Regrade ALL homeworks
+	</button>
   </form>
 </div>
 
@@ -55,6 +66,9 @@
         <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">
           <button class="py-btn" type="button"
                   onclick="reopenHw('{{ r.slug }}','{{ r.netid }}')">Reopen</button>
+	  <button class="py-btn" type="button"
+		  onclick="rerunHw('{{ r.slug }}','{{ r.netid }}')">Rerun</button>
+	  <a class="py-btn" href="/admin/hw/{{ r.slug }}/submission?netid={{ r.netid }}">Details</a>
         </td>
         <td style="padding:8px; border-bottom:1px solid rgba(127,127,127,.15); text-align:right;">
 		<a class="py-btn" href="/admin/hw/{{ r.slug }}/diff?netid={{ r.netid }}">Diff</a>
@@ -66,7 +80,7 @@
       </tr>
       {% endfor %}
       {% if not rows %}
-      <tr><td colspan="8" class="muted" style="padding:10px;">No rows.</td></tr>
+      <tr><td colspan="11" class="muted" style="padding:10px;">No rows.</td></tr>
       {% endif %}
     </tbody>
   </table>
@@ -92,5 +106,88 @@ async function reopenHw(slug, netid){
   location.reload();
 }
 </script>
+
+<script>
+async function postJson(url, payload){
+  const r = await fetch(url, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(payload || {})
+  });
+  const txt = await r.text();
+  if (!r.ok) throw new Error(txt || ("HTTP " + r.status));
+  try { return JSON.parse(txt); } catch { return { ok:true, raw:txt }; }
+}
+
+async function regradeSelected(){
+  const sel = document.querySelector('select[name="slug"]');
+  const slug = sel ? (sel.value || "") : "";
+  if (!slug){
+    alert("Pick a homework in the dropdown first.");
+    return;
+  }
+  if (!confirm(`Regrade ${slug} for ALL submitted students using the CURRENT tests?`)) return;
+
+  try{
+    const j = await postJson(`/api/admin/hw/${encodeURIComponent(slug)}/regrade`, {});
+    alert(`Regrade done: ${j.updated ?? "?"} updated`);
+    location.reload();
+  } catch(e){
+    alert("Regrade failed: " + (e.message || e));
+  }
+}
+
+async function regradeAll(){
+  if (!confirm("Regrade ALL homeworks for ALL submitted students using CURRENT tests?")) return;
+
+  // Collect homework slugs from the dropdown options (skip the “All” empty option)
+  const opts = Array.from(document.querySelectorAll('select[name="slug"] option'))
+    .map(o => o.value).filter(v => v);
+
+  if (!opts.length){
+    alert("No homework slugs found.");
+    return;
+  }
+
+  try{
+    let total = 0;
+    for (const slug of opts){
+      const j = await postJson(`/api/admin/hw/${encodeURIComponent(slug)}/regrade`, {});
+      total += (j.updated || 0);
+    }
+    alert(`Regrade done. Total updated rows: ${total}`);
+    location.reload();
+  } catch(e){
+    alert("Regrade failed: " + (e.message || e));
+  }
+}
+</script>
+
+
+<script>
+async function rerunHw(slug, netid){
+  const includeHidden = confirm("Include hidden tests? (OK=yes, Cancel=no)");
+  const r = await fetch(`/api/admin/hw/${encodeURIComponent(slug)}/rerun`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ netid, include_hidden: includeHidden, use_final: true })
+  });
+
+  const txt = await r.text();
+  if (!r.ok){
+    alert("Error: " + txt);
+    return;
+  }
+
+  const j = JSON.parse(txt);
+  const w = window.open("", "_blank");
+  const esc = (s)=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+  w.document.write("<pre>" + esc(j.output || "(no output)") + "</pre>");
+}
+</script>
+
+
+
+
 {% endblock %}
 

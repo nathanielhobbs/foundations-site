@@ -1,33 +1,73 @@
 {% extends "base.html" %}
 {% block title %}Notebooks{% endblock %}
 
+{% block extra_head %}
+{{ super() }}
+<style>
+  /* Notebook cards/buttons: theme-safe fallbacks */
+  .nb-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+    gap:12px;
+  }
+  .nb-card{
+    background: var(--panel-bg, var(--bg, #fff));
+    color: var(--panel-text, var(--text, #111));
+    border: 1px solid var(--panel-border, rgba(0,0,0,.15));
+    border-radius: 12px;
+    padding: 12px;
+  }
+  .nb-title{ font-weight: 650; margin-bottom: .25rem; }
+  .nb-muted{
+    font-size: .9rem;
+    margin-bottom: .6rem;
+    color: var(--muted-text, rgba(127,127,127,.95));
+  }
+  .nb-actions{
+    display:flex;
+    gap:.5rem;
+    flex-wrap:wrap;
+  }
+  .nb-btn{
+    border: 1px solid var(--panel-border, rgba(0,0,0,.2));
+    border-radius: 8px;
+    padding: .35rem .7rem;
+    text-decoration: none;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    user-select: none;
+  }
+  .nb-btn:hover{ filter: brightness(0.98); }
+</style>
+{% endblock %}
+
 {% block content %}
 <h2>Notebooks</h2>
-<div id="nbContainer" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px;"></div>
+<div id="nbContainer" class="nb-grid"></div>
 <div id="nbEmpty" style="display:none;">No notebooks found.</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
 (async function () {
+  const wrap = document.getElementById('nbContainer');
+  const empty = document.getElementById('nbEmpty');
+
   try {
-    // Admin can pass ?section=5 etc.; students ignore
-    const res = await fetch(
-      window.location.search
-        ? '/api/notebooks' + window.location.search
-        : '/api/notebooks'
-    );
+    const url = window.location.search
+      ? '/api/notebooks' + window.location.search
+      : '/api/notebooks';
+
+    const res = await fetch(url);
     const data = await res.json();
-    const wrap = document.getElementById('nbContainer');
-    const empty = document.getElementById('nbEmpty');
 
     if (!data.success || !data.items || !data.items.length) {
       wrap.style.display = 'none';
+      empty.textContent = (data && data.error) ? data.error : 'No notebooks found.';
       empty.style.display = 'block';
       return;
     }
-
-    wrap.innerHTML = '';
 
     const items = [...data.items].sort((a, b) => {
       const da = a.date ? new Date(a.date).getTime() : 0;
@@ -35,38 +75,61 @@
       return db - da; // newest first
     });
 
-    items.forEach(it => {
+    wrap.innerHTML = '';
+
+    for (const it of items) {
+      const ext = (it.ext || '').toLowerCase();
+      const filename = (it.filename || '').toLowerCase();
+      const isIpynb = (ext === '.ipynb') || filename.endsWith('.ipynb');
+
       const card = document.createElement('div');
-      card.style.border = '1px solid #ccc';
-      card.style.borderRadius = '10px';
-      card.style.padding = '12px';
-      card.style.background = 'var(--bg)';
-      card.style.color = 'var(--text)';
-      card.innerHTML = `
-        <div style="font-weight:600; margin-bottom:.25rem;">${it.title}</div>
-        <div class="muted" style="font-size:.9rem; margin-bottom:.5rem;">
-          Updated: ${it.date ? new Date(it.date).toLocaleString() : '—'}
-        </div>
-        <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-          <a class="btn"
-             style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none;"
-             href="https://github.com/${it.github_path}" target="_blank" rel="noopener">
-            View on GitHub
-          </a>
-          <a class="btn nb-dl"
-             style="border:1px solid #bbb; border-radius:7px; padding:.35rem .7rem; text-decoration:none; cursor:pointer;"
-             href="#"
-             data-url="${it.download_url}"
-             data-name="${it.filename}">
-            Download ${it.ext}
-          </a>
-        </div>`;
+      card.className = 'nb-card';
+
+      const title = document.createElement('div');
+      title.className = 'nb-title';
+      title.textContent = it.title || it.filename || 'Untitled';
+
+      const meta = document.createElement('div');
+      meta.className = 'nb-muted';
+      meta.textContent = 'Updated: ' + (it.date ? new Date(it.date).toLocaleString() : '—');
+
+      const actions = document.createElement('div');
+      actions.className = 'nb-actions';
+
+      // Only show Colab for .ipynb
+      if (isIpynb) {
+        const aColab = document.createElement('a');
+        aColab.className = 'nb-btn';
+        aColab.href = `https://colab.research.google.com/github/${it.github_path}`;
+        aColab.target = '_blank';
+        aColab.rel = 'noopener';
+        aColab.textContent = 'Open in Colab';
+        actions.appendChild(aColab);
+      }
+
+      const aGit = document.createElement('a');
+      aGit.className = 'nb-btn';
+      aGit.href = `https://github.com/${it.github_path}`;
+      aGit.target = '_blank';
+      aGit.rel = 'noopener';
+      aGit.textContent = 'View on GitHub';
+      actions.appendChild(aGit);
+
+      const aDl = document.createElement('a');
+      aDl.className = 'nb-btn nb-dl';
+      aDl.href = '#';
+      aDl.setAttribute('data-url', it.download_url);
+      aDl.setAttribute('data-name', it.filename);
+      aDl.textContent = (it.ext && it.ext.toLowerCase() === '.ipynb') ? 'Download .ipynb' : 'Download';
+      actions.appendChild(aDl);
+
+      card.appendChild(title);
+      card.appendChild(meta);
+      card.appendChild(actions);
       wrap.appendChild(card);
-    });
+    }
   } catch (err) {
     console.error('Error loading notebooks', err);
-    const wrap = document.getElementById('nbContainer');
-    const empty = document.getElementById('nbEmpty');
     wrap.style.display = 'none';
     empty.textContent = 'Error loading notebooks.';
     empty.style.display = 'block';
@@ -113,4 +176,3 @@ document.addEventListener('click', async (e) => {
 });
 </script>
 {% endblock %}
-
