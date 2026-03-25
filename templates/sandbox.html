@@ -15,7 +15,7 @@
   #paneLeft{ display:none; }
   .gutter-h{ display:none; }
 
-  /* default 2/3 vs 1/3 */
+  /* default stacked split */
   #paneTop{ flex: 0 0 66%; }
   #paneBottom{ flex: 1 1 34%; }
 
@@ -25,170 +25,460 @@
     min-height:0;
     overflow:hidden;
   }
-  .out-panel .py-out{ flex:1 1 auto; min-height:0; overflow:auto; height:auto; }
+  .out-panel .py-out{
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    height:auto;
+  }
+
   .CodeMirror{ height: 100% !important; }
 
-  /* Mode tabs (top-level) */
   .modebar{
     display:flex;
     gap:8px;
     align-items:center;
     margin:.35rem 0 1rem 0;
   }
+  .modebar .spacer{ flex:1; }
+
   .modebtn{
     padding:.45rem .8rem;
-    border-radius: 12px;
+    border-radius:12px;
     border:1px solid var(--panel-border, #d0d7de);
-    background: transparent;
+    background:transparent;
     cursor:pointer;
     font-weight:600;
   }
   .modebtn.active{ background: rgba(0,0,0,.06); }
   :root[data-theme="dark"] .modebtn.active{ background: rgba(255,255,255,.10); }
 
-  .filebar{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  margin: 0 0 8px 0;
-}
-.filepill{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: .95rem;
-  padding: .25rem .6rem;
-  border: 1px solid var(--panel-border, #d0d7de);
-  border-radius: 999px;
-  background: rgba(0,0,0,.03);
-}
-:root[data-theme="dark"] .filepill{ background: rgba(255,255,255,.06); }
+  .filepill{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: .95rem;
+    padding: .25rem .6rem;
+    border: 1px solid var(--panel-border, #d0d7de);
+    border-radius: 999px;
+    background: rgba(0,0,0,.03);
+  }
+  :root[data-theme="dark"] .filepill{ background: rgba(255,255,255,.06); }
 
-/* Script toolbar layout: Run | args (fills) | main.py | Reset */
-#toolbarSandbox{
-  display: grid;
-  grid-template-columns: auto auto 1fr auto;
-  gap: 8px;
-  align-items: center;
-}
+  /* Run | main.py | args | Reset */
+  #toolbarSandbox{
+    display:grid;
+    grid-template-columns:auto auto 1fr auto;
+    gap:8px;
+    align-items:center;
+    margin-bottom:8px;
+  }
 
-#argsBox{
-  width: 100%;
-  min-width: 180px;
-}
+  #argsBox{
+    width:100%;
+    min-width:180px;
+  }
 
-.filepill--toolbar{
-  opacity: .85;
-  font-size: .9rem;
-  padding: .2rem .55rem;
-}
+  .filepill--toolbar{
+    opacity:.85;
+    font-size:.9rem;
+    padding:.2rem .55rem;
+  }
 
-  /* REPL input row */
-  .repl-input-row{ display:flex; gap:8px; align-items:flex-start; }
+  .repl-input-row{
+    display:flex;
+    gap:8px;
+    align-items:flex-start;
+  }
+
   .repl-prompt{
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    padding: 8px 10px;
-    border: 1px solid var(--panel-border, #d0d7de);
-    border-radius: 10px;
+    padding:8px 10px;
+    border:1px solid var(--panel-border, #d0d7de);
+    border-radius:10px;
     background: var(--panel-bg, #fff);
   }
+
   .repl-in{
     flex:1;
-    min-height: 40px;
-    max-height: 120px;
-    resize: vertical;
-    padding: 8px 10px;
-    border: 1px solid var(--panel-border, #d0d7de);
-    border-radius: 10px;
+    min-height:40px;
+    max-height:120px;
+    resize:vertical;
+    padding:8px 10px;
+    border:1px solid var(--panel-border, #d0d7de);
+    border-radius:10px;
     background: var(--input-bg, #fff);
     color: var(--input-text, #111);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   }
-  .repl-status{ color: var(--muted-text, #6b7280); font-size:.95rem; }
 
-  /* Editor toggle row (REPL mode) */
+  .repl-status{
+    color: var(--muted-text, #6b7280);
+    font-size:.95rem;
+  }
+
   .editor-toggle-row{
     display:flex;
     gap:8px;
     align-items:center;
     margin-bottom:8px;
   }
+
   .editor-toggle{
     display:flex;
     align-items:center;
     gap:10px;
     padding:.35rem .55rem;
     border:1px solid var(--panel-border, #d0d7de);
-    border-radius: 12px;
+    border-radius:12px;
     background: rgba(0,0,0,.03);
     cursor:pointer;
     user-select:none;
   }
   :root[data-theme="dark"] .editor-toggle{ background: rgba(255,255,255,.06); }
+
   .editor-toggle .chev{
-    width: 1.1rem;
+    width:1.1rem;
     text-align:center;
     font-weight:900;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   }
   .editor-toggle .title{ font-weight:700; }
-  .editor-toggle .hint{ color: var(--muted-text, #6b7280); font-size:.95rem; }
+  .editor-toggle .hint{
+    color: var(--muted-text, #6b7280);
+    font-size:.95rem;
+  }
 
-  #editorBody{ flex:1 1 auto; min-height:0; }
+  #editorBody{
+    flex:1 1 auto;
+    min-height:0;
+  }
 
-/* tighter vertical spacing */
-.gutter-v{ height: 6px !important; }
-#paneTop, #paneBottom{ padding: 8px !important; }
-#bottomSandbox h3{ margin: 0 0 .35rem 0 !important; }
-
-.modebar .spacer{ flex:1; }
-
-/* Side-by-side layout */
-#ide.layout-side .pane-right{
-  flex-direction: row !important;
+  .filepane-gutter{
+  position:relative;
+  cursor:col-resize;
+  background:transparent;
 }
 
-/* Make the splitter visible and easy to grab */
-#ide.layout-side .gutter-v{
-  display: block !important;
-  width: 14px !important;
-  height: auto !important;
-  cursor: col-resize !important;
-  align-self: stretch;
-  background: transparent;
-  position: relative;
-  z-index: 5;
-}
-
-/* visible “handle” */
-#ide.layout-side .gutter-v::after{
+.filepane-gutter::after{
   content:"";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 3px;
-  height: 52px;
-  transform: translate(-50%, -50%);
-  border-radius: 3px;
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:3px;
+  height:52px;
+  transform:translate(-50%, -50%);
+  border-radius:999px;
   background: var(--panel-border, #d0d7de);
-  opacity: .9;
+  opacity:.95;
 }
 
-#ide.layout-side .gutter-v:hover{
+.filepane-gutter:hover{
   background: rgba(0,0,0,.06);
 }
-:root[data-theme="dark"] #ide.layout-side .gutter-v:hover{
+:root[data-theme="dark"] .filepane-gutter:hover{
   background: rgba(255,255,255,.08);
 }
 
-/* REPL mode: hide the entire editor pane (and the drag gutter) */
-#ide.mode-repl #paneTop,
-#ide.mode-repl .gutter-v{
-  display: none !important;
+.ide-shell.filepane-collapsed .filepane-gutter{
+  display:none;
 }
-#ide.mode-repl #paneBottom{
-  flex: 1 1 auto !important;
 
+  .gutter-v{ height:6px !important; }
+  #paneTop, #paneBottom{ padding:8px !important; }
+  #bottomSandbox h3{ margin: 0 0 .35rem 0 !important; }
 
+  /* Side-by-side top/bottom panes */
+  #ide.layout-side .pane-right{
+    flex-direction: row !important;
+  }
+
+  #ide.layout-side .gutter-v{
+    display:block !important;
+    width:14px !important;
+    height:auto !important;
+    cursor:col-resize !important;
+    align-self:stretch;
+    background:transparent;
+    position:relative;
+    z-index:5;
+  }
+
+  #ide.layout-side .gutter-v::after{
+    content:"";
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:3px;
+    height:52px;
+    transform: translate(-50%, -50%);
+    border-radius:3px;
+    background: var(--panel-border, #d0d7de);
+    opacity:.9;
+  }
+
+  #ide.layout-side .gutter-v:hover{
+    background: rgba(0,0,0,.06);
+  }
+  :root[data-theme="dark"] #ide.layout-side .gutter-v:hover{
+    background: rgba(255,255,255,.08);
+  }
+
+  /* In REPL mode, no top/bottom dragging */
+  #ide.mode-repl .gutter-v{
+    display:none !important;
+  }
+  #ide.mode-repl #paneBottom{
+    flex:1 1 auto !important;
+  }
+
+  /* left file sidebar inside the editor area */
+.ide-shell{
+  --filepane-w: 190px;
+  display:grid;
+  grid-template-columns: var(--filepane-w) 12px minmax(0, 1fr);
+  gap:0;
+  min-height:0;
+  flex:1 1 auto;
 }
+
+  .filepane{
+    border:1px solid var(--panel-border, #d0d7de);
+    border-radius:12px;
+    background: var(--panel-bg, rgba(0,0,0,.02));
+    padding:10px;
+    min-width:0;
+    min-height:0;
+  }
+
+.fileitem-row{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto;
+  gap:6px;
+  align-items:center;
+}
+
+.fileitem-run{
+  border:1px solid var(--panel-border, #d0d7de);
+  background: rgba(0,0,0,.03);
+  border-radius:10px;
+  padding:.45rem .55rem;
+  cursor:pointer;
+  font-size:.85rem;
+  line-height:1;
+  white-space:nowrap;
+}
+
+:root[data-theme="dark"] .fileitem-run{
+  background: rgba(255,255,255,.06);
+}
+
+.fileitem-run.active{
+  font-weight:700;
+}
+
+  .tree-node{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.filepane-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin:0 0 8px 0;
+}
+
+.filepane-toggle{
+  border:1px solid var(--panel-border, #d0d7de);
+  background: rgba(0,0,0,.03);
+  border-radius:10px;
+  padding:.28rem .5rem;
+  cursor:pointer;
+  font-size:.9rem;
+  line-height:1;
+}
+
+:root[data-theme="dark"] .filepane-toggle{
+  background: rgba(255,255,255,.06);
+}
+
+.ide-shell.filepane-collapsed{
+  grid-template-columns: 52px 0 minmax(0, 1fr);
+}
+
+.ide-shell.filepane-collapsed .filepane{
+  padding:10px 6px;
+}
+
+.ide-shell.filepane-collapsed .filepane-title,
+.ide-shell.filepane-collapsed .filelist,
+.ide-shell.filepane-collapsed .filepane-actions{
+  display:none;
+}
+
+.filepane-collapsed-only{
+  display:none;
+}
+
+.ide-shell.filepane-collapsed .filepane-collapsed-only{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.filepane-mini-btn{
+  width:100%;
+  border:1px solid var(--panel-border, #d0d7de);
+  background: rgba(0,0,0,.03);
+  border-radius:10px;
+  padding:.5rem .2rem;
+  cursor:pointer;
+  font-size:.85rem;
+  writing-mode:vertical-rl;
+  transform: rotate(180deg);
+}
+
+:root[data-theme="dark"] .filepane-mini-btn{
+  background: rgba(255,255,255,.06);
+}
+
+.tree-row{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto;
+  gap:6px;
+  align-items:center;
+}
+
+.tree-label{
+  width:100%;
+  text-align:left;
+  border:1px solid var(--panel-border, #d0d7de);
+  border-radius:10px;
+  padding:.45rem .6rem;
+  background: rgba(0,0,0,.03);
+  cursor:pointer;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size:.92rem;
+  line-height:1.25;
+}
+
+.tree-label.folder{
+  font-weight:600;
+}
+
+.tree-label.file.active{
+  background: rgba(0,0,0,.09);
+  font-weight:700;
+}
+
+.tree-label.folder.active{
+  background: rgba(0,0,0,.09);
+}
+:root[data-theme="dark"] .tree-label.folder.active{
+  background: rgba(255,255,255,.14);
+}
+
+.tree-children{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-left:14px;
+  padding-left:8px;
+  border-left:1px solid var(--panel-border, #d0d7de);
+}
+
+.tree-run{
+  border:1px solid var(--panel-border, #d0d7de);
+  background: rgba(0,0,0,.03);
+  border-radius:10px;
+  padding:.45rem .55rem;
+  cursor:pointer;
+  font-size:.85rem;
+  line-height:1;
+  white-space:nowrap;
+}
+
+.tree-run.active{
+  font-weight:700;
+}
+
+:root[data-theme="dark"] .tree-label,
+:root[data-theme="dark"] .tree-run{
+  background: rgba(255,255,255,.06);
+}
+
+:root[data-theme="dark"] .tree-label.file.active{
+  background: rgba(255,255,255,.14);
+}
+
+  .filepane-title{
+    font-weight:700;
+    font-size:.95rem;
+    margin:0 0 8px 0;
+  }
+
+  .filelist{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-bottom:10px;
+  }
+
+  .fileitem{
+    display:block;
+    width:100%;
+    text-align:left;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size:.92rem;
+    line-height:1.25;
+    padding:.5rem .65rem;
+    border:1px solid var(--panel-border, #d0d7de);
+    border-radius:10px;
+    background: rgba(0,0,0,.03);
+    cursor:pointer;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .fileitem.active{
+    background: rgba(0,0,0,.09);
+    font-weight:700;
+  }
+
+  .filepane-actions{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+
+  .filepane-actions .py-btn{
+    width:100%;
+  }
+
+  .editorpane{
+    min-width:0;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+  }
+
+  :root[data-theme="dark"] .fileitem{
+    background: rgba(255,255,255,.06);
+  }
+  :root[data-theme="dark"] .fileitem.active{
+    background: rgba(255,255,255,.14);
+  }
+
+  @media (max-width: 900px){
+    .ide-shell{
+      grid-template-columns:1fr;
+    }
+  }
 </style>
 {% endblock %}
 
@@ -210,30 +500,51 @@
   <div class="pane pane-right">
     <div id="paneTop" class="pane" style="padding:12px;">
       <div class="py-panel" style="height:100%; display:flex; flex-direction:column; min-height:0;">
-        <!-- SANDBOX toolbar -->
-	<div id="toolbarSandbox" class="toolbar-row">
-	  <button id="runBtn" class="py-btn" type="button">Run</button>
-
-	  <span class="filepill filepill--toolbar">main.py</span>
-
-	  <input id="argsBox" class="argsBox" placeholder="args (optional), e.g. 10 20">
-
-	  <button id="resetBtn" class="py-btn" type="button">Reset</button>
-	</div>
-
-	<!-- REPL toolbar: toggle editor (no dragging) -->
-        <div id="toolbarRepl" class="editor-toggle-row" style="display:none;">
-          <div id="editorToggle" class="editor-toggle" role="button" tabindex="0" aria-expanded="false">
-            <div id="editorChev" class="chev">▸</div>
-            <div class="title">Editor</div>
-            <div class="hint">click to expand/collapse</div>
-          </div>
-          <button id="replLoadEditorBtn" class="py-btn" type="button">Load editor into session</button>
-          <div class="spacer"></div>
+        <div id="toolbarSandbox" class="toolbar-row">
+          <button id="runBtn" class="py-btn" type="button">Run</button>
+          <span class="filepill filepill--toolbar">main.py</span>
+          <input id="argsBox" class="argsBox" placeholder="args (optional), e.g. 10 20">
+          <button id="resetBtn" class="py-btn" type="button">Reset</button>
         </div>
 
-        <div id="editorBody" style="flex:1 1 auto; min-height:0;">
-          <textarea id="editor"></textarea>
+        <div class="ide-shell">
+		<aside class="filepane">
+		  <div class="filepane-head">
+		    <div class="filepane-title">Files</div>
+		    <button id="toggleFilePaneBtn" class="filepane-toggle" type="button" title="Collapse file explorer">◂</button>
+		  </div>
+
+		  <div id="fileTabs" class="filelist"></div>
+
+		  <div class="filepane-actions">
+		    <button id="newFileBtn" class="py-btn" type="button">New file</button>
+		    <button id="newFolderBtn" class="py-btn" type="button">New folder</button>
+		    <button id="renameFileBtn" class="py-btn" type="button">Rename</button>
+		    <button id="deleteFileBtn" class="py-btn" type="button">Delete</button>
+		  </div>
+
+		  <div class="filepane-collapsed-only">
+		    <button id="expandFilePaneBtn" class="filepane-mini-btn" type="button" title="Expand file explorer">Files</button>
+		  </div>
+		</aside>
+
+	  <div id="filePaneGutter" class="filepane-gutter" title="Drag to resize file explorer"></div>
+
+          <div class="editorpane">
+            <div id="toolbarRepl" class="editor-toggle-row" style="display:none;">
+              <div id="editorToggle" class="editor-toggle" role="button" tabindex="0" aria-expanded="false">
+                <div id="editorChev" class="chev">▸</div>
+                <div class="title">Editor</div>
+                <div class="hint">click to expand/collapse</div>
+              </div>
+              <button id="replLoadEditorBtn" class="py-btn" type="button">Load editor into session</button>
+              <div class="spacer"></div>
+            </div>
+
+            <div id="editorBody">
+              <textarea id="editor"></textarea>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -241,21 +552,17 @@
     <div class="gutter gutter-v" title="Drag to resize"></div>
 
     <div id="paneBottom" class="pane" style="padding:12px;">
-      <!-- SANDBOX OUTPUT -->
       <div id="bottomSandbox" class="py-panel out-panel">
         <h3 style="margin-top:0;">Terminal/Command-line Output</h3>
         <div class="cmdline-row">
           <div id="cmd" class="cmdline">$</div>
-	  <!--
-          <button id="copyCmdBtn" class="py-btn" type="button">Copy</button>
-	  -->
+          <!-- <button id="copyCmdBtn" class="py-btn" type="button">Copy</button> -->
         </div>
         <div id="out" class="py-out" style="margin-top:.6rem;">
           <div class="system">Use Run to execute your code.</div>
         </div>
       </div>
 
-      <!-- REPL -->
       <div id="bottomRepl" class="py-panel out-panel" style="display:none;">
         <div class="toolbar-row" style="margin-top:0;">
           <button id="replResetBtn" class="py-btn" type="button">Reset session</button>
@@ -266,8 +573,7 @@
 
         <div class="repl-input-row" style="margin-top:.5rem;">
           <div class="repl-prompt">&gt;&gt;&gt;</div>
-          <textarea id="replIn" class="repl-in"
-            placeholder="Enter to run. Shift+Enter for newline."></textarea>
+          <textarea id="replIn" class="repl-in" placeholder="Enter to run. Shift+Enter for newline."></textarea>
           <button id="replSendBtn" class="py-btn" type="button">Run</button>
         </div>
 
@@ -295,294 +601,830 @@ document.addEventListener("DOMContentLoaded", () => {
   const LESSON       = {{ lesson|default("sandbox")|tojson }};
   const DEFAULT_ARGS = {{ default_args|default("")|tojson }};
 
-  const outId = "out";
-  const cmdEl = document.getElementById("cmd");
+  const LS_FILES   = `sandbox:${COURSE}:${LESSON}:files`;
+  const LS_CURRENT = `sandbox:${COURSE}:${LESSON}:currentFile`;
+  const LS_ARGS    = `sandbox:${COURSE}:${LESSON}:args`;
+  const LS_ENTRY   = `sandbox:${COURSE}:${LESSON}:entryFile`;
+  const LS_EXPANDED   = `sandbox:${COURSE}:${LESSON}:expandedDirs`;
+  const LS_UI_FOLDERS = `sandbox:${COURSE}:${LESSON}:uiFolders`;
+  const LS_FILEPANE   = `sandbox:${COURSE}:${LESSON}:filePaneOpen`;
+  const LS_FILEPANE_W = `sandbox:${COURSE}:${LESSON}:filePaneWidth`;
+
+  const KEY_SIDEW      = "sandbox:sideW";
+  const KEY_MODE       = "sandbox:mode";
+  const KEY_REPL_EXP   = "sandbox:repl:expanded";
+  const KEY_TOPH       = "sandbox:topH";
+  const KEY_REPL_TOPH  = "sandbox:repl:topH";
+  const KEY_LAYOUT     = "sandbox:layout";
+
+  const outId   = "out";
+  const cmdEl   = document.getElementById("cmd");
   const argsBox = document.getElementById("argsBox");
+
+  const ideEl            = document.getElementById("ide");
+  const paneTop          = document.getElementById("paneTop");
+  const paneBottom       = document.getElementById("paneBottom");
+  const gutterV          = ideEl ? ideEl.querySelector(".gutter-v") : null;
+  const toolbarSandbox   = document.getElementById("toolbarSandbox");
+  const toolbarRepl      = document.getElementById("toolbarRepl");
+  const bottomSandbox    = document.getElementById("bottomSandbox");
+  const bottomRepl       = document.getElementById("bottomRepl");
+  const editorBody       = document.getElementById("editorBody");
+  const editorToggle     = document.getElementById("editorToggle");
+  const editorChev       = document.getElementById("editorChev");
+  const modeSandboxBtn   = document.getElementById("modeSandboxBtn");
+  const modeReplBtn      = document.getElementById("modeReplBtn");
+  const layoutBtn        = document.getElementById("layoutToggleBtn");
+  const ideShell = document.querySelector(".ide-shell");
+  const toggleFilePaneBtn = document.getElementById("toggleFilePaneBtn");
+  const expandFilePaneBtn = document.getElementById("expandFilePaneBtn");
+  const filePaneGutter = document.getElementById("filePaneGutter");
 
   SplitPanes.init("ide", "paneLeft", "paneTop", "paneBottom", "sandbox");
 
   const editor = PyPanel.makeEditor("editor", {
-	  indentUnit: 4,
-	  tabSize: 4,
-	  indentWithTabs: false,
-	  extraKeys: {
-	    "Ctrl-Enter": ()=> runCode(),
-	    "Cmd-Enter": ()=> runCode(),
-	    "Ctrl-/": "toggleComment",
-	    "Cmd-/": "toggleComment",
-	    "Tab": "insertSoftTab",
-	    "Shift-Tab": "indentLess",
-	  }
-	});
-  editor.setValue({{ initial_code|default("print(2+2)\n")|tojson }});
+    indentUnit: 4,
+    tabSize: 4,
+    indentWithTabs: false,
+    extraKeys: {
+      "Ctrl-Enter": ()=> runCode(),
+      "Cmd-Enter": ()=> runCode(),
+      "Ctrl-/": "toggleComment",
+      "Cmd-/": "toggleComment",
+      "Tab": "insertSoftTab",
+      "Shift-Tab": "indentLess",
+    }
+  });
 
-  window.addEventListener("splitter:changed", ()=>{ try { editor.refresh(); } catch(e){} });
+  window.addEventListener("splitter:changed", () => {
+    try { editor.refresh(); } catch (_) {}
+    if (!ideEl.classList.contains("layout-side")) {
+      try {
+        localStorage.setItem(KEY_TOPH, String(Math.round(paneTop.getBoundingClientRect().height)));
+      } catch (_) {}
+    }
+  });
 
-  const starter = editor.getValue();
-  if (argsBox) argsBox.value = DEFAULT_ARGS || "";
+  const starterMain = {{ initial_code|default("print(2+2)\n")|tojson }};
+  const starterWorkspace = {
+    "main.py": starterMain,
+    "helper.py": [
+      "def square(x):",
+      "    return x * x",
+      ""
+    ].join("\n")
+  };
 
-  function setCmd(s){ cmdEl.textContent = s || "$"; }
-
-  async function postJson(url, payload, timeoutMs=12000){
-    const ctl = new AbortController();
-    const t = setTimeout(()=>ctl.abort(), timeoutMs);
-    try{
-      const r = await fetch(url, {
-        method:"POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify(payload),
-        signal: ctl.signal
-      });
-      const txt = await r.text();
-      if(!r.ok) throw new Error(`HTTP ${r.status}: ${txt}`);
-      return JSON.parse(txt);
-    } finally { clearTimeout(t); }
+  function filePaneOpen() {
+    return localStorage.getItem(LS_FILEPANE) !== "0";
   }
 
+  function applyFilePaneState() {
+    const open = filePaneOpen();
+    ideShell.classList.toggle("filepane-collapsed", !open);
 
-	  const USE_LOCAL_PYODIDE = (COURSE === "crypto" && LESSON === "relay");
+    if (open) {
+      const savedW = savedFilePaneWidth();
+      ideShell.style.setProperty("--filepane-w", `${savedW || 190}px`);
+    }
+
+    if (toggleFilePaneBtn) {
+      toggleFilePaneBtn.textContent = open ? "◂" : "▸";
+      toggleFilePaneBtn.title = open ? "Collapse file explorer" : "Expand file explorer";
+    }
+
+    try { editor.refresh(); } catch (_) {}
+  }
+
+  function setFilePaneOpen(open) {
+    localStorage.setItem(LS_FILEPANE, open ? "1" : "0");
+    applyFilePaneState();
+  }
+
+  function savedFilePaneWidth() {
+    const v = parseInt(localStorage.getItem(LS_FILEPANE_W) || "", 10);
+    return Number.isNaN(v) ? null : v;
+  }
+
+  function setFilePaneWidth(px) {
+    const w = Math.max(140, Math.min(420, Math.round(px)));
+    ideShell.style.setProperty("--filepane-w", `${w}px`);
+    localStorage.setItem(LS_FILEPANE_W, String(w));
+    try { editor.refresh(); } catch (_) {}
+  }
+
+  function loadSavedJson(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function loadExpandedDirs() {
+    try {
+      const raw = localStorage.getItem(LS_EXPANDED);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  let expandedDirs = loadExpandedDirs();
+  if (expandedDirs[""]) delete expandedDirs[""];
+
+  function persistExpandedDirs() {
+    try {
+      localStorage.setItem(LS_EXPANDED, JSON.stringify(expandedDirs));
+    } catch (_) {}
+  }
+
+  function loadUiFolders() {
+    try {
+      const raw = localStorage.getItem(LS_UI_FOLDERS);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  let uiFolders = loadUiFolders();
+
+  function persistUiFolders() {
+    try {
+      localStorage.setItem(LS_UI_FOLDERS, JSON.stringify(uiFolders));
+    } catch (_) {}
+  }
+
+  function normalizeFolderPath(path) {
+    return String(path || "")
+      .trim()
+      .replace(/^\/+/, "")
+      .replace(/\/+/g, "/")
+      .replace(/\/$/, "");
+  }
+
+  function folderExists(path) {
+    const p = normalizeFolderPath(path);
+    if (!p) return false;
+    if (uiFolders.includes(p)) return true;
+    return Object.keys(workspace).some(f => f.startsWith(p + "/"));
+  }
+
+  function buildFileTree(filesObj) {
+    const root = { kind: "dir", name: "", path: "", children: {} };
+
+    function ensureDirPath(dirPath) {
+      const parts = String(dirPath || "").split("/").filter(Boolean);
+      let node = root;
+      let curPath = "";
+
+      for (const name of parts) {
+        curPath = curPath ? `${curPath}/${name}` : name;
+        if (!node.children[name]) {
+          node.children[name] = { kind: "dir", name, path: curPath, children: {} };
+        }
+        node = node.children[name];
+      }
+    }
+
+    for (const dirPath of uiFolders) {
+      ensureDirPath(dirPath);
+    }
+
+    for (const path of Object.keys(filesObj || {})) {
+      const parts = String(path).split("/").filter(Boolean);
+      let node = root;
+      let curPath = "";
+
+      for (let i = 0; i < parts.length; i++) {
+        const name = parts[i];
+        curPath = curPath ? `${curPath}/${name}` : name;
+        const isLeaf = i === parts.length - 1;
+
+        if (!node.children[name]) {
+          node.children[name] = isLeaf
+            ? { kind: "file", name, path: curPath }
+            : { kind: "dir", name, path: curPath, children: {} };
+        }
+
+        node = node.children[name];
+      }
+    }
+
+    return root;
+  }
+
+  function sortTreeNodes(nodes) {
+    return Object.values(nodes).sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "dir" ? -1 : 1;
+      if (a.path === "main.py") return -1;
+      if (b.path === "main.py") return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  function ensureParentDirsExpanded(path) {
+    const parts = String(path).split("/").filter(Boolean);
+    let cur = "";
+    for (let i = 0; i < parts.length - 1; i++) {
+      cur = cur ? `${cur}/${parts[i]}` : parts[i];
+      expandedDirs[cur] = true;
+    }
+    persistExpandedDirs();
+  }
+
+  function pruneExpandedDirs() {
+    const tree = buildFileTree(workspace);
+    const valid = new Set();
+
+    function walk(node) {
+      if (node.kind === "dir" && node.path) valid.add(node.path);
+      if (node.kind === "dir") {
+        for (const child of Object.values(node.children || {})) walk(child);
+      }
+    }
+
+    walk(tree);
+
+    for (const key of Object.keys(expandedDirs)) {
+      if (!valid.has(key)) delete expandedDirs[key];
+    }
+
+    uiFolders = uiFolders.filter(p => valid.has(p) || folderExists(p));
+    persistExpandedDirs();
+    persistUiFolders();
+  }
+
+  function persistWorkspace() {
+    try {
+      localStorage.setItem(LS_FILES, JSON.stringify(workspace));
+      localStorage.setItem(LS_CURRENT, currentFile);
+      localStorage.setItem(LS_ENTRY, entryFile);
+      localStorage.setItem(LS_ARGS, argsBox.value || "");
+    } catch (_) {}
+    persistUiFolders();
+    pruneExpandedDirs();
+  }
+
+  function entryLabel(path) {
+    return path === entryFile ? `▶ ${path}` : path;
+  }
+
+  function setCmd(s) {
+    cmdEl.textContent = s || "$";
+  }
+
+  let workspace = loadSavedJson(LS_FILES, structuredClone(starterWorkspace));
+  let currentFile = localStorage.getItem(LS_CURRENT) || "main.py";
+  let entryFile = localStorage.getItem(LS_ENTRY) || "main.py";
+  let selectedFolder = null;
+
+  if (!(currentFile in workspace)) currentFile = "main.py";
+  if (!(currentFile in workspace)) {
+    workspace["main.py"] = starterWorkspace["main.py"] || "";
+    currentFile = "main.py";
+  }
+
+  if (!(entryFile in workspace)) entryFile = "main.py";
+  if (!(entryFile in workspace)) entryFile = currentFile;
+
+  if (argsBox) argsBox.value = localStorage.getItem(LS_ARGS) ?? (DEFAULT_ARGS || "");
+
+  function saveCurrentFile() {
+    workspace[currentFile] = editor.getValue();
+    persistWorkspace();
+  }
+
+  function sortedPaths(obj) {
+    return Object.keys(obj).sort((a, b) => {
+      if (a === "main.py") return -1;
+      if (b === "main.py") return 1;
+      return a.localeCompare(b);
+    });
+  }
+
+  function renderFileTabs() {
+    const host = document.getElementById("fileTabs");
+    host.innerHTML = "";
+
+    const tree = buildFileTree(workspace);
+
+    function renderNode(node, mount) {
+      if (node.kind === "dir") {
+        const isRoot = node.path === "";
+        const children = sortTreeNodes(node.children || {});
+        const isOpen = isRoot ? true : !!expandedDirs[node.path];
+
+        if (!isRoot) {
+          const wrap = document.createElement("div");
+          wrap.className = "tree-node";
+
+          const row = document.createElement("div");
+          row.className = "tree-row";
+
+          const label = document.createElement("button");
+          label.type = "button";
+          label.className = "tree-label folder";
+          label.textContent = `${isOpen ? "▾" : "▸"} ${node.name}`;
+          label.title = node.path;
+          label.onclick = () => {
+            selectedFolder = node.path;
+            expandedDirs[node.path] = !expandedDirs[node.path];
+            persistExpandedDirs();
+            renderFileTabs();
+          };
+
+          if (selectedFolder === node.path) {
+            label.classList.add("active");
+          }
+
+          const spacer = document.createElement("div");
+          row.appendChild(label);
+          row.appendChild(spacer);
+          wrap.appendChild(row);
+
+          if (isOpen) {
+            const kids = document.createElement("div");
+            kids.className = "tree-children";
+            for (const child of children) renderNode(child, kids);
+            wrap.appendChild(kids);
+          }
+
+          mount.appendChild(wrap);
+          return;
+        }
+
+        for (const child of children) renderNode(child, mount);
+        return;
+      }
+
+      const row = document.createElement("div");
+      row.className = "tree-row";
+
+      const label = document.createElement("button");
+      label.type = "button";
+      label.className = "tree-label file" + (node.path === currentFile ? " active" : "");
+      label.textContent = node.name;
+      label.title = node.path;
+      label.onclick = () => switchFile(node.path);
+
+      const runBtn = document.createElement("button");
+      runBtn.type = "button";
+      runBtn.className = "tree-run" + (node.path === entryFile ? " active" : "");
+      runBtn.textContent = (node.path === entryFile) ? "▶ Run" : "Run";
+      runBtn.title = (node.path === entryFile) ? "Current run file" : `Run ${node.path}`;
+      runBtn.onclick = (e) => {
+        e.stopPropagation();
+        entryFile = node.path;
+        ensureParentDirsExpanded(node.path);
+        persistWorkspace();
+        renderFileTabs();
+      };
+
+      row.appendChild(label);
+      row.appendChild(runBtn);
+      mount.appendChild(row);
+    }
+
+    renderNode(tree, host);
+
+    const pill = document.querySelector(".filepill--toolbar");
+    if (pill) pill.textContent = entryFile;
+  }
+
+  function switchFile(path) {
+    if (!(path in workspace)) return;
+    saveCurrentFile();
+    currentFile = path;
+    selectedFolder = null;
+    ensureParentDirsExpanded(path);
+    editor.setValue(workspace[currentFile] ?? "");
+    renderFileTabs();
+    persistWorkspace();
+    try { editor.refresh(); } catch (_) {}
+  }
+
+  function resetWorkspace() {
+    workspace = structuredClone(starterWorkspace);
+    currentFile = "main.py";
+    entryFile = "main.py";
+    editor.setValue(workspace[currentFile] || "");
+    if (argsBox) argsBox.value = DEFAULT_ARGS || "";
+    persistWorkspace();
+    renderFileTabs();
+    PyPanel.resetOut(outId, "Reset.");
+    setCmd("$");
+    try { editor.refresh(); } catch (_) {}
+  }
+
+  function validPath(path) {
+    if (!path) return false;
+    if (path.startsWith("/")) return false;
+    if (path.includes("..")) return false;
+    if (path.endsWith("/")) return false;
+    return true;
+  }
+
+  function suggestNewFileName() {
+    let n = 1;
+    while (workspace[`file${n}.py`]) n++;
+    return `file${n}.py`;
+  }
+
+  document.getElementById("newFileBtn").onclick = () => {
+    saveCurrentFile();
+    const suggested = selectedFolder
+      ? `${selectedFolder}/${suggestNewFileName()}`
+      : suggestNewFileName();
+
+    const raw = window.prompt(
+      "New file path (examples: helper.py, data.txt, mypkg/util.py)",
+      suggested
+    );
+    if (raw == null) return;
+    const path = raw.trim();
+    if (!validPath(path)) return alert("Invalid path.");
+    if (workspace[path] != null) return alert("That file already exists.");
+
+    workspace[path] = "";
+    ensureParentDirsExpanded(path);
+    switchFile(path);
+  };
+
+  document.getElementById("renameFileBtn").onclick = () => {
+    if (currentFile === "main.py") {
+      alert("You cannot rename main.py.");
+      return;
+    }
+
+    saveCurrentFile();
+    const old = currentFile;
+    const raw = window.prompt("Rename file:", currentFile);
+    if (raw == null) return;
+    const next = raw.trim();
+
+    if (!validPath(next)) return alert("Invalid path.");
+    if (next === currentFile) return;
+    if (workspace[next] != null) return alert("That file already exists.");
+
+    workspace[next] = workspace[old];
+    delete workspace[old];
+    currentFile = next;
+    if (entryFile === old) entryFile = next;
+    ensureParentDirsExpanded(next);
+    renderFileTabs();
+    persistWorkspace();
+  };
+
+  document.getElementById("deleteFileBtn").onclick = () => {
+    if (selectedFolder) {
+      const prefix = selectedFolder + "/";
+      const hasFiles = Object.keys(workspace).some(p => p.startsWith(prefix));
+
+      if (hasFiles) {
+        const ok = confirm(`Delete folder ${selectedFolder} and all files inside it?`);
+        if (!ok) return;
+
+        for (const path of Object.keys(workspace)) {
+          if (path.startsWith(prefix)) delete workspace[path];
+        }
+        uiFolders = uiFolders.filter(p => !(p === selectedFolder || p.startsWith(prefix)));
+      } else {
+        const ok = confirm(`Delete empty folder ${selectedFolder}?`);
+        if (!ok) return;
+        uiFolders = uiFolders.filter(p => p !== selectedFolder);
+      }
+
+      delete expandedDirs[selectedFolder];
+      selectedFolder = null;
+
+      if (!(currentFile in workspace)) currentFile = "main.py";
+      if (!(entryFile in workspace)) entryFile = "main.py";
+
+      editor.setValue(workspace[currentFile] ?? "");
+      renderFileTabs();
+      persistWorkspace();
+      return;
+    }
+
+    if (currentFile === "main.py") {
+      alert("You cannot delete main.py.");
+      return;
+    }
+    if (!confirm(`Delete ${currentFile}?`)) return;
+
+    if (entryFile === currentFile) entryFile = "main.py";
+    delete workspace[currentFile];
+    currentFile = "main.py";
+    editor.setValue(workspace[currentFile] ?? "");
+    renderFileTabs();
+    persistWorkspace();
+  };
+
+  document.getElementById("newFolderBtn").onclick = () => {
+    const raw = window.prompt("New folder path (examples: data, mypkg, src/utils)");
+    if (raw == null) return;
+
+    const path = normalizeFolderPath(raw);
+    if (!path) return alert("Invalid folder path.");
+    if (path.includes("..")) return alert("Invalid folder path.");
+
+    if (!uiFolders.includes(path)) uiFolders.push(path);
+    expandedDirs[path] = true;
+
+    // also expand parents
+    const parts = path.split("/").filter(Boolean);
+    let cur = "";
+    for (let i = 0; i < parts.length - 1; i++) {
+      cur = cur ? `${cur}/${parts[i]}` : parts[i];
+      expandedDirs[cur] = true;
+    }
+
+    persistUiFolders();
+    persistExpandedDirs();
+    renderFileTabs();
+  };
+
+  renderFileTabs();
+  editor.setValue(workspace[currentFile] || "");
+  applyFilePaneState();
+
+  if (toggleFilePaneBtn) {
+    toggleFilePaneBtn.onclick = () => setFilePaneOpen(!filePaneOpen());
+  }
+
+  if (expandFilePaneBtn) {
+    expandFilePaneBtn.onclick = () => setFilePaneOpen(true);
+  }
+
+  if (filePaneGutter) {
+    filePaneGutter.addEventListener("mousedown", (e) => {
+      if (!filePaneOpen()) return;
+
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = document.querySelector(".filepane").getBoundingClientRect().width;
+
+      function onMove(ev) {
+        const nextW = startW + (ev.clientX - startX);
+        setFilePaneWidth(nextW);
+      }
+
+      function onUp() {
+        window.removeEventListener("mousemove", onMove, true);
+        window.removeEventListener("mouseup", onUp, true);
+      }
+
+      window.addEventListener("mousemove", onMove, true);
+      window.addEventListener("mouseup", onUp, true);
+    }, true);
+  }
+
   let pyRunner = null;
-  let pyRunnerReady = false;
   const pending = new Map();
 
-  function ensurePyRunner(){
+  function ensurePyRunner() {
     if (pyRunner) return;
     pyRunner = new Worker("{{ url_for('static', filename='js/py_runner_worker.js') }}");
-    pyRunner.onmessage = (e)=>{
+    pyRunner.onmessage = (e) => {
       const m = e.data || {};
       const cb = pending.get(m.id);
       if (!cb) return;
       pending.delete(m.id);
       cb(m);
     };
-    pyRunnerReady = true;
   }
 
-  function runLocalPyodide(code){
+  function runLocalWorkspace(files, args, entryFileName) {
     ensurePyRunner();
-    return new Promise((resolve)=>{
+    return new Promise((resolve) => {
       const id = Math.random().toString(36).slice(2);
       pending.set(id, resolve);
-      pyRunner.postMessage({ id, code });
+      pyRunner.postMessage({
+        id,
+        kind: "run_workspace",
+        files,
+        args,
+        entry_file: entryFileName
+      });
     });
   }
 
-
-  async function runCode(){
-    try{
+  async function runCode() {
+    try {
+      saveCurrentFile();
       PyPanel.resetOut(outId, "Running…");
+
       const args = (argsBox.value || "").trim();
-      setCmd(args ? `$ python main.py ${args}` : "$ python main.py");
+      const argsList = args ? args.split(/\s+/) : [];
+      setCmd(args ? `$ python ${entryFile} ${args}` : `$ python ${entryFile}`);
 
-      if (USE_LOCAL_PYODIDE){
-        const res = await runLocalPyodide(editor.getValue());
-        PyPanel.resetOut(outId);
-        if (res.ok){
-          if (res.stdout) PyPanel.append(outId, "stdout", res.stdout);
-          if (res.stderr) PyPanel.append(outId, "stderr", res.stderr);
-          if (!res.stdout && !res.stderr) PyPanel.append(outId, "system", "No output.");
-        } else {
-          PyPanel.append(outId, "stderr", res.error || "Error");
-        }
-        return;
-      }
-
-      // default behavior (server-side docker)
-      const j = await postJson(`/api/course/${COURSE}/${LESSON}/run`, { code: editor.getValue(), args });
-      setCmd(j.cmd_display || "$ python main.py");
+      const res = await runLocalWorkspace(workspace, argsList, entryFile);
 
       PyPanel.resetOut(outId);
-      if (j.stdout) PyPanel.append(outId, "stdout", j.stdout);
-      if (j.stderr) PyPanel.append(outId, "stderr", j.stderr);
-      if (!j.stdout && !j.stderr) PyPanel.append(outId, "system", "No output.");
-    } catch(e){
+
+      if (res.ok) {
+        if (res.files && typeof res.files === "object") {
+          workspace = res.files;
+          if (!(currentFile in workspace)) currentFile = "main.py";
+          editor.setValue(workspace[currentFile] ?? "");
+          renderFileTabs();
+          persistWorkspace();
+        }
+
+        if (res.stdout) PyPanel.append(outId, "stdout", res.stdout);
+        if (res.stderr) PyPanel.append(outId, "stderr", res.stderr);
+        if (!res.stdout && !res.stderr) PyPanel.append(outId, "system", "No output.");
+      } else {
+        PyPanel.append(outId, "stderr", res.error || "Error");
+      }
+    } catch (e) {
       PyPanel.resetOut(outId);
       PyPanel.append(outId, "stderr", String(e && e.message ? e.message : e));
     }
   }
 
   document.getElementById("runBtn").onclick = runCode;
-  document.getElementById("resetBtn").onclick = () => {
-    editor.setValue(starter);
-    PyPanel.resetOut(outId, "Reset.");
-    setCmd("$");
-  };
+  document.getElementById("resetBtn").onclick = resetWorkspace;
 
-// Copy cmd
-const copyBtn = document.getElementById("copyCmdBtn");
-if (copyBtn){
-  copyBtn.onclick = async ()=>{
-    let text = (cmdEl.textContent || "").trim().replace(/^\$\s*/, "");
-    if (!text) return;
-    try {
-      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
-      else { window.prompt("Copy command:", text); return; }
-      const old = copyBtn.textContent;
-      copyBtn.textContent = "Copied";
-      setTimeout(()=> copyBtn.textContent = old, 800);
-    } catch(e){
-      window.prompt("Copy command:", text);
-    }
-  };
-}
+  if (argsBox) {
+    argsBox.addEventListener("input", persistWorkspace);
+  }
 
+  const copyBtn = document.getElementById("copyCmdBtn");
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      let text = (cmdEl.textContent || "").trim().replace(/^\$\s*/, "");
+      if (!text) return;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          window.prompt("Copy command:", text);
+          return;
+        }
+        const old = copyBtn.textContent;
+        copyBtn.textContent = "Copied";
+        setTimeout(() => copyBtn.textContent = old, 800);
+      } catch (_) {
+        window.prompt("Copy command:", text);
+      }
+    };
+  }
 
-  // ----- Mode switching: Sandbox <-> REPL -----
-  const modeSandboxBtn = document.getElementById("modeSandboxBtn");
-  const modeReplBtn    = document.getElementById("modeReplBtn");
+  function savedSideW() {
+    const v = parseInt(localStorage.getItem(KEY_SIDEW) || "", 10);
+    return Number.isNaN(v) ? null : v;
+  }
 
-  const toolbarSandbox = document.getElementById("toolbarSandbox");
-  const toolbarRepl    = document.getElementById("toolbarRepl");
-
-  const bottomSandbox  = document.getElementById("bottomSandbox");
-  const bottomRepl     = document.getElementById("bottomRepl");
-
-  const ideEl = document.getElementById("ide");
-  const paneTop = document.getElementById("paneTop");
-  const editorBody = document.getElementById("editorBody");
-  const editorToggle = document.getElementById("editorToggle");
-  const editorChev = document.getElementById("editorChev");
-  const gutterV = ideEl ? ideEl.querySelector(".gutter-v") : null;
-
-  const KEY_SIDEW = "sandbox:sideW";
-  const KEY_MODE = "sandbox:mode"; // sandbox | repl
-  const KEY_REPL_EXP = "sandbox:repl:expanded"; // 1/0
-  const KEY_TOPH = "sandbox:topH"; // SplitPanes key
-  const KEY_REPL_TOPH = "sandbox:repl:topH"; // last expanded height in REPL
-  const KEY_LAYOUT = "sandbox:layout"; // "stack" | "side"
-
-  const layoutBtn = document.getElementById("layoutToggleBtn");
-
-	function savedSideW(){
-	  const v = parseInt(localStorage.getItem(KEY_SIDEW) || "", 10);
-	  return Number.isNaN(v) ? null : v;
-	}
-
-	function setSideW(px){
-	  paneTop.style.flex = `0 0 ${Math.round(px)}px`; // width when flex-direction: row
-	  try{ editor.refresh(); }catch(_e){}
-	}
-
-	function onSideDragStart(e){
-	  if (!ideEl.classList.contains("layout-side")) return;
-
-	  // prevent SplitPanes' vertical handler from grabbing this drag
-	  e.preventDefault();
-	  e.stopImmediatePropagation();
-
-	  const startX = e.clientX;
-	  const startW = paneTop.getBoundingClientRect().width;	
-          const paneRight = ideEl.querySelector(".pane-right");
-          const totalW = (paneRight ? paneRight.getBoundingClientRect().width : ideEl.getBoundingClientRect().width);
-
-	  const MIN = 260;
-	  const MAX = Math.max(MIN, totalW - 260);
-
-	  function onMove(ev){
-	    let w = startW + (ev.clientX - startX);
-	    w = Math.max(MIN, Math.min(MAX, w));
-	    setSideW(w);
-	  }
-	  function onUp(){
-	    window.removeEventListener("mousemove", onMove, true);
-	    window.removeEventListener("mouseup", onUp, true);
-	    localStorage.setItem(KEY_SIDEW, String(Math.round(paneTop.getBoundingClientRect().width)));
-	  }
-
-	  window.addEventListener("mousemove", onMove, true);
-	  window.addEventListener("mouseup", onUp, true);
-	}
-
-	if (gutterV){
-	  gutterV.addEventListener("mousedown", onSideDragStart, true);
-	}
-
-	function applyLayout(layout){
-	  const side = (layout === "side");
-	  ideEl.classList.toggle("layout-side", side);
-
-	  if (side){
-	    const paneRight = ideEl.querySelector(".pane-right");
-	    const totalW = (paneRight ? paneRight.getBoundingClientRect().width : ideEl.getBoundingClientRect().width);
-
-	    const wSaved = savedSideW();
-	    const w = (wSaved != null) ? wSaved : Math.round(totalW * 0.55);
-	    setSideW(w);
-	  }
-
-	  if (layoutBtn) layoutBtn.textContent = side ? "Stacked" : "Side-by-side";
-	  try{ editor.refresh(); }catch(_e){}
-	}	
-
-	if (layoutBtn){
-	  layoutBtn.onclick = ()=>{
-	    const next = ideEl.classList.contains("layout-side") ? "stack" : "side";
-	    localStorage.setItem(KEY_LAYOUT, next);
-	    applyLayout(next);
-	  };
-	}
-
-applyLayout(localStorage.getItem(KEY_LAYOUT) || "stack");
-
-  let replMounted = false;
-
-  function savedTopPx(){
+  function savedTopPx() {
     const v = parseInt(localStorage.getItem(KEY_TOPH) || "", 10);
     return Number.isNaN(v) ? null : v;
   }
-  function savedReplTopPx(){
+
+  function savedReplTopPx() {
     const v = parseInt(localStorage.getItem(KEY_REPL_TOPH) || "", 10);
     return Number.isNaN(v) ? null : v;
   }
 
-  function setTopPx(px){
-    paneTop.style.flex = "0 0 " + Math.round(px) + "px";
+  function setSideW(px) {
+    paneTop.style.flex = `0 0 ${Math.round(px)}px`;
+    try { editor.refresh(); } catch (_) {}
   }
 
-  function replExpanded(){
+  function setTopPx(px) {
+    paneTop.style.flex = `0 0 ${Math.round(px)}px`;
+    try { editor.refresh(); } catch (_) {}
+  }
+
+  function applyStackHeight() {
+    const saved = savedTopPx();
+    if (saved != null) {
+      setTopPx(saved);
+      return;
+    }
+    const totalH = ideEl.getBoundingClientRect().height || 520;
+    setTopPx(Math.round(totalH * 0.66));
+  }
+
+  function onSideDragStart(e) {
+    if (!ideEl.classList.contains("layout-side")) return;
+    if (ideEl.classList.contains("mode-repl")) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    const startX = e.clientX;
+    const startW = paneTop.getBoundingClientRect().width;
+    const paneRight = ideEl.querySelector(".pane-right");
+    const totalW = (paneRight ? paneRight.getBoundingClientRect().width : ideEl.getBoundingClientRect().width);
+
+    const MIN = 260;
+    const MAX = Math.max(MIN, totalW - 260);
+
+    function onMove(ev) {
+      let w = startW + (ev.clientX - startX);
+      w = Math.max(MIN, Math.min(MAX, w));
+      setSideW(w);
+    }
+
+    function onUp() {
+      window.removeEventListener("mousemove", onMove, true);
+      window.removeEventListener("mouseup", onUp, true);
+      localStorage.setItem(KEY_SIDEW, String(Math.round(paneTop.getBoundingClientRect().width)));
+    }
+
+    window.addEventListener("mousemove", onMove, true);
+    window.addEventListener("mouseup", onUp, true);
+  }
+
+  if (gutterV) {
+    gutterV.addEventListener("mousedown", onSideDragStart, true);
+  }
+
+  function applyLayout(layout) {
+    const side = (layout === "side");
+    ideEl.classList.toggle("layout-side", side);
+
+    if (side) {
+      const paneRight = ideEl.querySelector(".pane-right");
+      const totalW = (paneRight ? paneRight.getBoundingClientRect().width : ideEl.getBoundingClientRect().width);
+      const wSaved = savedSideW();
+      const w = (wSaved != null) ? wSaved : Math.round(totalW * 0.55);
+      setSideW(w);
+    } else {
+      applyStackHeight();
+    }
+
+    if (layoutBtn) {
+      layoutBtn.textContent = side ? "Stacked" : "Side-by-side";
+    }
+    try { editor.refresh(); } catch (_) {}
+  }
+
+  if (layoutBtn) {
+    layoutBtn.onclick = () => {
+      if (ideEl.classList.contains("mode-repl")) return;
+      const next = ideEl.classList.contains("layout-side") ? "stack" : "side";
+      localStorage.setItem(KEY_LAYOUT, next);
+      applyLayout(next);
+    };
+  }
+
+  let replMounted = false;
+
+  function replExpanded() {
     return (localStorage.getItem(KEY_REPL_EXP) === "1");
   }
 
-  function setReplExpanded(on){
+  function setReplExpanded(on) {
     localStorage.setItem(KEY_REPL_EXP, on ? "1" : "0");
     editorToggle.setAttribute("aria-expanded", on ? "true" : "false");
     editorChev.textContent = on ? "▾" : "▸";
   }
 
-  function applyReplEditorState(){
+  function applyReplEditorState() {
     const on = replExpanded();
-    if (on){
+
+    if (on) {
       editorBody.style.display = "";
-      if (gutterV) gutterV.style.display = "none"; // no dragging needed in REPL mode
-      const h = savedReplTopPx() || savedTopPx() || Math.round((ideEl.getBoundingClientRect().height || 520) * 0.66);
+      const h = savedReplTopPx() || savedTopPx() || Math.round((ideEl.getBoundingClientRect().height || 520) * 0.5);
       setTopPx(h);
-      try{ editor.refresh(); }catch(_e){}
+      try { editor.refresh(); } catch (_) {}
     } else {
-      // remember expanded height before collapsing (if currently tall)
       const curH = paneTop.getBoundingClientRect().height;
-      if (curH > 120){
-        try{ localStorage.setItem(KEY_REPL_TOPH, String(Math.round(curH))); }catch(_e){}
+      if (curH > 120) {
+        try {
+          localStorage.setItem(KEY_REPL_TOPH, String(Math.round(curH)));
+        } catch (_) {}
       }
       editorBody.style.display = "none";
-      if (gutterV) gutterV.style.display = "none";
       setTopPx(64);
     }
   }
 
-  editorToggle.onclick = ()=>{
+  editorToggle.onclick = () => {
     setReplExpanded(!replExpanded());
     applyReplEditorState();
   };
-  editorToggle.addEventListener("keydown", (e)=>{
-    if(e.key === "Enter" || e.key === " "){
+
+  editorToggle.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       editorToggle.click();
     }
   });
 
-  function mountReplOnce(){
+  function mountReplOnce() {
     if (replMounted) return;
     replMounted = true;
+
     window.ReplEmbed.mount({
       outId: "replOut",
       inId: "replIn",
@@ -591,24 +1433,13 @@ applyLayout(localStorage.getItem(KEY_LAYOUT) || "stack");
       resetId: "replResetBtn",
       loadId: "replLoadEditorBtn",
       statusId: "replStatus",
-      getEditorCode: ()=> editor.getValue(),
+      getEditorCode: () => editor.getValue(),
       workerUrl: "{{ url_for('static', filename='js/py_repl_worker.js') }}?v=2"
-
     });
   }
 
-  function setMode(mode){
+  function setMode(mode) {
     const isRepl = (mode === "repl");
-
-	  if (layoutBtn){
-	    layoutBtn.disabled = isRepl;
-	    layoutBtn.style.opacity = isRepl ? "0.5" : "1";
-	    layoutBtn.style.cursor = isRepl ? "not-allowed" : "";
-	  }
-
-	  if (isRepl){
-	    ideEl.classList.remove("layout-side"); // force stacked in REPL
-	  }
 
     ideEl.classList.toggle("mode-repl", isRepl);
     localStorage.setItem(KEY_MODE, isRepl ? "repl" : "sandbox");
@@ -617,33 +1448,32 @@ applyLayout(localStorage.getItem(KEY_LAYOUT) || "stack");
     modeReplBtn.classList.toggle("active", isRepl);
 
     toolbarSandbox.style.display = isRepl ? "none" : "";
-    //toolbarRepl.style.display = isRepl ? "" : "none";
-    toolbarRepl.style.display = "none"; // keep hidden always (no editor dropdown in REPL)
+    toolbarRepl.style.display = isRepl ? "" : "none";
 
     bottomSandbox.style.display = isRepl ? "none" : "";
     bottomRepl.style.display = isRepl ? "" : "none";
 
-    if (!isRepl){
-      // restore sandbox layout + splitter
+    if (layoutBtn) {
+      layoutBtn.disabled = isRepl;
+      layoutBtn.style.opacity = isRepl ? "0.5" : "1";
+      layoutBtn.style.cursor = isRepl ? "not-allowed" : "";
+    }
+
+    if (!isRepl) {
       editorBody.style.display = "";
-      if (gutterV) gutterV.style.display = "";
-      const h = savedTopPx();
-      if (h != null) setTopPx(h);
-      else {
-        const ideH = ideEl.getBoundingClientRect().height || 520;
-        setTopPx(Math.round(ideH * 0.66));
-      }
-      try{ editor.refresh(); }catch(_e){}
+      applyLayout(localStorage.getItem(KEY_LAYOUT) || "stack");
+      try { editor.refresh(); } catch (_) {}
       return;
     }
 
-    // default: collapsed editor in REPL unless user expanded before
-    if (localStorage.getItem(KEY_REPL_EXP) == null){
+    ideEl.classList.remove("layout-side");
+
+    if (localStorage.getItem(KEY_REPL_EXP) == null) {
       setReplExpanded(false);
     } else {
-      // sync chevron state
       setReplExpanded(replExpanded());
     }
+
     applyReplEditorState();
     mountReplOnce();
 
@@ -651,10 +1481,11 @@ applyLayout(localStorage.getItem(KEY_LAYOUT) || "stack");
     if (inp) inp.focus();
   }
 
-  modeSandboxBtn.onclick = ()=> setMode("sandbox");
-  modeReplBtn.onclick    = ()=> setMode("repl");
+  modeSandboxBtn.onclick = () => setMode("sandbox");
+  modeReplBtn.onclick = () => setMode("repl");
 
-  // initial mode
+  applyLayout(localStorage.getItem(KEY_LAYOUT) || "stack");
+
   const savedMode = localStorage.getItem(KEY_MODE) || "sandbox";
   setMode(savedMode === "repl" ? "repl" : "sandbox");
 });

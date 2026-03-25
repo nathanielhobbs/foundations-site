@@ -46,6 +46,50 @@
   .submit-title{ font-weight: 800; margin-bottom: 6px; }
   .submit-sub{ color: rgba(120,120,120,.95); margin-bottom: 10px; }
   .submitted-at{ margin-top: 8px; font-weight: 700; }
+    .filebar2{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin: 8px 0 8px 0;
+    flex-wrap: wrap;
+  }
+
+  .filetabs{
+    display:flex;
+    gap:8px;
+    flex-wrap: wrap;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .filetab{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: .93rem;
+    padding: .35rem .65rem;
+    border: 1px solid var(--panel-border, #d0d7de);
+    border-radius: 999px;
+    background: rgba(0,0,0,.03);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .filetab.active{
+    background: rgba(0,0,0,.09);
+    font-weight: 700;
+  }
+
+  :root[data-theme="dark"] .filetab{
+    background: rgba(255,255,255,.06);
+  }
+  :root[data-theme="dark"] .filetab.active{
+    background: rgba(255,255,255,.14);
+  }
+
+  .fileactions{
+    display:flex;
+    gap:8px;
+    flex: 0 0 auto;
+  }
 </style>
 {% endblock %}
 
@@ -58,6 +102,7 @@
     netid: {{ NETID|tojson }},
     title: {{ hw.title|tojson }},
     initialCode: {{ initial_code|tojson }},
+    initialFiles: {{ initial_files|tojson }},
     promptMd: {{ prompt_md|tojson }},
     submittedAt: {{ submitted_at|tojson }},
   };
@@ -107,12 +152,23 @@
       <div class="py-panel">
         <div class="toolbar-row">
           <button id="runBtn" class="py-btn">Run</button>
+          <span class="filepill filepill--toolbar">student.py</span>
           <input id="argsBox" class="argsBox" placeholder="args (optional), e.g. 10 20">
           <button id="checkBtn" class="py-btn">Check</button>
           <button id="resetBtn" class="py-btn">Reset</button>
           <div class="spacer"></div>
           <div class="muted">Submit is one-time.</div>
         </div>
+
+        <div class="filebar2">
+          <div id="fileTabs" class="filetabs"></div>
+          <div class="fileactions">
+            <button id="newFileBtn" class="py-btn" type="button">New file</button>
+            <button id="renameFileBtn" class="py-btn" type="button">Rename</button>
+            <button id="deleteFileBtn" class="py-btn" type="button">Delete</button>
+          </div>
+        </div>
+
         <textarea id="editor"></textarea>
       </div>
     </div>
@@ -147,14 +203,17 @@
 <script>
 (function(){
   const HW = window.__HW;
-  const LS_KEY = `hw:${HW.slug}:netid:${HW.netid}:code`;
+
+  const LS_FILES   = `hw:${HW.slug}:netid:${HW.netid}:files`;
+  const LS_CURRENT = `hw:${HW.slug}:netid:${HW.netid}:currentFile`;
+  const LS_ARGS    = `hw:${HW.slug}:netid:${HW.netid}:args`;
 
   const outId = "out";
   const cmdEl = document.getElementById("cmd");
+  const argsEl = document.getElementById("argsBox");
 
   const editor = PyPanel.makeEditor("editor", {});
 
-  // Render homework prompt markdown
   const promptEl = document.getElementById("prompt");
   if (promptEl && window.marked){
     promptEl.innerHTML = marked.parse(HW.promptMd || "");
@@ -162,19 +221,161 @@
     promptEl.textContent = (HW.promptMd || "");
   }
 
-  const saved = localStorage.getItem(LS_KEY);
-  editor.setValue(saved ?? HW.initialCode ?? "");
-
   SplitPanes.init("ide", "paneLeft", "paneTop", "paneBottom", `hw:${HW.slug}:${HW.netid}`);
   window.addEventListener("splitter:changed", ()=>{ try { editor.refresh(); } catch(e){} });
 
   function setCmd(s){ cmdEl.textContent = s || "$"; }
 
+  function loadSavedJson(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  const starterWorkspace = (HW.initialFiles && typeof HW.initialFiles === "object" && Object.keys(HW.initialFiles).length)
+    ? HW.initialFiles
+    : { "student.py": HW.initialCode || "" };
+
+  let workspace = loadSavedJson(LS_FILES, structuredClone(starterWorkspace));
+  let currentFile = localStorage.getItem(LS_CURRENT) || "student.py";
+  if (!(currentFile in workspace)) currentFile = "student.py";
+  if (!(currentFile in workspace)) {
+    workspace["student.py"] = HW.initialCode || "";
+    currentFile = "student.py";
+  }
+
+  argsEl.value = localStorage.getItem(LS_ARGS) || "";
+
+  function persistWorkspace() {
+    try {
+      localStorage.setItem(LS_FILES, JSON.stringify(workspace));
+      localStorage.setItem(LS_CURRENT, currentFile);
+      localStorage.setItem(LS_ARGS, argsEl.value || "");
+    } catch (_) {}
+  }
+
+  function saveCurrentFile() {
+    workspace[currentFile] = editor.getValue();
+    persistWorkspace();
+  }
+
+  function sortedPaths(obj) {
+    return Object.keys(obj).sort((a, b) => {
+      if (a === "student.py") return -1;
+      if (b === "student.py") return 1;
+      return a.localeCompare(b);
+    });
+  }
+
+  function renderFileTabs() {
+    const host = document.getElementById("fileTabs");
+    host.innerHTML = "";
+
+    for (const path of sortedPaths(workspace)) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "filetab" + (path === currentFile ? " active" : "");
+      btn.textContent = path;
+      btn.title = path;
+      btn.onclick = () => switchFile(path);
+      host.appendChild(btn);
+    }
+  }
+
+  function switchFile(path) {
+    if (!(path in workspace)) return;
+    saveCurrentFile();
+    currentFile = path;
+    editor.setValue(workspace[currentFile] ?? "");
+    renderFileTabs();
+    persistWorkspace();
+    try { editor.refresh(); } catch(_) {}
+  }
+
+  function validPath(path) {
+    if (!path) return false;
+    if (path.startsWith("/")) return false;
+    if (path.includes("..")) return false;
+    if (path.endsWith("/")) return false;
+    return true;
+  }
+
+  function suggestNewFileName() {
+    let n = 1;
+    while (workspace[`helper${n}.py`]) n++;
+    return `helper${n}.py`;
+  }
+
+  document.getElementById("newFileBtn").onclick = () => {
+    if (HW.submittedAt) return;
+    saveCurrentFile();
+    const raw = window.prompt(
+      "New file path (examples: helper.py, data.txt, mypkg/util.py)",
+      suggestNewFileName()
+    );
+    if (raw == null) return;
+    const path = raw.trim();
+    if (!validPath(path)) return alert("Invalid path.");
+    if (workspace[path] != null) return alert("That file already exists.");
+
+    workspace[path] = "";
+    switchFile(path);
+  };
+
+  document.getElementById("renameFileBtn").onclick = () => {
+    if (HW.submittedAt) return;
+    if (currentFile === "student.py") return alert("Keep student.py as the entry file.");
+    saveCurrentFile();
+    const raw = window.prompt("Rename file:", currentFile);
+    if (raw == null) return;
+    const next = raw.trim();
+    if (!validPath(next)) return alert("Invalid path.");
+    if (next === currentFile) return;
+    if (workspace[next] != null) return alert("That file already exists.");
+
+    workspace[next] = workspace[currentFile];
+    delete workspace[currentFile];
+    currentFile = next;
+    renderFileTabs();
+    persistWorkspace();
+  };
+
+  document.getElementById("deleteFileBtn").onclick = () => {
+    if (HW.submittedAt) return;
+    if (currentFile === "student.py") return alert("You cannot delete student.py.");
+    if (!confirm(`Delete ${currentFile}?`)) return;
+
+    delete workspace[currentFile];
+    currentFile = "student.py";
+    editor.setValue(workspace[currentFile] ?? "");
+    renderFileTabs();
+    persistWorkspace();
+  };
+
+  function resetWorkspace() {
+    workspace = structuredClone(starterWorkspace);
+    currentFile = "student.py";
+    editor.setValue(workspace[currentFile] ?? "");
+    localStorage.removeItem(LS_ARGS);
+    argsEl.value = "";
+    persistWorkspace();
+    setCmd("$");
+    PyPanel.resetOut(outId);
+    PyPanel.append(outId, "system", "Reset. Run or Check to see output.");
+  }
+
+  renderFileTabs();
+  editor.setValue(workspace[currentFile]);
+
   const runBtn   = document.getElementById("runBtn");
   const checkBtn = document.getElementById("checkBtn");
   const resetBtn = document.getElementById("resetBtn");
   const submitBtn = document.getElementById("btnSubmit");
-  const argsEl   = document.getElementById("argsBox");
   const submittedAtEl = document.getElementById("submittedAt");
 
   function setBusy(b){
@@ -182,6 +383,9 @@
     checkBtn.disabled = b;
     resetBtn.disabled = b;
     submitBtn.disabled = b || !!HW.submittedAt;
+    document.getElementById("newFileBtn").disabled = b || !!HW.submittedAt;
+    document.getElementById("renameFileBtn").disabled = b || !!HW.submittedAt;
+    document.getElementById("deleteFileBtn").disabled = b || !!HW.submittedAt;
   }
 
   function setSubmitted(ts){
@@ -193,7 +397,6 @@
       submittedAtEl.textContent = "Submitted: " + ts;
     }
   }
-
 
   if (HW.submittedAt) setSubmitted(HW.submittedAt);
 
@@ -219,21 +422,63 @@
     }
   }
 
+  let pyRunner = null;
+  const pending = new Map();
+
+  function ensurePyRunner(){
+    if (pyRunner) return;
+    pyRunner = new Worker("{{ url_for('static', filename='js/py_runner_worker.js') }}");
+    pyRunner.onmessage = (e)=>{
+      const m = e.data || {};
+      const cb = pending.get(m.id);
+      if (!cb) return;
+      pending.delete(m.id);
+      cb(m);
+    };
+  }
+
+  function runLocalWorkspace(files, args){
+    ensurePyRunner();
+    return new Promise((resolve)=>{
+      const id = Math.random().toString(36).slice(2);
+      pending.set(id, resolve);
+      pyRunner.postMessage({
+        id,
+        kind: "run_workspace",
+        files,
+        args,
+        entry_file: "student.py"
+      });
+    });
+  }
+
   async function runCode(){
     setBusy(true);
     PyPanel.resetOut(outId, "Running…");
-    const code = editor.getValue();
-    localStorage.setItem(LS_KEY, code);
+    saveCurrentFile();
 
     const args = (argsEl.value || "").trim();
+    const argsList = args ? args.split(/\s+/) : [];
     setCmd(args ? `$ python student.py ${args}` : "$ python student.py");
 
     try{
-      const j = await postJson(`/api/hw/${encodeURIComponent(HW.slug)}/run`, { code, args }, 12000);
+      const j = await runLocalWorkspace(workspace, argsList);
       PyPanel.resetOut(outId);
-      if (j.stdout) PyPanel.append(outId, "stdout", j.stdout);
-      if (j.stderr) PyPanel.append(outId, "stderr", j.stderr);
-      if (!j.stdout && !j.stderr) PyPanel.append(outId, "system", "No output.");
+
+      if (j.ok){
+        if (j.files && typeof j.files === "object") {
+          workspace = j.files;
+          if (!(currentFile in workspace)) currentFile = "student.py";
+          editor.setValue(workspace[currentFile] ?? "");
+          renderFileTabs();
+          persistWorkspace();
+        }
+        if (j.stdout) PyPanel.append(outId, "stdout", j.stdout);
+        if (j.stderr) PyPanel.append(outId, "stderr", j.stderr);
+        if (!j.stdout && !j.stderr) PyPanel.append(outId, "system", "No output.");
+      } else {
+        PyPanel.append(outId, "stderr", j.error || "Error");
+      }
     } catch(e){
       PyPanel.resetOut(outId);
       PyPanel.append(outId, "stderr", String(e && e.message ? e.message : e));
@@ -251,12 +496,14 @@
     setBusy(true);
     PyPanel.resetOut(outId, "Running tests…");
     setCmd("$ pytest -q");
-
-    const code = editor.getValue();
-    localStorage.setItem(LS_KEY, code);
+    saveCurrentFile();
 
     try{
-      const j = await postJson(`/api/hw/${encodeURIComponent(HW.slug)}/submit`, { action:"check", code }, 20000);
+      const j = await postJson(
+        `/api/hw/${encodeURIComponent(HW.slug)}/submit`,
+        { action:"check", files: workspace, code: workspace["student.py"] || "" },
+        20000
+      );
       PyPanel.resetOut(outId);
       if (typeof j.passed === "number" && typeof j.failed === "number"){
         PyPanel.append(outId, "system", `Passed: ${j.passed}  Failed: ${j.failed}`);
@@ -278,12 +525,14 @@
     setBusy(true);
     PyPanel.resetOut(outId, "Submitting (final)…");
     setCmd("$ pytest -q (final)");
-
-    const code = editor.getValue();
-    localStorage.setItem(LS_KEY, code);
+    saveCurrentFile();
 
     try{
-      const j = await postJson(`/api/hw/${encodeURIComponent(HW.slug)}/submit`, { action:"submit", code }, 20000);
+      const j = await postJson(
+        `/api/hw/${encodeURIComponent(HW.slug)}/submit`,
+        { action:"submit", files: workspace, code: workspace["student.py"] || "" },
+        20000
+      );
       PyPanel.resetOut(outId);
       if (typeof j.passed === "number" && typeof j.failed === "number"){
         PyPanel.append(outId, "system", `Passed: ${j.passed}  Failed: ${j.failed}`);
@@ -291,6 +540,7 @@
       if (j.output) PyPanel.append(outId, "stdout", j.output);
       if (j.submitted_at) setSubmitted(j.submitted_at);
       else setSubmitted(new Date().toLocaleString());
+      persistWorkspace();
     } catch(e){
       PyPanel.resetOut(outId);
       PyPanel.append(outId, "stderr", String(e && e.message ? e.message : e));
@@ -301,16 +551,10 @@
 
   runBtn.onclick = runCode;
   checkBtn.onclick = check;
-
-  resetBtn.onclick = ()=>{
-    editor.setValue(HW.initialCode ?? "");
-    localStorage.removeItem(LS_KEY);
-    setCmd("$");
-    PyPanel.resetOut(outId);
-    PyPanel.append(outId, "system", "Reset. Run or Check to see output.");
-  };
-
+  resetBtn.onclick = resetWorkspace;
   submitBtn.onclick = submitFinal;
+
+  argsEl.addEventListener("input", persistWorkspace);
 
   const copyBtn = document.getElementById("copyCmdBtn");
   if (copyBtn){

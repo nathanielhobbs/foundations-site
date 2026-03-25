@@ -54,10 +54,14 @@ SECTION_REPOS = {
 
 app = Flask(__name__)
 # Bump cookie name so old cookies get ignored by the browser:
+app = Flask(__name__)
+
 app.config["SESSION_COOKIE_NAME"] = "foundations_sess_v2"
-app.config['SESSION_COOKIE_DOMAIN'] = os.environ.get('SESSION_COOKIE_DOMAIN') 
+#app.config['SESSION_COOKIE_DOMAIN'] = os.environ.get('SESSION_COOKIE_DOMAIN') 
+app.config["SESSION_COOKIE_DOMAIN"] = None   # important: let browser scope it automatically
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = True   # keep True if you serve HTTPS
+app.config["SESSION_COOKIE_SECURE"] = True   # keep True in production HTTPS
+app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=14)
 app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev-secret-key")
 app.config['ADMIN_NETID'] = os.environ.get('ADMIN_NETID') 
@@ -1486,7 +1490,40 @@ def hw_index():
         avg_score=avg_score,
     )
 
+def _load_homework_starter_workspace(root: Path) -> dict[str, str]:
+    starter_dir = root / "starter_files"
+    if starter_dir.exists() and starter_dir.is_dir():
+        out = {}
+        for p in sorted(starter_dir.rglob("*")):
+            if p.is_file():
+                rel = p.relative_to(starter_dir).as_posix()
+                out[rel] = p.read_text(encoding="utf-8")
+        if out:
+            return out
 
+    starter_path = root / "starter.py"
+    starter = starter_path.read_text(encoding="utf-8") if starter_path.exists() else ""
+    return {"student.py": starter}
+
+
+def _workspace_from_submission(sub, root: Path) -> dict[str, str]:
+    starter = _load_homework_starter_workspace(root)
+    if not sub:
+        return starter
+
+    try:
+        data = json.loads(sub.result_json or "{}")
+        ws = data.get("_workspace")
+        if isinstance(ws, dict) and ws:
+            clean = {str(k): str(v) for k, v in ws.items()}
+            if "student.py" not in clean:
+                clean["student.py"] = sub.code or starter.get("student.py", "")
+            return clean
+    except Exception:
+        pass
+
+    starter["student.py"] = sub.code or starter.get("student.py", "")
+    return starter
 
 @app.get("/hw/<slug>")
 def hw_page(slug):
@@ -1510,12 +1547,11 @@ def hw_page(slug):
         .first())
 
     root = (BASE_DIR / hw["root"]).resolve()
-    starter_path = root / "starter.py"
     prompt_path  = root / "prompt.md"
-    starter = starter_path.read_text(encoding="utf-8") if starter_path.exists() else ""
     prompt_md = prompt_path.read_text(encoding="utf-8") if prompt_path.exists() else ""
 
-    initial_code = (latest_any.code if latest_any else starter)
+    initial_files = _workspace_from_submission(latest_any, root)
+    initial_code = initial_files.get("student.py", "")
 
     # LOCK only if there is a final
     submitted_at = None
@@ -1529,8 +1565,9 @@ def hw_page(slug):
         hw=hw,
         slug=slug,
         initial_code=initial_code,
+        initial_files=initial_files,
         submitted_at=submitted_at,
-        reopened_at=reopened_at,      # optional: show banner
+        reopened_at=reopened_at,
         prompt_md=prompt_md,
     )
 
@@ -1673,8 +1710,18 @@ def hw_submit(slug):
 
 
     data = request.get_json(force=True) or {}
-    code = (data.get("code") or "")
     action = (data.get("action") or "check").lower()
+
+    raw_files = data.get("files")
+    if isinstance(raw_files, dict) and raw_files:
+        workspace = {str(k): str(v) for k, v in raw_files.items()}
+    else:
+        workspace = {"student.py": str(data.get("code") or "")}
+
+    if "student.py" not in workspace:
+        workspace["student.py"] = str(data.get("code") or "")
+
+    code = workspace.get("student.py", "")
     if action not in ("check", "submit"):
         action = "check"
 
@@ -1714,7 +1761,7 @@ def hw_submit(slug):
     except FileNotFoundError as e:
         return jsonify({"error": "bad_qid", "detail": str(e)}), 400
 
-    files = {"student.py": code, **tests}
+    files = {**workspace, **tests}
     result = run_pytest_in_docker(files, timeout_s=10)
     result["cmd_display"] = "$ pytest -q"
 
@@ -1773,7 +1820,7 @@ def hw_submit(slug):
             netid=netid,
             section=session.get("section"),
             code=code,
-            result_json=json.dumps(result),
+            result_json=json.dumps({**result, "_workspace": workspace}),
 
             is_final=1,
             due_at=(due_dt.isoformat() if due_dt else None),

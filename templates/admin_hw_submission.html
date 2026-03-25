@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}HW {{ slug }} · {{ netid }}{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:.25rem;">HW {{ slug }} · {{ netid }}</h2>
+<div class="muted" style="margin-bottom:1rem;">
+  Submitted: {{ sub.created_at|human_dt if sub else "-" }} · Status: {{ sub.status if sub else "-" }}
+</div>
+
+{% if not sub %}
+  <div class="py-panel" style="padding:12px;">No submission found.</div>
+{% else %}
+  <div class="py-panel" style="padding:12px; margin-bottom:12px;">
+    <button class="py-btn" type="button" onclick="rerun(false)">Rerun tests (don’t save)</button>
+    <button class="py-btn" type="button" onclick="rerun(true)">Rerun tests (save new score)</button>
+    <span class="muted" id="rerunStatus" style="margin-left:10px;"></span>
+  </div>
+
+  <div class="py-panel" style="padding:12px; margin-bottom:12px;">
+    <div style="font-weight:700; margin-bottom:8px;">Stored result_json</div>
+    <pre style="white-space:pre-wrap;">{{ result_pretty }}</pre>
+  </div>
+
+  <div class="py-panel" style="padding:12px;">
+    <div style="font-weight:700; margin-bottom:8px;">Stored output</div>
+    <pre id="out" style="white-space:pre-wrap;">{{ output_text }}</pre>
+  </div>
+{% endif %}
+
+<script>
+async function rerun(commit){
+  const el = document.getElementById("rerunStatus");
+  el.textContent = "Running…";
+  const r = await fetch(`/api/admin/hw/${encodeURIComponent({{ slug|tojson }})}/rerun`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ netid: {{ netid|tojson }}, commit: !!commit })
+  });
+  const txt = await r.text();
+  if(!r.ok){ el.textContent = "Error"; alert(txt); return; }
+  const j = JSON.parse(txt);
+  el.textContent = "Done";
+  if (j.output) document.getElementById("out").textContent = j.output;
+}
+</script>
+{% endblock %}
+
